@@ -16,7 +16,7 @@
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
-    "@prisma/client": "^6.1.0",
+    "@prisma/client": "^7.4.1",
     "@radix-ui/react-slot": "^1.2.4",
     "@tanstack/react-query": "^5.64.1",
     "bcryptjs": "^2.4.3",
@@ -43,7 +43,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
-    "prisma": "^6.1.0",
+    "prisma": "^7.4.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
