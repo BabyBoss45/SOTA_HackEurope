@@ -46,7 +46,11 @@ logger = logging.getLogger(__name__)
 
 # ---- IDL Loading ---------------------------------------------------------
 
-_IDL_PATH = Path(__file__).resolve().parent.parent.parent.parent / "anchor" / "target" / "idl" / "sota_marketplace.json"
+import os as _os
+_IDL_PATH = Path(_os.path.join(
+    _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))),
+    "anchor", "target", "idl", "sota_marketplace.json"
+))
 
 _idl_cache: Optional[dict] = None
 
