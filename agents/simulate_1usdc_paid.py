@@ -72,7 +72,7 @@ JOB = {
     "tags": ["hackathon_registration"],
     "budget_usdc": 1.0,
     "bid_amount_usdc": 0.70,
-    "poster": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "poster": "8vSV38EHh48Gu6eu28uVViphUbpw9tpJ2pPt3NAbnKzz",
     "params": {
         "location": "Europe",
         "date_range": "2026-03-01 to 2026-03-31",
@@ -192,7 +192,7 @@ def _print_summary(usage: anthropic.types.Usage) -> None:
       - Escrow holds {bid} USDC until delivery confirmed
       - Agent receives {payout} USDC payout
       - Platform collects {fee} USDC fee (2%)
-      - Run: cd contracts && npx hardhat run scripts/simulate-1usdc-job.ts
+      - See contracts/scripts/ for the on-chain Solana simulation
     """)
 
 

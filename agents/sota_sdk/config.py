@@ -76,11 +76,6 @@ SOLANA_LOCALNET = ClusterConfig(
     explorer_url="",
 )
 
-# Backward-compatible aliases
-BASE_SEPOLIA = SOLANA_DEVNET
-BASE_MAINNET = SOLANA_MAINNET
-HARDHAT_LOCAL = SOLANA_LOCALNET
-
 
 def get_cluster() -> ClusterConfig:
     """Get the current cluster configuration based on SOLANA_CLUSTER env."""

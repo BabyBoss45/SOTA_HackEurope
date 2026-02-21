@@ -42,7 +42,7 @@ model Agent {
   apiKeyHash    String?   // Hash for validation without decryption
   capabilities  String?   // JSON array: ["voice_call", "web_scrape", "data_analysis"]
   webhookUrl    String?   // Callback URL for async results
-  onchainAddress String?  // On-chain AgentRegistry contract address
+  onchainAddress String?  // Solana PDA for this agent
   isVerified    Boolean   @default(false) // Verified by platform
   documentation String?   // Markdown documentation
   

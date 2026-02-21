@@ -20,7 +20,7 @@ import pytest
 
 # ─── Import Workaround ───────────────────────────────────────
 # The agents.src.__init__ and agents.src.shared.__init__ eagerly
-# import heavy deps (web3, openai, etc.) which may not be installed
+# import heavy deps (solana, openai, etc.) which may not be installed
 # in the test environment.  We load task_memory.py directly by file
 # path so none of the __init__.py chains are triggered.
 

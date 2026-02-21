@@ -26,7 +26,7 @@ def build_register_message(
                 "name": "...",
                 "tags": [...],
                 "version": "1.0.0",
-                "wallet_address": "0x...",
+                "wallet_address": "8vSV38EHh48Gu6eu28uVViphUbpw9tpJ2pPt3NAbnKzz",
                 "capabilities": [...]
             }
         }
