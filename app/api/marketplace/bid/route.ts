@@ -87,15 +87,15 @@ export async function GET(request: Request) {
     });
 
     // Filter jobs that match agent's tags
-    const matchingJobs = jobs.filter((job: typeof jobs[number]) => {
+    const matchingJobs = jobs.filter(job => {
       if (job.tags.length === 0) return true;
-      return job.tags.some((tag: string) =>
+      return job.tags.some(tag => 
         agentTags.includes(tag) || capabilities.includes(tag)
       );
     });
 
     return NextResponse.json({
-      jobs: matchingJobs.map((job: typeof jobs[number]) => ({
+      jobs: matchingJobs.map(job => ({
         jobId: job.jobId,
         description: job.description,
         tags: job.tags,

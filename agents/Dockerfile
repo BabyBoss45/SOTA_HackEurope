@@ -19,4 +19,6 @@ RUN playwright install chromium --with-deps
 RUN useradd -m -u 1000 appuser
 USER appuser
 
+EXPOSE 3001
+
 CMD ["python", "agents/butler_api.py"]

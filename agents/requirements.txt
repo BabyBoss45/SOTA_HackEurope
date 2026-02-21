@@ -13,6 +13,13 @@ pydantic>=2.9.0
 # Server (Butler API)
 uvicorn>=0.32.0
 fastapi>=0.115.0
+starlette>=0.27.0
+
+# Database
+asyncpg>=0.29.0
+
+# Database (PostgreSQL via Railway)
+asyncpg>=0.30.0
 
 # AI / Vector DB (Butler + Seeding)
 anthropic>=0.39.0
@@ -29,18 +36,31 @@ requests>=2.31.0
 httpx>=0.27.0
 aiohttp>=3.10.0
 
+# Database (Firebase Firestore)
+firebase-admin>=6.2.0
+google-cloud-firestore>=2.16.0
+
 # Scraping (Hackathon Agent)
 beautifulsoup4>=4.12.0
+
+# SerpAPI (Shopping, Flights, Hotels, Local search)
+google-search-results>=2.4.2
+
+# Google Calendar API uses httpx directly with user's OAuth token from Firestore
+# No server-side OAuth library needed — frontend handles the OAuth flow
 
 # Browser Automation (Hackathon Registration)
 playwright>=1.40.0
 
-
 # Cost tracking (Paid.ai)
 paid-python>=1.0.5
 
-# Optional: Agent-specific tools
-# twilio>=9.3.0  # For Caller Agent
+# Crypto (A2A protocol)
+PyNaCl>=1.5.0
+
+# Caller Agent (phone bookings and verification)
+twilio>=9.3.0
+elevenlabs>=1.0.0
 
 # Dev
 pytest>=8.0.0

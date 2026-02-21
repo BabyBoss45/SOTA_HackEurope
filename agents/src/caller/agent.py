@@ -1,14 +1,12 @@
 """
-Caller Agent — SOTA on Solana
+Caller Agent — SOTA on Base
 
-The Caller Agent:
-1. Listens for phone verification job events
-2. Evaluates jobs and decides whether to bid
-3. Executes accepted jobs using Twilio
-4. Uploads results and submits delivery proofs
+Uses ElevenLabs Conversational AI over Twilio to make real phone calls
+that can listen, adapt, and actually complete bookings.
 """
 
 import os
+import re
 import asyncio
 import logging
 from typing import Optional
@@ -29,36 +27,130 @@ from .tools import create_caller_tools
 
 logger = logging.getLogger(__name__)
 
+_CONFIRMED_PATTERNS = [
+    r"\bconfirm", r"\bbooked\b", r"\breserved\b", r"\bsee you\b",
+    r"\ball set\b", r"\btable.{0,20}ready", r"\broom.{0,20}ready",
+    r"\bgot you down\b", r"\byou'?re all\b", r"\bwe'?ll have",
+    r"\bwe have.{0,15}(?:table|room|spot|space)",
+]
+_DENIED_PATTERNS = [
+    r"fully booked", r"no availability", r"sold out",
+    r"no tables?\b", r"no rooms?\b", r"cannot accommodate",
+    r"unfortunately.{0,30}(?:full|available|book)",
+    r"don'?t have.{0,20}(?:space|availability|opening)",
+]
+_VOICEMAIL_PATTERNS = [
+    r"voicemail", r"leave a message", r"after the (?:tone|beep)",
+    r"please record", r"not available.{0,20}message",
+]
+
+
+def _extract_venue_text(transcript_text: str) -> str:
+    """Pull out only the venue (USER) side of the conversation so we
+    don't false-positive on words the *agent* said."""
+    lines = transcript_text.split("\n")
+    venue_lines = []
+    for line in lines:
+        stripped = line.strip().lower()
+        if stripped.startswith("user:"):
+            venue_lines.append(stripped[5:].strip())
+    return " ".join(venue_lines)
+
+
+def _detect_booking_outcome(transcript_text: str, analysis: dict) -> str:
+    """Determine booking outcome from the conversation transcript and
+    ElevenLabs post-call analysis."""
+    call_ok = str((analysis or {}).get("call_successful", "")).lower().strip()
+    if call_ok in ("true", "success", "yes"):
+        return "confirmed"
+    if call_ok in ("false", "failure", "no"):
+        return "denied"
+
+    if not transcript_text.strip():
+        return "no_conversation"
+
+    # Also check the summary for voicemail indicators
+    summary = str((analysis or {}).get("transcript_summary", "")).lower()
+    full_text = (transcript_text + " " + summary).lower()
+    for pat in _VOICEMAIL_PATTERNS:
+        if re.search(pat, full_text):
+            return "voicemail"
+
+    # Only look at what the VENUE said (USER role) to avoid matching
+    # words the agent itself spoke (e.g. "please confirm").
+    venue_text = _extract_venue_text(transcript_text)
+
+    for pat in _DENIED_PATTERNS:
+        if re.search(pat, venue_text):
+            return "denied"
+    for pat in _CONFIRMED_PATTERNS:
+        if re.search(pat, venue_text):
+            return "confirmed"
+
+    return "unknown"
+
+
+def _build_chat_summary(
+    outcome: str,
+    phone_number: str,
+    booking_type: str,
+    guests,
+    date: str,
+    time_slot: str,
+    user_name: str,
+    summary: str,
+    transcript_text: str,
+) -> str:
+    """Build a human-readable chat summary from the call outcome."""
+    base = (
+        f"I called {phone_number} to make a {booking_type} reservation "
+        f"for {guests} guests on {date} at {time_slot} under {user_name}."
+    )
+    if outcome == "confirmed":
+        result = "The booking was confirmed!"
+    elif outcome == "denied":
+        result = "Unfortunately, they couldn't accommodate the booking."
+    elif outcome == "voicemail":
+        result = (
+            "The call went to voicemail. I left a message with the "
+            "booking details and asked them to call back to confirm."
+        )
+    elif outcome == "no_conversation":
+        result = "The call connected but no conversation took place."
+    else:
+        result = (
+            "The call completed but I couldn't determine the booking "
+            "outcome from the conversation."
+        )
+
+    parts = [base, result]
+    if summary:
+        parts.append(f"Call summary: {summary}")
+    return " ".join(parts)
+
 
 CALLER_SYSTEM_PROMPT = """
-You are the Caller Agent for SOTA, specializing in phone verification on Solana.
+You are the Caller Agent for SOTA, specializing in phone-based bookings
+and verifications via ElevenLabs Conversational AI over Twilio.
 
-Your capabilities:
-1. **Phone Calls**: Use make_phone_call to:
-   - Verify business information
-   - Make reservations
-   - Confirm details
+## CRITICAL SAFETY RULE
+You NEVER provide credit card numbers, bank details, or any payment
+information during calls. If a venue asks for a card to hold a booking,
+say: "The guest will provide payment details directly. Could we hold
+the reservation under their name for now?" If a card is absolutely
+required, ask for a direct number so the guest can call themselves.
 
-2. **SMS**: Use send_sms for follow-up confirmations.
+## YOUR CAPABILITIES
+1. Conversational Calls: Use make_elevenlabs_call for real, adaptive
+   phone conversations (books restaurants, hotels, verifies info).
+2. Conversation Status: Use get_elevenlabs_conversation to check
+   call transcripts and outcomes.
+3. SMS: Use send_sms for follow-up confirmations.
+4. Delivery: After calls, upload results and submit delivery proofs.
 
-3. **Call Status**: Use get_call_status to check call outcomes.
-
-4. **Delivery**: After calls:
-   - Upload results using upload_call_result
-   - Compute proof hash using compute_proof_hash
-   - Submit delivery using submit_delivery
-
-5. **Wallet & Bidding**: Check balance and manage bids.
-
-IMPORTANT: Always be professional and polite on calls.
-Generate appropriate scripts before making calls.
-
-Based on the current progress, decide the next action:
-- To make a call: generate script, then use make_phone_call
-- After call: get_call_status, then upload_call_result
-- Finally: submit_delivery with proof hash
-- To check wallet: use get_wallet_balance
-- To bid on job: use place_bid
+## WORKFLOW
+- Primary: make_elevenlabs_call → poll get_elevenlabs_conversation
+- After call completes: upload_call_result → submit_delivery
 """
 
 
@@ -146,24 +238,19 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
             logger.error("Contracts not initialized; cannot bid on job #%s", job.job_id)
 
     async def execute_job(self, job: ActiveJob) -> dict:
-        """
-        Execute a booking/verification call.
+        """Execute a booking/verification call via ElevenLabs ConvAI.
 
-        Tries ElevenLabs ConvAI outbound call first (conversational AI),
-        falls back to Twilio TwiML (text-to-speech script).
+        The AI agent has a real conversation with the venue, listens to
+        their responses, and adapts in real-time.  After the call we poll
+        the ElevenLabs API for the transcript and detect whether the
+        booking was confirmed or denied.
         """
-        # Enrich with historical pattern analysis
-        _adaptation_preamble = ""
-        pattern_analysis = (job.params or {}).get("_pattern_analysis")
-        if pattern_analysis:
-            from ..shared.task_memory import build_adaptation_prompt
-            _adaptation_preamble = build_adaptation_prompt(pattern_analysis)
+        import json as _json
+        import httpx as _httpx
 
         params = job.params or {}
         phone_number = params.get("phone_number", "") or "+447553293952"
-        purpose = params.get("purpose", job.description or "booking")
 
-        # Determine booking type from job metadata or description
         tool_tag = (job.metadata_uri or "").lower() if hasattr(job, "metadata_uri") else ""
         desc_lower = (job.description or "").lower()
         if "hotel" in tool_tag or "hotel" in desc_lower:
@@ -173,7 +260,6 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
         else:
             booking_type = "restaurant"
 
-        # Booking details
         location = params.get("location") or params.get("city") or ""
         date = params.get("date") or params.get("check_in") or "tomorrow"
         check_out = params.get("check_out") or ""
@@ -185,158 +271,191 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
         if booking_type == "hotel" and check_out:
             special_requests = f"Check-out: {check_out}. {special_requests}".strip()
 
+        # -- No phone number: ask the user for it --
         if not phone_number:
-            # No phone number provided — use LLM agent to handle the job
-            logger.info("No phone_number in params — delegating to LLM agent for job #%s", job.job_id)
-            if self.llm_agent:
-                prompt = _adaptation_preamble + (
-                    f"You are executing a {booking_type} booking job.\n"
-                    f"Job description: {job.description}\n"
-                    f"Details: location={location}, date={date}, time={time_slot}, "
-                    f"guests={guests}, cuisine={cuisine}, user_name={user_name}\n\n"
-                    f"No phone number was provided for the venue. "
-                    f"Respond with a helpful summary of what you would need to complete "
-                    f"this booking (e.g. the venue's phone number or name). "
-                    f"Format your response as a plain text message for the user."
-                )
-                try:
-                    result = await self.llm_agent.run(prompt)
-                    return {
-                        "success": True,
-                        "result": result,
-                        "chat_summary": result or (
-                            f"I'd be happy to help with your {booking_type} booking "
-                            f"in {location or 'your area'} for {guests} guests on {date} at {time_slot}. "
-                            f"To make the call, I'll need the venue's phone number. "
-                            f"Could you provide it?"
-                        ),
-                        "job_id": job.job_id,
-                    }
-                except Exception as e:
-                    logger.error("LLM fallback failed: %s", e)
+            logger.info("No phone_number — asking user for job #%s", job.job_id)
             return {
                 "success": True,
                 "chat_summary": (
                     f"I'd be happy to help with your {booking_type} booking "
-                    f"in {location or 'your area'} for {guests} guests on {date} at {time_slot}. "
-                    f"To complete the reservation, I'll need the venue's phone number. "
-                    f"Could you provide it?"
+                    f"in {location or 'your area'} for {guests} guests on "
+                    f"{date} at {time_slot}. "
+                    f"To make the call, I'll need the venue's phone number."
                 ),
                 "job_id": job.job_id,
             }
 
-        logger.info("📞 Executing call job #%s → %s (%s)", job.job_id, phone_number, purpose)
+        logger.info(
+            "Executing call job #%s → %s (%s)",
+            job.job_id, phone_number, job.description,
+        )
 
-        # ── Try ElevenLabs ConvAI outbound call ──────────────
-        from .tools import MakeElevenLabsCallTool, MakePhoneCallTool, GetCallStatusTool
-        import json as _json
-
+        # -- Verify ElevenLabs config --
         el_api_key = os.getenv("ELEVENLABS_API_KEY")
         el_phone_id = os.getenv("ELEVENLABS_PHONE_ID")
-        el_agent_id = os.getenv("ELEVENLABS_CALLER_AGENT_ID") or os.getenv("ELEVENLABS_AGENT_ID")
-
-        if el_api_key and el_phone_id and el_agent_id:
-            logger.info("📞 Using ElevenLabs ConvAI for outbound call")
-            tool = MakeElevenLabsCallTool()
-            raw = await tool.execute(
-                to_number=phone_number,
-                user_name=user_name,
-                time=time_slot,
-                date=str(date),
-                num_of_people=int(guests),
-                booking_type=booking_type,
-                cuisine=cuisine,
-                location=location,
-                special_requests=special_requests,
-            )
-            result = _json.loads(raw)
-            if result.get("success"):
-                return {
-                    "success": True,
-                    "method": "elevenlabs_convai",
-                    "phone_number": phone_number,
-                    "call_data": result,
-                    "chat_summary": (
-                        f"I've placed a call to {phone_number} to "
-                        f"{'book a table' if 'restaurant' in purpose.lower() else 'make a reservation'} "
-                        f"for {guests} guests on {date} at {time_slot}. "
-                        f"The AI assistant is handling the conversation now."
-                    ),
-                }
-            logger.warning("ElevenLabs call failed, falling back to Twilio: %s", result.get("error"))
-
-        # ── Fallback: Twilio TwiML call ──────────────────────
-        logger.info("📞 Using Twilio TwiML for outbound call")
-        if booking_type == "hotel":
-            script = (
-                f"Hello, I'm calling on behalf of {user_name} through a concierge service. "
-                f"I'd like to book a room for {guests} {'guests' if int(guests) > 1 else 'guest'}, "
-                f"checking in on {date}. "
-            )
-            if check_out:
-                script += f"Check-out would be {check_out}. "
-            if location:
-                script += f"Preferably in the {location} area. "
-        else:
-            script = (
-                f"Hello, I'm calling on behalf of {user_name} through a concierge service. "
-                f"I'd like to book a table for {guests} {'people' if int(guests) > 1 else 'person'} "
-                f"on {date} at {time_slot}. "
-            )
-            if cuisine:
-                script += f"We're interested in {cuisine} cuisine. "
-            if location:
-                script += f"Location preference: {location}. "
-        script += "Could you confirm availability? Thank you."
-
-        call_tool = MakePhoneCallTool()
-        raw = await call_tool.execute(
-            phone_number=phone_number,
-            script=script,
-            gather_input=False,
-            record=True,
+        el_agent_id = (
+            os.getenv("ELEVENLABS_CALLER_AGENT_ID")
+            or os.getenv("ELEVENLABS_AGENT_ID")
         )
-        call_result = _json.loads(raw)
 
-        if not call_result.get("success"):
+        if not all([el_api_key, el_phone_id, el_agent_id]):
+            missing = []
+            if not el_api_key:
+                missing.append("ELEVENLABS_API_KEY")
+            if not el_phone_id:
+                missing.append("ELEVENLABS_PHONE_ID")
+            if not el_agent_id:
+                missing.append("ELEVENLABS_CALLER_AGENT_ID")
             return {
                 "success": False,
-                "error": call_result.get("error", "Call failed"),
-                "chat_summary": f"I tried to call {phone_number} but the call couldn't be connected: {call_result.get('error', 'unknown error')}",
+                "error": f"ElevenLabs not configured: missing {', '.join(missing)}",
+                "chat_summary": (
+                    "I couldn't place the call because the voice AI "
+                    "service isn't fully configured."
+                ),
             }
 
-        call_sid = call_result.get("call_sid")
+        # -- 1. Initiate ElevenLabs ConvAI call --
+        logger.info("Using ElevenLabs ConvAI via Twilio")
+        from .tools import MakeElevenLabsCallTool
+        tool = MakeElevenLabsCallTool()
+        raw = await tool.execute(
+            to_number=phone_number,
+            user_name=user_name,
+            time=time_slot,
+            date=str(date),
+            num_of_people=int(guests),
+            booking_type=booking_type,
+            cuisine=cuisine,
+            location=location,
+            special_requests=special_requests,
+        )
+        result = _json.loads(raw)
 
-        # Poll for call completion (up to 90 seconds)
-        status_tool = GetCallStatusTool()
-        final_status = "initiated"
-        call_duration = None
-        recording_urls = []
+        if not result.get("success"):
+            error = result.get("error", "Failed to initiate call")
+            logger.error("ElevenLabs call initiation failed: %s", error)
+            return {
+                "success": False,
+                "error": error,
+                "chat_summary": (
+                    f"I tried to call {phone_number} but couldn't "
+                    f"connect: {error}"
+                ),
+            }
 
-        for _ in range(18):  # 18 * 5s = 90s max
+        body = result.get("body", {})
+        conversation_id = (
+            body.get("conversation_id")
+            or body.get("call_id")
+            or body.get("id")
+        )
+        logger.info(
+            "Call initiated → conversation_id=%s", conversation_id,
+        )
+
+        if not conversation_id:
+            return {
+                "success": True,
+                "method": "elevenlabs_convai",
+                "phone_number": phone_number,
+                "call_data": body,
+                "chat_summary": (
+                    f"Call placed to {phone_number}. "
+                    f"The AI concierge is handling the conversation now."
+                ),
+            }
+
+        # -- 2. Poll ElevenLabs for conversation completion --
+        conv_data: dict = {}
+        final_status = "unknown"
+        max_polls = 30          # 30 * 5s = 150s max
+        not_found_grace = 6     # allow up to 30s for conversation to appear
+
+        for attempt in range(max_polls):
             await asyncio.sleep(5)
             try:
-                status_raw = await status_tool.execute(call_sid)
-                status_data = _json.loads(status_raw)
-                if status_data.get("success"):
-                    final_status = status_data.get("status", "unknown")
-                    call_duration = status_data.get("duration")
-                    recording_urls = status_data.get("recording_urls", [])
-                    if final_status in ("completed", "failed", "busy", "no-answer", "canceled"):
+                async with _httpx.AsyncClient(timeout=15) as client:
+                    resp = await client.get(
+                        f"https://api.elevenlabs.io/v1/convai/conversations/{conversation_id}",
+                        headers={"xi-api-key": el_api_key},
+                    )
+                    if resp.status_code == 404:
+                        if attempt < not_found_grace:
+                            continue
+                        logger.warning(
+                            "Conversation %s still 404 after %ds",
+                            conversation_id, (attempt + 1) * 5,
+                        )
+                        continue
+                    resp.raise_for_status()
+                    conv_data = resp.json()
+                    final_status = conv_data.get("status", "unknown")
+                    logger.info(
+                        "Poll %d: status=%s", attempt + 1, final_status,
+                    )
+                    if final_status in (
+                        "done", "completed", "ended", "failed", "error"
+                    ):
                         break
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Poll %d error: %s", attempt + 1, exc)
 
-        logger.info("📞 Call %s finished: status=%s duration=%s", call_sid, final_status, call_duration)
+        # -- 3. Extract transcript, analysis, outcome --
+        transcript_turns: list[dict] = []
+        transcript_text = ""
+        raw_transcript = conv_data.get("transcript") or []
+        if isinstance(raw_transcript, list):
+            for turn in raw_transcript:
+                role = turn.get("role", "unknown")
+                msg = turn.get("message") or ""
+                if not msg or msg == "None":
+                    continue
+                transcript_turns.append({"role": role, "message": msg})
+                transcript_text += f"{role}: {msg}\n"
+        elif isinstance(raw_transcript, str):
+            transcript_text = raw_transcript
+
+        analysis = conv_data.get("analysis") or {}
+        summary = (
+            analysis.get("transcript_summary")
+            or analysis.get("summary")
+            or conv_data.get("summary")
+            or ""
+        )
+        metadata = conv_data.get("metadata") or {}
+        duration = metadata.get("call_duration_secs")
+
+        outcome = _detect_booking_outcome(transcript_text, analysis)
+
+        logger.info(
+            "Call %s finished: status=%s outcome=%s duration=%s",
+            conversation_id, final_status, outcome, duration,
+        )
+
+        # -- 4. Build response --
+        chat_summary = _build_chat_summary(
+            outcome=outcome,
+            phone_number=phone_number,
+            booking_type=booking_type,
+            guests=guests,
+            date=date,
+            time_slot=time_slot,
+            user_name=user_name,
+            summary=summary,
+            transcript_text=transcript_text,
+        )
 
         return {
-            "success": final_status == "completed",
-            "method": "twilio_twiml",
+            "success": outcome == "confirmed" or final_status == "done",
+            "method": "elevenlabs_convai",
+            "conversation_id": conversation_id,
             "phone_number": phone_number,
-            "call_sid": call_sid,
             "status": final_status,
-            "duration_seconds": call_duration,
-            "recording_urls": recording_urls,
+            "outcome": outcome,
+            "duration_seconds": duration,
+            "transcript": transcript_turns,
+            "summary": summary,
             "booking_details": {
                 "type": booking_type,
                 "guests": guests,
@@ -346,15 +465,7 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
                 "location": location,
                 "cuisine": cuisine,
             },
-            "chat_summary": (
-                f"I called {phone_number} to make a {booking_type} reservation "
-                f"for {guests} guests on {date} at {time_slot} under {user_name}. "
-                f"Call status: {final_status}"
-                + (f", duration: {call_duration}s" if call_duration else "")
-                + ". "
-                + ("The reservation request has been communicated." if final_status == "completed"
-                   else f"The call ended with status: {final_status}. You may want to try again.")
-            ),
+            "chat_summary": chat_summary,
         }
 
 

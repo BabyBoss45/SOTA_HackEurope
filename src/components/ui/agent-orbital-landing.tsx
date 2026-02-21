@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Phone, Calendar, Briefcase, X, Zap, Star, Activity, Loader2, Search, type LucideIcon } from 'lucide-react';
+import { Bot, Phone, Calendar, Briefcase, X, Zap, Star, Activity, Loader2, Search, Map, Receipt, Gift, UtensilsCrossed, ShoppingCart, type LucideIcon } from 'lucide-react';
 import { FloatingPaths } from './background-paths-wrapper';
 
 // Icon mapping for dynamic icons from DB
@@ -9,6 +9,11 @@ const iconMap: Record<string, LucideIcon> = {
   Phone,
   Calendar,
   Briefcase,
+  Map,
+  Receipt,
+  Gift,
+  UtensilsCrossed,
+  ShoppingCart,
 };
 
 interface Agent {
@@ -98,11 +103,17 @@ const AgentOrbitalLanding = () => {
       } catch (err) {
         console.error('Error fetching agents:', err);
         setError('Failed to load agents');
-        // Fallback to default data
-        setAgents([
-          { id: 1, title: "Caller", description: "Phone verification via Twilio", icon: "Phone", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
-          { id: 2, title: "Hackathon", description: "Event discovery & registration", icon: "Calendar", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
-        ]);
+        const fallbackAgents: Agent[] = [
+          { id: 1, title: "Caller", description: "Phone verification and booking calls via Twilio", icon: "Phone", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+          { id: 2, title: "Hackathon", description: "Event discovery and automatic registration", icon: "Calendar", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+          { id: 3, title: "Trip Planner", description: "Group trip planning with smart inference", icon: "Map", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+          { id: 4, title: "Refund Claim", description: "Automates refund claims for delayed transport", icon: "Receipt", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+          { id: 5, title: "Gift Suggestion", description: "Personalized gift recommendations", icon: "Gift", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+          { id: 6, title: "Restaurant Booker", description: "Find and book restaurant tables", icon: "UtensilsCrossed", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+          { id: 7, title: "Smart Shopper", description: "Deal finding with economic reasoning", icon: "ShoppingCart", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+        ];
+        setAgents(fallbackAgents);
+        setAllAgents(fallbackAgents);
       } finally {
         setLoading(false);
       }
@@ -226,7 +237,7 @@ const AgentOrbitalLanding = () => {
   // Calculate agent position on orbit
   const getAgentPosition = (index: number, total: number) => {
     const angle = ((index / total) * 360 + rotationAngle) % 360;
-    const radius = 160;
+    const radius = 220;
     const radian = (angle * Math.PI) / 180;
     const x = radius * Math.cos(radian);
     const y = radius * Math.sin(radian);
@@ -397,7 +408,7 @@ const AgentOrbitalLanding = () => {
           
             {/* Header */}
             <div className="text-center">
-              <h2 className="text-xl font-semibold text-[color:var(--foreground)]">
+              <h2 className="text-2xl font-semibold text-[color:var(--foreground)]">
                 <span className="word-animate" data-delay="0">AI</span>
                 <span className="word-animate" data-delay="200">Agent</span>
                 <span className="word-animate" data-delay="400">Marketplace</span>
@@ -410,29 +421,29 @@ const AgentOrbitalLanding = () => {
             <div className="relative">
               
               {/* Orbit Rings */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] rounded-full border border-violet-500/10 orbit-ring" />
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] rounded-full border border-violet-500/5" />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[460px] h-[460px] rounded-full border border-violet-500/10 orbit-ring" />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[510px] h-[510px] rounded-full border border-violet-500/5" />
               
               {/* Butler - Center Agent */}
               <button
                 onClick={(e) => { e.stopPropagation(); setShowButler(!showButler); setSelectedAgent(null); }}
-                className="relative z-20 w-24 h-24 rounded-full bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-600 flex items-center justify-center cursor-pointer transition-all duration-300 hover:scale-105"
+                className="relative z-20 w-32 h-32 rounded-full bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-600 flex items-center justify-center cursor-pointer transition-all duration-300 hover:scale-105"
                 style={{ 
                   boxShadow: showButler 
                     ? '0 0 60px rgba(139, 92, 246, 0.5), 0 0 100px rgba(139, 92, 246, 0.3)' 
                     : '0 0 40px rgba(139, 92, 246, 0.3)' 
                 }}
               >
-                <div className="absolute w-28 h-28 rounded-full border border-violet-400/30 animate-ping opacity-30" style={{ animationDuration: '2s' }} />
-                <div className="absolute w-32 h-32 rounded-full border border-violet-400/20 animate-ping opacity-20" style={{ animationDuration: '3s', animationDelay: '0.5s' }} />
-                <div className="w-12 h-12 rounded-xl bg-white/90 flex items-center justify-center">
-                  <Bot size={28} className="text-violet-600" />
+                <div className="absolute w-36 h-36 rounded-full border border-violet-400/30 animate-ping opacity-30" style={{ animationDuration: '2s' }} />
+                <div className="absolute w-40 h-40 rounded-full border border-violet-400/20 animate-ping opacity-20" style={{ animationDuration: '3s', animationDelay: '0.5s' }} />
+                <div className="w-16 h-16 rounded-xl bg-white/90 flex items-center justify-center">
+                  <Bot size={36} className="text-violet-600" />
                 </div>
               </button>
               
               {/* Butler Label */}
               <div className="absolute top-full mt-4 left-1/2 -translate-x-1/2 text-center">
-                <span className="text-sm font-medium text-violet-300 uppercase tracking-widest">Butler</span>
+                <span className="text-base font-medium text-violet-300 uppercase tracking-widest">Butler</span>
               </div>
 
               {/* Butler Info Panel */}
@@ -524,14 +535,14 @@ const AgentOrbitalLanding = () => {
                       zIndex: isSelected ? 30 : 10,
                     }}
                   >
-                    <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 ${
+                    <div className={`w-18 h-18 rounded-full flex items-center justify-center transition-all duration-300 ${
                       isSelected 
                         ? 'bg-white shadow-lg shadow-violet-500/30' 
                         : 'bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] hover:bg-[color:var(--surface-hover)]'
-                    }`}>
-                      <Icon size={22} className={isSelected ? 'text-violet-600' : 'text-[color:var(--foreground)]'} />
+                    }`} style={{ width: '5.5rem', height: '5.5rem' }}>
+                      <Icon size={34} className={isSelected ? 'text-violet-600' : 'text-[color:var(--foreground)]'} />
                     </div>
-                    <div className={`absolute top-16 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs font-medium transition-all duration-300 ${
+                    <div className={`absolute top-20 left-1/2 -translate-x-1/2 whitespace-nowrap text-sm font-medium transition-all duration-300 ${
                       isSelected ? 'text-[color:var(--foreground)]' : 'text-[color:var(--text-muted)]'
                     }`}>
                       {agent.title}

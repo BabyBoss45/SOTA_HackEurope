@@ -113,7 +113,7 @@ class JobBoard:
         # Worker side (at startup)
         board.register_worker(RegisteredWorker(
             worker_id="caller",
-            address="0x...",
+            address="8vSV38EHh48Gu6eu28uVViphUbpw9tpJ2pPt3NAbnKzz",
             tags=["call_verification", "hotel_booking"],
             evaluator=my_evaluate_fn,
         ))

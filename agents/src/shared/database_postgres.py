@@ -429,22 +429,6 @@ class Database:
         return [_row_to_dict(r) for r in rows]
 
     # =====================================================================
-    #  Task outcome persistence (used by TaskPatternMemory)
-    # =====================================================================
-
-    async def store_task_outcome(self, outcome: dict) -> dict:
-        """Persist a task outcome as an AgentJobUpdate record."""
-        status = "task_success" if outcome.get("success") else "task_failure"
-        message = outcome.get("failure_detail") or outcome.get("strategy_used") or ""
-        return await self.create_update(
-            job_id=outcome.get("job_id", "unknown"),
-            agent=outcome.get("agent_id", "unknown"),
-            status=status,
-            message=str(message),
-            data=outcome,
-        )
-
-    # =====================================================================
     #  CallSummary
     # =====================================================================
 

@@ -196,7 +196,7 @@ class ManagerAgent:
         # Combine manager tools with wallet tools
         tools = get_manager_tools(self.wallet, vector_client=self.vector_client) + create_wallet_tools(self.wallet)
 
-        model_name = os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001")
+        model_name = os.getenv("LLM_MODEL", "claude-sonnet-4-5-20241022")
 
         agent = AgentRunner(
             name=self.agent_name,

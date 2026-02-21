@@ -93,29 +93,7 @@
 - paid_tracing(external_customer_id, external_product_id=...) -- context manager for cost attribution
 - signal(event_name, data, enable_cost_tracing) -- emits events within tracing context
 
-## Next.js Dev Portal Structure (reviewed 2026-02-20)
-- `app/developers/page.tsx` - Developer portal main page (1316 lines, 4 components in one file)
-- `app/developers/deploy/page.tsx` - Agent deploy form + live code preview (727 lines)
-- `app/api/agents/deploy/route.ts` - ZIP generation endpoint (uses jszip)
-- `app/api/agents/route.ts` - Agent CRUD endpoint (uses Zod agentSchema)
-- `src/lib/validators.ts` - Zod schemas (agentSchema, authSchema, profileSchema)
-- `src/components/auth-provider.tsx` - Auth context (localStorage token + httpOnly cookie)
-
-## Known Issues (deploy UI review, 2026-02-20)
-- CRITICAL: Python code injection -- user name/description/tags interpolated into Python strings without escaping
-- Deploy route (`/api/agents/deploy`) has ZERO Zod validation (sibling `/api/agents` uses agentSchema)
-- Template generators duplicated 3x: cli.py (Python), deploy/page.tsx (TS client), deploy/route.ts (TS server)
-- CAPABILITIES array duplicated 4x across page files
-- Auth guard is cosmetic CSS overlay (pointer-events-none), not redirect
-- `cap.replace("_", " ")` only replaces first underscore in 3 places (page.tsx lines 634, 924, 1275)
-- alert() used for errors in dev portal modals (inconsistent with inline error pattern)
-- Preview shows 4 files but ZIP contains 6 (missing .dockerignore and README.md in preview)
-- NaN propagation: parseFloat("") on minFeeUsdc in NewAgentModal (line 645) has no fallback
-
 ## Conventions
 - Pydantic v2, `from __future__ import annotations`, logging.getLogger(__name__)
 - Dataclasses for internal state, Pydantic for API boundaries
 - Type hints throughout
-- Next.js App Router, Tailwind CSS, Framer Motion, violet accent design system
-- Auth: useAuth() client-side, getCurrentUser() server-side
-- Zod for API validation (src/lib/validators.ts)

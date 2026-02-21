@@ -38,15 +38,6 @@ from .tool_base import BaseTool
 logger = logging.getLogger(__name__)
 
 
-def _log_task_exception(task: asyncio.Task) -> None:
-    """Callback for fire-and-forget tasks — logs unhandled exceptions."""
-    if task.cancelled():
-        return
-    exc = task.exception()
-    if exc:
-        logger.error("Background task %s failed: %s", task.get_name(), exc, exc_info=exc)
-
-
 # ─── In-memory store for pending requests (Butler side) ──────
 
 class ButlerDataExchange:
@@ -95,19 +86,18 @@ class ButlerDataExchange:
 
     # ── Worker side: post a request ─────────────────────────
 
-    async def post_request(self, request_id: str, job_id: str, request: dict):
+    def post_request(self, request_id: str, job_id: str, request: dict):
         """Store a data request from a worker agent."""
         self._pending.setdefault(job_id, []).append({
             "request_id": request_id,
             **request,
         })
         self._events[request_id] = asyncio.Event()
-        logger.info("Data request queued: req=%s job=%s type=%s",
+        logger.info("📩 Data request queued: req=%s job=%s type=%s",
                      request_id, job_id, request.get("data_type"))
 
-        # Persist to DB in background
-        task = asyncio.create_task(self._persist_request(request_id, job_id, request))
-        task.add_done_callback(_log_task_exception)
+        # Persist to DB (fire-and-forget)
+        asyncio.ensure_future(self._persist_request(request_id, job_id, request))
 
     async def _persist_request(self, request_id: str, job_id: str, request: dict):
         try:
@@ -170,8 +160,7 @@ class ButlerDataExchange:
             logger.warning("⚠️ No waiter for request %s", request_id)
 
         # Persist to DB
-        task = asyncio.create_task(self._persist_answer(request_id, answer))
-        task.add_done_callback(_log_task_exception)
+        asyncio.ensure_future(self._persist_answer(request_id, answer))
 
     async def _persist_answer(self, request_id: str, answer: dict):
         try:
@@ -191,8 +180,7 @@ class ButlerDataExchange:
         """Worker pushes a status/progress update for the Butler."""
         self._updates.setdefault(job_id, []).append(update)
         # Persist to DB
-        task = asyncio.create_task(self._persist_update(job_id, update))
-        task.add_done_callback(_log_task_exception)
+        asyncio.ensure_future(self._persist_update(job_id, update))
 
     async def _persist_update(self, job_id: str, update: dict):
         try:
@@ -282,10 +270,6 @@ class RequestDataFromButlerTool(BaseTool):
         "required": ["data_type", "question", "job_id"]
     }
 
-    def __init__(self, agent_name: str = "hackathon", **kwargs):
-        super().__init__(**kwargs)
-        self._agent_name = agent_name
-
     async def execute(
         self,
         data_type: str,
@@ -298,7 +282,7 @@ class RequestDataFromButlerTool(BaseTool):
         import uuid
 
         butler_url = os.getenv("BUTLER_ENDPOINT", "http://localhost:3001")
-        request_id = str(uuid.uuid4())  # H8: use full UUID
+        request_id = str(uuid.uuid4())[:8]
 
         payload = {
             "request_id": request_id,
@@ -307,7 +291,7 @@ class RequestDataFromButlerTool(BaseTool):
             "question": question,
             "fields": fields or [],
             "context": context or "",
-            "agent": self._agent_name,
+            "agent": "hackathon",
         }
 
         # ── Try HTTP call to Butler ──────────────────────────
@@ -335,7 +319,7 @@ class RequestDataFromButlerTool(BaseTool):
         # (works when Butler and worker run in the same Python process)
         try:
             exchange = ButlerDataExchange.instance()
-            await exchange.post_request(request_id, job_id, payload)
+            exchange.post_request(request_id, job_id, payload)
             answer = await exchange.wait_for_answer(request_id, timeout=120)
             if answer:
                 return json.dumps(answer, indent=2)
@@ -397,10 +381,6 @@ class SendUpdateToButlerTool(BaseTool):
         "required": ["job_id", "status", "message"]
     }
 
-    def __init__(self, agent_name: str = "hackathon", **kwargs):
-        super().__init__(**kwargs)
-        self._agent_name = agent_name
-
     async def execute(
         self,
         job_id: str,
@@ -416,7 +396,7 @@ class SendUpdateToButlerTool(BaseTool):
             "status": status,
             "message": message,
             "data": data or {},
-            "agent": self._agent_name,
+            "agent": "hackathon",
         }
 
         # Try HTTP
@@ -442,9 +422,9 @@ class SendUpdateToButlerTool(BaseTool):
 
 # ─── Factory ─────────────────────────────────────────────────
 
-def create_butler_comm_tools(agent_name: str = "hackathon") -> list[BaseTool]:
+def create_butler_comm_tools() -> list[BaseTool]:
     """Create all Butler communication tools."""
     return [
-        RequestDataFromButlerTool(agent_name=agent_name),
-        SendUpdateToButlerTool(agent_name=agent_name),
+        RequestDataFromButlerTool(),
+        SendUpdateToButlerTool(),
     ]

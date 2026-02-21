@@ -39,6 +39,9 @@
   "exclude": [
     "node_modules",
     "contracts",
+    "contracts-evm",
+    "anchor",
+    "agents",
     "mobile_frontend",
     "prisma/seed.ts",
     "scripts"

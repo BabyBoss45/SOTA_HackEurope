@@ -31,11 +31,6 @@ from .models import (
 from .registry import AgentRegistry, ConnectedAgent
 from .bidding import BiddingEngine, BidResult
 
-try:
-    from agents.src.shared.refund import trigger_refund as _trigger_refund
-except ImportError:
-    _trigger_refund = None  # type: ignore
-
 logger = logging.getLogger(__name__)
 
 # Type for the optional callback when a job completes
@@ -169,21 +164,6 @@ class JobRouter:
             self._engine.mark_completed(job_id, result)
         else:
             self._engine.mark_failed(job_id, result.get("error", "unknown"))
-
-            # Auto-refund on failure
-            if _trigger_refund is not None:
-                try:
-                    error_msg = result.get("error", "unknown")
-                    refund_result = await _trigger_refund(
-                        job_id=job_id,
-                        reason=f"Job failed via WS hub: {error_msg}",
-                    )
-                    if refund_result.get("success"):
-                        logger.info("Auto-refund succeeded for job %s: %s", job_id, refund_result)
-                    else:
-                        logger.error("Auto-refund FAILED for job %s — customer may not be refunded: %s", job_id, refund_result)
-                except Exception as refund_err:
-                    logger.error("Auto-refund exception for job %s: %s", job_id, refund_err)
 
         logger.info(
             "Job %s %s by %s",

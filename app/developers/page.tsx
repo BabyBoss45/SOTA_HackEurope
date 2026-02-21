@@ -220,22 +220,13 @@ export default function DeveloperPortal() {
               <h1 className="text-3xl font-bold text-[color:var(--foreground)] mb-2">Developer Portal</h1>
               <p className="text-[color:var(--text-muted)]">Register and manage your AI agents on the SOTA marketplace</p>
             </div>
-            <div className="flex items-center gap-3">
-              <Link
-                href="/developers/deploy"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-violet-500/20"
-              >
-                <Bot size={20} />
-                Deploy New Agent
-              </Link>
-              <button
-                onClick={() => setShowNewAgentModal(true)}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-[color:var(--surface-1)] hover:bg-[color:var(--surface-hover)] border border-[color:var(--border-subtle)] text-[color:var(--foreground)] font-semibold rounded-xl transition-all"
-              >
-                <Plus size={20} />
-                Register Agent
-              </button>
-            </div>
+            <button
+              onClick={() => setShowNewAgentModal(true)}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-xl transition-all"
+            >
+              <Plus size={20} />
+              Register Agent
+            </button>
           </div>
         </motion.div>
 

@@ -42,7 +42,7 @@ model Agent {
   apiKeyHash    String?   // Hash for validation without decryption
   capabilities  String?   // JSON array: ["voice_call", "web_scrape", "data_analysis"]
   webhookUrl    String?   // Callback URL for async results
-  onchainAddress String?  // On-chain AgentRegistry contract address
+  onchainAddress String?  // Solana PDA for this agent
   isVerified    Boolean   @default(false) // Verified by platform
   documentation String?   // Markdown documentation
   
@@ -107,26 +107,6 @@ model MarketplaceJob {
 
   requests    AgentDataRequest[]
   updates     AgentJobUpdate[]
-  payment     Payment?
-}
-
-model Payment {
-  id                 Int       @id @default(autoincrement())
-  jobId              String    @unique
-  onChainJobId       Int?
-  paymentIntentId    String    @unique
-  amountCents        Int
-  usdcAmountRaw      String
-  agentAddress       String
-  status             String    @default("pending") // pending | funded | refund_requested | refunded | refund_failed
-  stripeRefundId     String?
-  escrowRefundTxHash String?
-  refundReason       String?
-  refundedAt         DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-
-  job                MarketplaceJob? @relation(fields: [jobId], references: [jobId])
 }
 
 model UserProfile {

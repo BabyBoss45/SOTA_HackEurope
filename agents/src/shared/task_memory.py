@@ -2,12 +2,12 @@
 Task Memory — Structured outcome persistence + similarity-based pattern detection.
 
 Dual storage:
-  Firestore = source of truth (structured data, analytics, UI)
-  Qdrant    = experience retrieval layer (embeddings for similarity search)
+  PostgreSQL = source of truth (structured data, analytics, UI)
+  Qdrant     = experience retrieval layer (embeddings for similarity search)
 
 Usage::
 
-    memory = TaskPatternMemory(db=firestore_db)
+    memory = TaskPatternMemory(db=database)
     await memory.persist_outcome(job, agent_id="hackathon", result=result, elapsed_ms=1820)
     pattern = await memory.analyze_similar("Register for EU hackathons", ["hackathon_registration"], "hackathon")
 """
@@ -27,7 +27,23 @@ logger = logging.getLogger(__name__)
 
 QDRANT_COLLECTION = "task_outcomes"
 SIMILARITY_THRESHOLD = 0.70
-DEFAULT_EMBED_DIM = 3072  # text-embedding-3-large
+_EMBED_DIM: Optional[int] = None
+
+
+def _get_embed_dim() -> int:
+    """Detect embedding dimension from the active model (cached after first call)."""
+    global _EMBED_DIM
+    if _EMBED_DIM is not None:
+        return _EMBED_DIM
+    try:
+        import asyncio
+        from .embedding import embed_text
+        vec = asyncio.get_event_loop().run_until_complete(embed_text("dim_probe"))
+        _EMBED_DIM = len(vec)
+    except Exception:
+        _EMBED_DIM = 384  # safe fallback for all-MiniLM-L6-v2
+    logger.info("Detected embedding dimension: %d", _EMBED_DIM)
+    return _EMBED_DIM
 
 
 # ─── Failure Classification ──────────────────────────────────
@@ -172,8 +188,8 @@ class TaskPatternMemory:
     """
     Dual-write outcome store with similarity-based pattern retrieval.
 
-    Firestore = source of truth (structured records).
-    Qdrant    = experience retrieval (embedding similarity search).
+    PostgreSQL = source of truth (structured records).
+    Qdrant     = experience retrieval (embedding similarity search).
     """
 
     def __init__(
@@ -197,7 +213,7 @@ class TaskPatternMemory:
             from qdrant_client import QdrantClient  # type: ignore
             resolved_url = url or os.getenv("QDRANT_URL")
             if not resolved_url:
-                logger.info("QDRANT_URL not set — task memory will use Firestore only")
+                logger.info("QDRANT_URL not set — task memory will use PostgreSQL only")
                 return None
             return QdrantClient(
                 url=resolved_url,
@@ -213,9 +229,10 @@ class TaskPatternMemory:
         try:
             from qdrant_client.models import Distance, VectorParams  # type: ignore
             if not self.qdrant.collection_exists(QDRANT_COLLECTION):
+                dim = _get_embed_dim()
                 self.qdrant.create_collection(
                     collection_name=QDRANT_COLLECTION,
-                    vectors_config=VectorParams(size=DEFAULT_EMBED_DIM, distance=Distance.COSINE),
+                    vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
                 )
                 logger.info("Created Qdrant collection '%s'", QDRANT_COLLECTION)
         except Exception as exc:
@@ -233,7 +250,7 @@ class TaskPatternMemory:
         pattern_hint: Optional[PatternAnalysis] = None,
     ) -> TaskOutcome:
         """
-        Build a structured TaskOutcome and write it to Firestore + Qdrant.
+        Build a structured TaskOutcome and write it to PostgreSQL + Qdrant.
 
         ``pattern_hint`` is the pre-execution PatternAnalysis (if available).
         It's forwarded to ``_notify_incident_io`` so severity can escalate
@@ -264,8 +281,8 @@ class TaskPatternMemory:
             created_at=time.time(),
         )
 
-        # 1. Firestore (always)
-        await self._persist_firestore(outcome)
+        # 1. PostgreSQL (always)
+        await self._persist_db(outcome)
 
         # 2. Qdrant (if available)
         await self._persist_qdrant(outcome)
@@ -275,13 +292,13 @@ class TaskPatternMemory:
 
         return outcome
 
-    async def _persist_firestore(self, outcome: TaskOutcome) -> None:
+    async def _persist_db(self, outcome: TaskOutcome) -> None:
         if not self.db:
             return
         try:
             await self.db.store_task_outcome(asdict(outcome))
         except Exception as exc:
-            logger.warning("Firestore task outcome write failed: %s", exc)
+            logger.warning("Database task outcome write failed: %s", exc)
 
     async def _persist_qdrant(self, outcome: TaskOutcome) -> None:
         if not self.qdrant:
@@ -402,12 +419,13 @@ class TaskPatternMemory:
                 must=[FieldCondition(key="agent_id", match=MatchValue(value=agent_id))]
             )
 
-            results = self.qdrant.search(
+            response = self.qdrant.query_points(
                 collection_name=QDRANT_COLLECTION,
-                query_vector=vector,
+                query=vector,
                 limit=5,
                 query_filter=query_filter,
             )
+            results = response.points
         except Exception as exc:
             logger.warning("Qdrant search failed: %s", exc)
             return _empty_pattern()

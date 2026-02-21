@@ -21,8 +21,8 @@ class TestBuildRegisterMessage:
         assert msg["agent"]["wallet_address"] == ""
 
     def test_wallet_custom(self):
-        msg = build_register_message(name="a", tags=["t"], version="1.0.0", wallet_address="0xABC")
-        assert msg["agent"]["wallet_address"] == "0xABC"
+        msg = build_register_message(name="a", tags=["t"], version="1.0.0", wallet_address="SoLTest1111111111111111111111111")
+        assert msg["agent"]["wallet_address"] == "SoLTest1111111111111111111111111"
 
     def test_capabilities_default_to_tags(self):
         msg = build_register_message(name="a", tags=["t1", "t2"], version="1.0.0")
@@ -35,8 +35,8 @@ class TestBuildRegisterMessage:
     def test_compatible_with_hub_agentinfo(self):
         """The register message payload must be parseable by the hub's AgentInfo model."""
         from marketplace.models import AgentInfo
-        msg = build_register_message(name="test", tags=["t"], version="1.0.0", wallet_address="0x123")
+        msg = build_register_message(name="test", tags=["t"], version="1.0.0", wallet_address="SoLTest2222222222222222222222222")
         info = AgentInfo(**msg["agent"])
         assert info.name == "test"
         assert info.tags == ["t"]
-        assert info.wallet_address == "0x123"
+        assert info.wallet_address == "SoLTest2222222222222222222222222"

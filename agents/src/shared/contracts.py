@@ -2,7 +2,7 @@
 Contracts -- Re-exports from chain_contracts for backward compatibility.
 
 All agent modules should import from here or from chain_contracts directly.
-The chain layer has been migrated from EVM (Base Sepolia) to Solana Devnet.
+The chain layer uses Solana Devnet.
 """
 
 import time as _t

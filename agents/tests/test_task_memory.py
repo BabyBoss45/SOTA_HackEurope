@@ -1,7 +1,7 @@
 """
 Tests for the Adaptive Task Memory system (agents/src/shared/task_memory.py).
 
-All external services (Firestore, Qdrant, OpenAI embeddings) are mocked.
+All external services (PostgreSQL, Qdrant, OpenAI embeddings) are mocked.
 No env vars or network access required.
 """
 
@@ -20,7 +20,7 @@ import pytest
 
 # ─── Import Workaround ───────────────────────────────────────
 # The agents.src.__init__ and agents.src.shared.__init__ eagerly
-# import heavy deps (web3, openai, etc.) which may not be installed
+# import heavy deps (solana, openai, etc.) which may not be installed
 # in the test environment.  We load task_memory.py directly by file
 # path so none of the __init__.py chains are triggered.
 
@@ -44,7 +44,7 @@ def _load_module_from_file(name: str, filepath: Path) -> ModuleType:
 # dotted name before loading task_memory.
 _embedding_stub = ModuleType("agents.src.shared.embedding")
 async def _noop_embed(text, model=None):
-    return [0.0] * 3072
+    return [0.0] * 384
 _embedding_stub.embed_text = _noop_embed  # type: ignore[attr-defined]
 sys.modules["agents.src.shared.embedding"] = _embedding_stub
 
@@ -111,11 +111,11 @@ EMBED_PATCH_TARGET = "agents.src.shared.embedding.embed_text"
 
 # ─── Helpers ──────────────────────────────────────────────────
 
-EMBED_DIM = 3072
+EMBED_DIM = 384
 
 
 async def fake_embed_text(text: str, model: str | None = None) -> list[float]:
-    """Deterministic 3072-dim vector from hash of input."""
+    """Deterministic 384-dim vector from hash of input."""
     h = hashlib.sha256(text.encode()).digest()
     return [b / 255.0 for b in h] * (EMBED_DIM // 32)
 
@@ -138,6 +138,11 @@ class FakeJob:
 def _make_scored_point(score: float, payload: dict) -> SimpleNamespace:
     """Mimics a qdrant_client ScoredPoint."""
     return SimpleNamespace(score=score, payload=payload)
+
+
+def make_query_response(scored_points: list) -> SimpleNamespace:
+    """Mimics a qdrant_client QueryResponse (returned by query_points)."""
+    return SimpleNamespace(points=scored_points)
 
 
 def _failure_payload(
@@ -327,19 +332,19 @@ class TestPersistOutcome:
         return db
 
     @pytest.fixture
-    def memory_firestore_only(self, mock_db):
-        """TaskPatternMemory with Firestore only (no Qdrant)."""
+    def memory_db_only(self, mock_db):
+        """TaskPatternMemory with database only (no Qdrant)."""
         mem = TaskPatternMemory.__new__(TaskPatternMemory)
         mem.db = mock_db
         mem.qdrant = None
         mem.incident_io = None
         return mem
 
-    async def test_success_outcome(self, memory_firestore_only, mock_db):
+    async def test_success_outcome(self, memory_db_only, mock_db):
         job = FakeJob(tags=["hackathon_registration"])
         result = {"success": True, "hackathons": []}
 
-        outcome = await memory_firestore_only.persist_outcome(
+        outcome = await memory_db_only.persist_outcome(
             job=job, agent_id="hackathon", result=result, elapsed_ms=1200,
         )
 
@@ -351,11 +356,11 @@ class TestPersistOutcome:
         assert outcome.execution_time_ms == 1200
         mock_db.store_task_outcome.assert_awaited_once()
 
-    async def test_captcha_failure(self, memory_firestore_only):
+    async def test_captcha_failure(self, memory_db_only):
         job = FakeJob(description="Register for EU hackathons on devpost")
         result = {"success": False, "error": "CAPTCHA detected"}
 
-        outcome = await memory_firestore_only.persist_outcome(
+        outcome = await memory_db_only.persist_outcome(
             job=job, agent_id="hackathon", result=result, elapsed_ms=5000,
         )
 
@@ -366,29 +371,29 @@ class TestPersistOutcome:
         assert outcome.context.get("region") == "EU"
         assert outcome.context.get("site") == "devpost"
 
-    async def test_network_failure(self, memory_firestore_only):
+    async def test_network_failure(self, memory_db_only):
         result = {"success": False, "error": "Connection refused to target host"}
 
-        outcome = await memory_firestore_only.persist_outcome(
+        outcome = await memory_db_only.persist_outcome(
             job=FakeJob(), agent_id="caller", result=result, elapsed_ms=300,
         )
 
         assert outcome.failure_type == "network"
         assert outcome.recoverable is True
 
-    async def test_unknown_failure(self, memory_firestore_only):
+    async def test_unknown_failure(self, memory_db_only):
         result = {"success": False, "error": "Something bizarre"}
 
-        outcome = await memory_firestore_only.persist_outcome(
+        outcome = await memory_db_only.persist_outcome(
             job=FakeJob(), agent_id="caller", result=result, elapsed_ms=100,
         )
 
         assert outcome.failure_type == "unknown"
         assert outcome.recoverable is False
 
-    async def test_firestore_called_with_dict(self, memory_firestore_only, mock_db):
+    async def test_db_called_with_dict(self, memory_db_only, mock_db):
         job = FakeJob(tags=["call_verification"])
-        await memory_firestore_only.persist_outcome(
+        await memory_db_only.persist_outcome(
             job=job, agent_id="caller",
             result={"success": True}, elapsed_ms=800,
         )
@@ -400,42 +405,42 @@ class TestPersistOutcome:
         assert call_args["agent_id"] == "caller"
         assert call_args["success"] is True
 
-    async def test_no_qdrant_still_works(self, memory_firestore_only, mock_db):
-        """Without Qdrant configured, persist should still write to Firestore."""
-        await memory_firestore_only.persist_outcome(
+    async def test_no_qdrant_still_works(self, memory_db_only, mock_db):
+        """Without Qdrant configured, persist should still write to database."""
+        await memory_db_only.persist_outcome(
             job=FakeJob(), agent_id="hackathon",
             result={"success": False, "error": "timeout"}, elapsed_ms=100,
         )
         mock_db.store_task_outcome.assert_awaited_once()
 
-    async def test_no_incident_io_no_crash(self, memory_firestore_only):
+    async def test_no_incident_io_no_crash(self, memory_db_only):
         """Without incident.io client, persist should not raise."""
-        outcome = await memory_firestore_only.persist_outcome(
+        outcome = await memory_db_only.persist_outcome(
             job=FakeJob(), agent_id="hackathon",
             result={"success": False, "error": "captcha"}, elapsed_ms=100,
         )
         assert outcome.success is False
 
-    async def test_strategy_passed_through(self, memory_firestore_only):
-        outcome = await memory_firestore_only.persist_outcome(
+    async def test_strategy_passed_through(self, memory_db_only):
+        outcome = await memory_db_only.persist_outcome(
             job=FakeJob(), agent_id="hackathon",
             result={"success": True}, elapsed_ms=500,
             strategy="cautious",
         )
         assert outcome.strategy_used == "cautious"
 
-    async def test_task_type_inferred(self, memory_firestore_only):
+    async def test_task_type_inferred(self, memory_db_only):
         job = FakeJob(tags=["hotel_booking"])
-        outcome = await memory_firestore_only.persist_outcome(
+        outcome = await memory_db_only.persist_outcome(
             job=job, agent_id="caller",
             result={"success": True}, elapsed_ms=200,
         )
         assert outcome.task_type == "hotel_booking"
 
-    async def test_firestore_error_swallowed(self):
-        """Firestore failure should not crash persist_outcome."""
+    async def test_db_error_swallowed(self):
+        """Database failure should not crash persist_outcome."""
         db = AsyncMock()
-        db.store_task_outcome = AsyncMock(side_effect=RuntimeError("Firestore down"))
+        db.store_task_outcome = AsyncMock(side_effect=RuntimeError("Database down"))
 
         mem = TaskPatternMemory.__new__(TaskPatternMemory)
         mem.db = db
@@ -478,7 +483,7 @@ class TestAnalyzeSimilar:
     @patch(EMBED_PATCH_TARGET, new=fake_embed_text)
     async def test_qdrant_empty_results(self, mock_db):
         mock_q = MagicMock()
-        mock_q.search.return_value = []
+        mock_q.query_points.return_value = make_query_response([])
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("test", [], "hackathon")
@@ -488,10 +493,10 @@ class TestAnalyzeSimilar:
     @patch(EMBED_PATCH_TARGET, new=fake_embed_text)
     async def test_below_threshold_filtered(self, mock_db):
         mock_q = MagicMock()
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.5, _failure_payload("captcha")),
             _make_scored_point(0.3, _failure_payload("timeout")),
-        ]
+        ])
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("test", [], "hackathon")
@@ -501,11 +506,11 @@ class TestAnalyzeSimilar:
     @patch(EMBED_PATCH_TARGET, new=fake_embed_text)
     async def test_all_failures(self, mock_db):
         mock_q = MagicMock()
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.85, _failure_payload("captcha")),
             _make_scored_point(0.80, _failure_payload("captcha")),
             _make_scored_point(0.75, _failure_payload("timeout")),
-        ]
+        ])
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("EU hackathons", [], "hackathon")
@@ -520,11 +525,11 @@ class TestAnalyzeSimilar:
     @patch(EMBED_PATCH_TARGET, new=fake_embed_text)
     async def test_mixed_results(self, mock_db):
         mock_q = MagicMock()
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.90, _failure_payload("captcha", success=False)),
             _make_scored_point(0.85, _failure_payload("", success=True)),
             _make_scored_point(0.80, _failure_payload("", success=True)),
-        ]
+        ])
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("EU hackathons", [], "hackathon")
@@ -552,7 +557,7 @@ class TestAnalyzeSimilar:
     @patch(EMBED_PATCH_TARGET, new=fake_embed_text)
     async def test_qdrant_search_error_graceful(self, mock_db):
         mock_q = MagicMock()
-        mock_q.search.side_effect = RuntimeError("Qdrant connection lost")
+        mock_q.query_points.side_effect = RuntimeError("Qdrant connection lost")
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("test", [], "hackathon")
@@ -563,11 +568,11 @@ class TestAnalyzeSimilar:
     async def test_confidence_and_strategy_thresholds(self, mock_db):
         """success_rate=0.33 * mean_sim=0.85 => confidence ~0.28 => cautious"""
         mock_q = MagicMock()
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.85, _failure_payload("captcha", success=False)),
             _make_scored_point(0.85, _failure_payload("timeout", success=False)),
             _make_scored_point(0.85, _failure_payload("", success=True)),
-        ]
+        ])
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("test", [], "hackathon")
@@ -577,10 +582,10 @@ class TestAnalyzeSimilar:
     @patch(EMBED_PATCH_TARGET, new=fake_embed_text)
     async def test_avg_execution_time(self, mock_db):
         mock_q = MagicMock()
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.90, _failure_payload(execution_time_ms=1000)),
             _make_scored_point(0.80, _failure_payload(execution_time_ms=3000)),
-        ]
+        ])
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("test", [], "hackathon")
@@ -632,9 +637,9 @@ class TestEndToEnd:
         assert upserted["payload"]["failure_type"] == "captcha"
         assert upserted["payload"]["success"] is False
 
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.92, upserted["payload"]),
-        ]
+        ])
 
         pattern = await mem.analyze_similar(
             "Sign up for European hackathons on devpost",
@@ -684,11 +689,11 @@ class TestEndToEnd:
 
         assert len(captured) == 3
 
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.88, captured[0]["payload"]),
             _make_scored_point(0.85, captured[1]["payload"]),
             _make_scored_point(0.82, captured[2]["payload"]),
-        ]
+        ])
 
         pattern = await mem.analyze_similar("EU hackathons", [], "hackathon")
 
@@ -723,9 +728,9 @@ class TestEndToEnd:
             elapsed_ms=4000,
         )
 
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.91, captured[0]["payload"]),
-        ]
+        ])
 
         pattern = await mem.analyze_similar("EU hackathons", [], "hackathon")
         prompt = build_adaptation_prompt(pattern)
