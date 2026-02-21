@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  butler-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sota-butler-api
+    command: python butler_api.py
+    ports:
+      - "3001:3001"
+    environment:
+      - BUTLER_API_PORT=3001
+      - RPC_URL=${RPC_URL}
+      - PRIVATE_KEY=${PRIVATE_KEY}
+      - CHAIN_ID=${CHAIN_ID}
+      - ORDERBOOK_ADDRESS=${ORDERBOOK_ADDRESS}
+      - ESCROW_ADDRESS=${ESCROW_ADDRESS}
+      - AGENT_REGISTRY_ADDRESS=${AGENT_REGISTRY_ADDRESS}
+      - USDC_ADDRESS=${USDC_ADDRESS}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    networks:
+      - sota-network
+
+  manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sota-manager
+    command: python -m agents manager
+    ports:
+      - "3002:3002"
+    environment:
+      - MANAGER_PORT=3002
+      - RPC_URL=${RPC_URL}
+      - MANAGER_PRIVATE_KEY=${MANAGER_PRIVATE_KEY}
+      - ORDERBOOK_ADDRESS=${ORDERBOOK_ADDRESS}
+      - AGENT_REGISTRY_ADDRESS=${AGENT_REGISTRY_ADDRESS}
+      - ESCROW_ADDRESS=${ESCROW_ADDRESS}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - CALLER_ENDPOINT=http://caller:3003
+    depends_on:
+      - caller
+    networks:
+      - sota-network
+
+  caller:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sota-caller
+    command: python -m agents caller
+    ports:
+      - "3003:3003"
+    environment:
+      - CALLER_PORT=3003
+      - RPC_URL=${RPC_URL}
+      - CALLER_PRIVATE_KEY=${CALLER_PRIVATE_KEY}
+      - ORDERBOOK_ADDRESS=${ORDERBOOK_ADDRESS}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    networks:
+      - sota-network
+
+networks:
+  sota-network:
+    driver: bridge

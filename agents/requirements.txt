@@ -1,0 +1,43 @@
+# Web3 / Blockchain (Base Sepolia)
+web3>=7.0.0
+eth-account>=0.13.0
+
+# Core (All scripts)
+python-dotenv>=1.0.0
+pydantic>=2.9.0
+
+# Server (Butler API)
+uvicorn>=0.32.0
+fastapi>=0.115.0
+
+# AI / Vector DB (Butler + Seeding)
+anthropic>=0.39.0
+sentence-transformers>=3.0.0
+qdrant-client>=1.7.0
+mem0ai>=0.0.10
+
+# LangGraph (Butler Agent Orchestration)
+langgraph>=0.2.0
+langchain-core>=0.3.0
+
+# HTTP tools
+requests>=2.31.0
+httpx>=0.27.0
+aiohttp>=3.10.0
+
+# Scraping (Hackathon Agent)
+beautifulsoup4>=4.12.0
+
+# Browser Automation (Hackathon Registration)
+playwright>=1.40.0
+
+
+# Cost tracking (Paid.ai)
+paid-python>=1.0.5
+
+# Optional: Agent-specific tools
+# twilio>=9.3.0  # For Caller Agent
+
+# Dev
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
