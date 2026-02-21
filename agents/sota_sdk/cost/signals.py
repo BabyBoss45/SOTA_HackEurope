@@ -145,14 +145,11 @@ def send_outcome(
     if metadata:
         data["metadata"] = metadata
 
-    try:
-        signal(
-            event_name="job_completed",
-            data=data,
-            enable_cost_tracing=True,
-        )
-    except TypeError:
-        signal(event_name="job_completed", data=data)
+    signal(
+        event_name="job_completed",
+        data=data,
+        enable_cost_tracing=True,
+    )
     logger.info(
         "Outcome signal sent: job=%s agent=%s revenue=$%.2f success=%s",
         job_id, agent_name, revenue_usdc, success,

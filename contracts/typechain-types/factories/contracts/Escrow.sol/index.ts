@@ -3,4 +3,3 @@
 /* eslint-disable */
 export { Escrow__factory } from "./Escrow__factory";
 export { IOrderBook__factory } from "./IOrderBook__factory";
-export { IReputationToken__factory } from "./IReputationToken__factory";

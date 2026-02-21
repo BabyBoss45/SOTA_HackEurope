@@ -141,20 +141,7 @@ async function main() {
   await delay(2000);
 
   // ═══════════════════════════════════════════════════════════
-  // 5. ReputationToken
-  // ═══════════════════════════════════════════════════════════
-
-  console.log("Deploying ReputationToken...");
-  const reputationToken = await retryWithBackoff(() =>
-    ethers.deployContract("ReputationToken", [deployer.address])
-  );
-  await retryWithBackoff(() => reputationToken.waitForDeployment());
-  const reputationTokenAddress = reputationToken.target as string;
-  console.log(`   ReputationToken: ${reputationTokenAddress}`);
-  await delay(2000);
-
-  // ═══════════════════════════════════════════════════════════
-  // 6. Wire contracts together
+  // 5. Wire contracts together
   // ═══════════════════════════════════════════════════════════
 
   console.log("\nWiring contracts...");
@@ -165,22 +152,6 @@ async function main() {
 
   console.log("   Escrow.setOrderBook -> OrderBook");
   await retryWithBackoff(() => (escrow as any).setOrderBook(orderBookAddress));
-  await delay(2000);
-
-  console.log("   Escrow.setReputationToken -> ReputationToken");
-  await retryWithBackoff(() => (escrow as any).setReputationToken(reputationTokenAddress));
-  await delay(2000);
-
-  console.log("   ReputationToken.setEscrow -> Escrow");
-  await retryWithBackoff(() => (reputationToken as any).setEscrow(escrowAddress));
-  await delay(2000);
-
-  console.log("   ReputationToken.setAgentRegistry -> AgentRegistry");
-  await retryWithBackoff(() => (reputationToken as any).setAgentRegistry(agentRegistryAddress));
-  await delay(2000);
-
-  console.log("   AgentRegistry.setReputationOracle -> ReputationToken");
-  await retryWithBackoff(() => (agentRegistry as any).setReputationOracle(reputationTokenAddress));
   await delay(2000);
 
   // ═══════════════════════════════════════════════════════════
@@ -198,7 +169,6 @@ async function main() {
       OrderBook: orderBookAddress,
       Escrow: escrowAddress,
       AgentRegistry: agentRegistryAddress,
-      ReputationToken: reputationTokenAddress,
     },
   };
 
@@ -223,11 +193,10 @@ async function main() {
   console.log(`   ${latestPath}`);
 
   console.log("\nContract Addresses:");
-  console.log(`   USDC:            ${usdcAddress}`);
-  console.log(`   OrderBook:       ${orderBookAddress}`);
-  console.log(`   Escrow:          ${escrowAddress}`);
-  console.log(`   AgentRegistry:   ${agentRegistryAddress}`);
-  console.log(`   ReputationToken: ${reputationTokenAddress}`);
+  console.log(`   USDC:          ${usdcAddress}`);
+  console.log(`   OrderBook:     ${orderBookAddress}`);
+  console.log(`   Escrow:        ${escrowAddress}`);
+  console.log(`   AgentRegistry: ${agentRegistryAddress}`);
 }
 
 main().catch((error) => {

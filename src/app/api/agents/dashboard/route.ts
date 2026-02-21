@@ -19,14 +19,14 @@ export async function GET() {
     const dbAgents = await prisma.agent.findMany();
 
     // Sort by creation date ascending
-    dbAgents.sort((a: typeof dbAgents[number], b: typeof dbAgents[number]) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    dbAgents.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     // Transform to dashboard format
-    const agents: DashboardAgent[] = dbAgents.map((agent: typeof dbAgents[number]) => {
-      const totalReqs = agent.totalRequests ?? 0;
-      const successReqs = agent.successfulRequests ?? 0;
-      const rep = agent.reputation ?? 5.0;
-      const iconName = agent.icon ?? "Bot";
+    const agents: DashboardAgent[] = dbAgents.map((agent) => {
+      const totalReqs = (agent as { totalRequests?: number }).totalRequests ?? 0;
+      const successReqs = (agent as { successfulRequests?: number }).successfulRequests ?? 0;
+      const rep = (agent as { reputation?: number }).reputation ?? 5.0;
+      const iconName = (agent as { icon?: string }).icon ?? "Bot";
       
       const successRate = totalReqs > 0 
         ? Math.round((successReqs / totalReqs) * 1000) / 10 

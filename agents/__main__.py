@@ -16,8 +16,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def run_butler_api():
-    """Run the Butler API (LangGraph-based)"""
+def run_butler_api():
+    """Run the Butler API"""
     import uvicorn
     logger.info("🚀 Starting SOTA Butler API on port 3001...")
     uvicorn.run(
@@ -95,7 +95,7 @@ Examples:
 
     # Run selected agent
     if args.agent == "butler":
-        asyncio.run(run_butler_api())
+        run_butler_api()
     elif args.agent == "manager":
         asyncio.run(run_manager())
     elif args.agent == "caller":

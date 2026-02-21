@@ -237,8 +237,6 @@ export default function PayoutPage(): React.JSX.Element {
       setAgents(myAgents);
       setSelectedAgent((prev) => (myAgents.length > 0 && !prev ? myAgents[0].address : prev));
 
-      // TODO: Query Escrow contract for actual agent earnings
-      // Currently stubbed to 0 — pending Escrow contract integration
       const earningsMap = new Map<Address, bigint>();
       for (const agent of myAgents) {
         earningsMap.set(agent.address, 0n);

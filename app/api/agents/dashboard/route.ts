@@ -1,6 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
 
 export interface DashboardAgent {
   id: number;
@@ -14,24 +13,19 @@ export interface DashboardAgent {
   isButler: boolean;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     // Fetch all agents from DB
     const dbAgents = await prisma.agent.findMany({
       orderBy: { createdAt: 'asc' },
     });
 
     // Transform to dashboard format
-    const agents: DashboardAgent[] = dbAgents.map((agent: typeof dbAgents[number]) => {
-      const totalReqs = agent.totalRequests ?? 0;
-      const successReqs = agent.successfulRequests ?? 0;
-      const rep = agent.reputation ?? 5.0;
-      const iconName = agent.icon ?? "Bot";
+    const agents: DashboardAgent[] = dbAgents.map((agent) => {
+      const totalReqs = (agent as { totalRequests?: number }).totalRequests ?? 0;
+      const successReqs = (agent as { successfulRequests?: number }).successfulRequests ?? 0;
+      const rep = (agent as { reputation?: number }).reputation ?? 5.0;
+      const iconName = (agent as { icon?: string }).icon ?? "Bot";
       
       const successRate = totalReqs > 0 
         ? Math.round((successReqs / totalReqs) * 1000) / 10 

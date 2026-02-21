@@ -255,7 +255,7 @@ class HackathonAgent(AutoBidderMixin, BaseArchiveAgent):
             )
 
         # Enrich prompt with historical pattern analysis
-        pattern_analysis = job.params.get("_pattern_analysis")
+        pattern_analysis = job.params.get("pattern_analysis")
         if pattern_analysis:
             from ..shared.task_memory import build_adaptation_prompt
             adaptation = build_adaptation_prompt(pattern_analysis)

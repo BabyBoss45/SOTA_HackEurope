@@ -70,10 +70,6 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IOrderBook__factory>;
     getContractFactory(
-      name: "IReputationToken",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.IReputationToken__factory>;
-    getContractFactory(
       name: "MockUSDC",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.MockUSDC__factory>;
@@ -161,11 +157,6 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.IOrderBook>;
     getContractAt(
-      name: "IReputationToken",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.IReputationToken>;
-    getContractAt(
       name: "MockUSDC",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -242,10 +233,6 @@ declare module "hardhat/types/runtime" {
       name: "IOrderBook",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IOrderBook>;
-    deployContract(
-      name: "IReputationToken",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IReputationToken>;
     deployContract(
       name: "MockUSDC",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -333,11 +320,6 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IOrderBook>;
-    deployContract(
-      name: "IReputationToken",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IReputationToken>;
     deployContract(
       name: "MockUSDC",
       args: any[],

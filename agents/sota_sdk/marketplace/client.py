@@ -28,14 +28,6 @@ from ..config import (
     WS_RECONNECT_MAX,
 )
 
-
-def _ws_is_open(ws) -> bool:
-    """Check if a websockets connection is open (compatible with v14+ and v15+)."""
-    if hasattr(ws, "open"):
-        return ws.open
-    # websockets v15+: ClientConnection has no .open; check close_code instead
-    return ws.close_code is None
-
 logger = logging.getLogger(__name__)
 
 # Type alias for async message handlers
@@ -75,7 +67,7 @@ class MarketplaceClient:
         self._url = url
         self._register_payload = register_payload
         self._handlers: Dict[str, Handler] = {}
-        self._ws = None  # Optional[websockets.asyncio.client.ClientConnection]
+        self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._running = False
         self._reconnect_delay = WS_RECONNECT_MIN
         self._send_queue: deque[dict] = deque(maxlen=_MAX_SEND_QUEUE)
@@ -116,35 +108,28 @@ class MarketplaceClient:
         ``_MAX_SEND_QUEUE`` items) and flushed when the connection
         comes back. Heartbeats are not queued.
         """
-        if self._ws is not None and _ws_is_open(self._ws):
-            try:
-                await self._ws.send(json.dumps(payload))
+        if self._ws is not None and self._ws.open:
+            await self._ws.send(json.dumps(payload))
+        else:
+            # Don't queue heartbeats -- they're ephemeral
+            if payload.get("type") == "heartbeat":
                 return
-            except (ConnectionClosed, Exception):
-                pass  # Fall through to queue
-        # Don't queue heartbeats -- they're ephemeral
-        if payload.get("type") == "heartbeat":
-            return
-        self._send_queue.append(payload)
-        logger.debug(
-            "WS not connected, queued %s (queue=%d)",
-            payload.get("type"), len(self._send_queue),
-        )
+            self._send_queue.append(payload)
+            logger.debug(
+                "WS not connected, queued %s (queue=%d)",
+                payload.get("type"), len(self._send_queue),
+            )
 
     @property
     def connected(self) -> bool:
-        return self._ws is not None and _ws_is_open(self._ws)
+        return self._ws is not None and self._ws.open
 
     # -- Internals -------------------------------------------------------------
 
     async def _connect_once(self) -> None:
         """Single connection attempt: connect, register, listen."""
         logger.info("Connecting to marketplace hub at %s ...", self._url)
-        async with websockets.connect(
-            self._url,
-            ping_interval=20,
-            ping_timeout=20,
-        ) as ws:
+        async with websockets.connect(self._url) as ws:
             self._ws = ws
             self._reconnect_delay = WS_RECONNECT_MIN
             logger.info("Connected to marketplace hub")
@@ -169,17 +154,12 @@ class MarketplaceClient:
     async def _flush_queue(self) -> None:
         """Send all queued messages that accumulated during disconnect."""
         flushed = 0
-        while self._send_queue and self._ws and _ws_is_open(self._ws):
-            msg = self._send_queue[0]  # peek, don't remove yet
-            try:
-                await self._ws.send(json.dumps(msg))
-                self._send_queue.popleft()  # remove only on success
-                flushed += 1
-            except Exception:
-                logger.warning("Flush interrupted, %d msgs remain in queue", len(self._send_queue))
-                break
+        while self._send_queue and self._ws and self._ws.open:
+            msg = self._send_queue.popleft()
+            await self._ws.send(json.dumps(msg))
+            flushed += 1
         if flushed:
-            logger.debug("Flushed %d queued messages", flushed)
+            logger.info("Flushed %d queued messages after reconnect", flushed)
 
     async def _listen(self, ws) -> None:
         """Read messages until the connection drops."""
@@ -212,15 +192,8 @@ class MarketplaceClient:
     async def _heartbeat_loop(self) -> None:
         """Send periodic heartbeat messages."""
         try:
-            while self._running:
-                if not self._ws or not _ws_is_open(self._ws):
-                    logger.warning("Heartbeat: connection lost, stopping heartbeat loop")
-                    break
-                try:
-                    await self.send({"type": "heartbeat"})
-                except Exception as e:
-                    logger.warning("Heartbeat send failed: %s", e)
-                    break
+            while self._running and self._ws and self._ws.open:
+                await self.send({"type": "heartbeat"})
                 await asyncio.sleep(WS_HEARTBEAT_INTERVAL)
         except asyncio.CancelledError:
             pass

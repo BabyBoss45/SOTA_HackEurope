@@ -1,21 +1,9 @@
-import { createHash, createHmac, randomBytes, createCipheriv, createDecipheriv, timingSafeEqual } from 'crypto';
+import { createHash, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
 import { prisma } from './prisma';
 import type { Agent, User } from '@prisma/client';
-import bcrypt from 'bcryptjs';
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}. Refusing to start with insecure defaults.`);
-  }
-  return value;
-}
-
-const JWT_SECRET = requireEnv('JWT_SECRET');
-const ENCRYPTION_KEY = requireEnv('ENCRYPTION_KEY');
-if (Buffer.from(ENCRYPTION_KEY, 'utf-8').length !== 32) {
-  throw new Error('ENCRYPTION_KEY must be exactly 32 bytes (UTF-8) for AES-256-CBC');
-}
+const JWT_SECRET = process.env.JWT_SECRET || 'sota-dev-secret-change-in-production';
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef'; // 32 bytes for AES-256
 
 // ═══════════════════════════════════════════════════════════
 //  API Key Generation & Validation
@@ -116,7 +104,7 @@ export interface SessionPayload {
 export function createSessionToken(payload: Omit<SessionPayload, 'exp'>): string {
   const exp = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
   const data = JSON.stringify({ ...payload, exp });
-  const signature = createHmac('sha256', JWT_SECRET).update(data).digest('hex');
+  const signature = createHash('sha256').update(`${data}${JWT_SECRET}`).digest('hex');
   return Buffer.from(`${data}.${signature}`).toString('base64');
 }
 
@@ -124,23 +112,17 @@ export function verifySessionToken(token: string): SessionPayload | null {
   try {
     const decoded = Buffer.from(token, 'base64').toString('utf-8');
     const [data, signature] = decoded.split(/\.(?=[^.]+$)/); // Split on last dot
-
-    if (!data || !signature) return null;
-
-    const expectedSignature = createHmac('sha256', JWT_SECRET).update(data).digest('hex');
-
-    // Timing-safe comparison to prevent timing oracle attacks
-    const sigBuf = Buffer.from(signature, 'utf-8');
-    const expectedBuf = Buffer.from(expectedSignature, 'utf-8');
-    if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
+    
+    const expectedSignature = createHash('sha256').update(`${data}${JWT_SECRET}`).digest('hex');
+    if (signature !== expectedSignature) {
       return null;
     }
-
+    
     const payload = JSON.parse(data) as SessionPayload;
     if (payload.exp < Date.now()) {
       return null;
     }
-
+    
     return payload;
   } catch {
     return null;
@@ -154,29 +136,19 @@ export function verifySessionToken(token: string): SessionPayload | null {
 export async function getCurrentUser(request: Request): Promise<User | null> {
   const authHeader = request.headers.get('Authorization');
 
-  if (authHeader) {
-    if (authHeader.startsWith('Bearer ')) {
-      const payload = verifySessionToken(authHeader.slice(7));
-      if (!payload) return null;
-      return prisma.user.findUnique({ where: { id: payload.userId } });
-    }
-
-    if (authHeader.startsWith('ApiKey ')) {
-      const result = await validateApiKey(authHeader.slice(7));
-      return result?.owner ?? null;
-    }
+  if (!authHeader) {
+    return null;
   }
 
-  // Fall back to session cookie when no Authorization header is present
-  const cookieHeader = request.headers.get('Cookie');
-  if (cookieHeader) {
-    const match = cookieHeader.match(/(?:^|;\s*)session_token=([^;]+)/);
-    if (match) {
-      const payload = verifySessionToken(match[1]);
-      if (payload) {
-        return prisma.user.findUnique({ where: { id: payload.userId } });
-      }
-    }
+  if (authHeader.startsWith('Bearer ')) {
+    const payload = verifySessionToken(authHeader.slice(7));
+    if (!payload) return null;
+    return prisma.user.findUnique({ where: { id: payload.userId } });
+  }
+
+  if (authHeader.startsWith('ApiKey ')) {
+    const result = await validateApiKey(authHeader.slice(7));
+    return result?.owner ?? null;
   }
 
   return null;
@@ -228,17 +200,10 @@ export function generateNonce(): string {
   return `Sign this message to authenticate with SOTA:\n\nNonce: ${randomBytes(16).toString('hex')}\nTimestamp: ${Date.now()}`;
 }
 
-const BCRYPT_ROUNDS = 12;
-
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, BCRYPT_ROUNDS);
+export function hashPassword(password: string): string {
+  return createHash('sha256').update(`${password}${JWT_SECRET}`).digest('hex');
 }
 
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  // Support legacy SHA-256 hashes (64-char hex) for migration
-  if (/^[a-f0-9]{64}$/.test(hash)) {
-    const legacyHash = createHash('sha256').update(`${password}${JWT_SECRET}`).digest('hex');
-    return timingSafeEqual(Buffer.from(legacyHash, 'utf-8'), Buffer.from(hash, 'utf-8'));
-  }
-  return bcrypt.compare(password, hash);
+export function verifyPassword(password: string, hash: string): boolean {
+  return hashPassword(password) === hash;
 }

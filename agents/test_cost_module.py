@@ -97,17 +97,8 @@ record(n, "Config", "Disabled when PAID_ENABLED empty string", not cfg.is_tracki
 n += 1
 cfg._initialized = False
 os.environ["PAID_ENABLED"] = "true"
-cfg.initialize_cost_tracking()
-# If paid-python IS installed, tracking will initialize; if not, it stays disabled
-_paid_available = True
-try:
-    import paid.tracing  # noqa: F401
-except ImportError:
-    _paid_available = False
-if _paid_available:
-    record(n, "Config", "Initializes when paid-python available", cfg.is_tracking_enabled())
-else:
-    record(n, "Config", "Graceful fallback (paid-python missing)", not cfg.is_tracking_enabled())
+cfg.initialize_cost_tracking()  # paid-python not installed -> graceful
+record(n, "Config", "Graceful fallback (paid-python missing)", not cfg.is_tracking_enabled())
 
 n += 1
 cfg._initialized = True
@@ -135,45 +126,16 @@ class FakeClient:
 
 n += 1
 c = FakeClient()
-if _paid_available:
-    # With paid-python installed, wrappers return a wrapped object (not the original)
-    wrapped = wrap_openai(c)
-    record(n, "Wrappers", "wrap_openai wraps client (paid-python present)", wrapped is not c)
-else:
-    record(n, "Wrappers", "wrap_openai returns original (no paid-python)", wrap_openai(c) is c)
+record(n, "Wrappers", "wrap_openai returns original (no paid-python)", wrap_openai(c) is c)
 
 n += 1
-if _paid_available:
-    wrapped = wrap_anthropic(c)
-    record(n, "Wrappers", "wrap_anthropic wraps client (paid-python present)", wrapped is not c)
-else:
-    record(n, "Wrappers", "wrap_anthropic returns original (no paid-python)", wrap_anthropic(c) is c)
+record(n, "Wrappers", "wrap_anthropic returns original (no paid-python)", wrap_anthropic(c) is c)
 
 n += 1
-_gemini_wrapper_available = False
-try:
-    from paid.tracing.wrappers.google_genai import PaidGoogleGenAI  # noqa: F401
-    _gemini_wrapper_available = True
-except ImportError:
-    pass
-if _gemini_wrapper_available:
-    wrapped = wrap_gemini(c)
-    record(n, "Wrappers", "wrap_gemini wraps client (paid-python present)", wrapped is not c)
-else:
-    record(n, "Wrappers", "wrap_gemini returns original (SDK not installed)", wrap_gemini(c) is c)
+record(n, "Wrappers", "wrap_gemini returns original (no paid-python)", wrap_gemini(c) is c)
 
 n += 1
-_mistral_wrapper_available = False
-try:
-    from paid.tracing.wrappers.mistral import PaidMistral  # noqa: F401
-    _mistral_wrapper_available = True
-except ImportError:
-    pass
-if _mistral_wrapper_available:
-    wrapped = wrap_mistral(c)
-    record(n, "Wrappers", "wrap_mistral wraps client (paid-python present)", wrapped is not c)
-else:
-    record(n, "Wrappers", "wrap_mistral returns original (SDK not installed)", wrap_mistral(c) is c)
+record(n, "Wrappers", "wrap_mistral returns original (no paid-python)", wrap_mistral(c) is c)
 
 n += 1
 try:

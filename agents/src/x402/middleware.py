@@ -9,11 +9,8 @@ Implements the x402 payment protocol:
 
 import os
 import json
-import asyncio
 import base64
 import logging
-import sqlite3
-import threading
 from typing import Optional
 
 from fastapi import Request, HTTPException, Depends
@@ -24,51 +21,11 @@ logger = logging.getLogger(__name__)
 # ERC-20 Transfer event topic
 TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
 
-# Persistent replay protection using SQLite (survives restarts)
-_replay_db_path = os.getenv("X402_REPLAY_DB", "x402_used_tx.db")
-_replay_db_lock = threading.Lock()
-
-
-def _init_replay_db():
-    """Initialize the replay protection database."""
-    conn = sqlite3.connect(_replay_db_path)
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS used_tx (tx_hash TEXT PRIMARY KEY, used_at REAL)"
-    )
-    conn.commit()
-    conn.close()
-
-
-_init_replay_db()
-
-
-def _is_tx_used(tx_hash: str) -> bool:
-    with _replay_db_lock:
-        conn = sqlite3.connect(_replay_db_path)
-        row = conn.execute(
-            "SELECT 1 FROM used_tx WHERE tx_hash = ?", (tx_hash,)
-        ).fetchone()
-        conn.close()
-        return row is not None
-
-
-def _mark_tx_used(tx_hash: str) -> None:
-    import time
-    with _replay_db_lock:
-        conn = sqlite3.connect(_replay_db_path)
-        conn.execute(
-            "INSERT OR IGNORE INTO used_tx (tx_hash, used_at) VALUES (?, ?)",
-            (tx_hash, time.time()),
-        )
-        conn.commit()
-        conn.close()
-
+# In-memory replay protection (hackathon scope — use Redis/DB in production)
+_used_tx_hashes: set[str] = set()
 
 # Cached config (loaded once at module level to avoid re-reading env vars per request)
 _cached_config: tuple[str, str, str] | None = None
-
-# Singleton Web3 instance to avoid creating a new connection per request
-_web3_instance: Web3 | None = None
 
 
 def _get_config():
@@ -94,15 +51,6 @@ def _get_config():
 
     _cached_config = (rpc_url, usdc_address, platform_wallet)
     return _cached_config
-
-
-def _get_web3() -> Web3:
-    """Return a singleton Web3 instance to avoid per-request connection overhead."""
-    global _web3_instance
-    if _web3_instance is None:
-        rpc_url, _, _ = _get_config()
-        _web3_instance = Web3(Web3.HTTPProvider(rpc_url))
-    return _web3_instance
 
 
 def _build_payment_request(price_usdc: float, resource: str) -> dict:
@@ -165,14 +113,14 @@ async def _verify_payment(payment_header: str, price_usdc: float) -> bool:
         logger.warning(f"Wrong chain ID: {chain_id}, expected 84532")
         return False
 
-    # Replay protection: reject reused transaction hashes (persistent across restarts)
+    # Replay protection: reject reused transaction hashes
     tx_hash_lower = tx_hash.lower()
-    if await asyncio.to_thread(_is_tx_used, tx_hash_lower):
+    if tx_hash_lower in _used_tx_hashes:
         logger.warning(f"Transaction {tx_hash} already used for a previous request")
         return False
 
     try:
-        w3 = _get_web3()
+        w3 = Web3(Web3.HTTPProvider(rpc_url))
 
         receipt = w3.eth.get_transaction_receipt(tx_hash)
 
@@ -216,7 +164,7 @@ async def _verify_payment(payment_header: str, price_usdc: float) -> bool:
                 logger.info(
                     f"Payment verified: {tx_hash}, amount={amount}, required={required_amount}"
                 )
-                await asyncio.to_thread(_mark_tx_used, tx_hash_lower)
+                _used_tx_hashes.add(tx_hash_lower)
                 return True
 
         logger.warning(f"No matching Transfer event found in {tx_hash}")

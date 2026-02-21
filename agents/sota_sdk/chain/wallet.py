@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import re
 import threading
-import time
 from decimal import Decimal
 from typing import Optional
 
@@ -117,58 +116,28 @@ class AgentWallet:
 
     # -- Tx helpers (used by contracts.py) -------------------------------------
 
-    def build_and_send(self, fn, value: int = 0, gas: int | None = None, retries: int = 3) -> str:
+    def build_and_send(self, fn, value: int = 0, gas: int | None = None) -> str:
         """Build, sign, and send a contract function call. Returns tx hash hex."""
-        from web3.exceptions import ContractLogicError
+        with self._nonce_lock:
+            if gas is None:
+                try:
+                    gas = int(
+                        fn.estimate_gas({"from": self.address, "value": value}) * 1.3
+                    )
+                except Exception:
+                    gas = 600_000  # fallback if estimate fails
 
-        for attempt in range(retries):
-            try:
-                with self._nonce_lock:
-                    if gas is None:
-                        try:
-                            gas = int(
-                                fn.estimate_gas({"from": self.address, "value": value}) * 1.3
-                            )
-                        except ContractLogicError:
-                            raise  # H6: tx will revert on-chain, don't waste gas
-                        except Exception as e:
-                            logger.warning("Gas estimation failed, using 600k fallback: %s", e)
-                            gas = 600_000
-
-                    nonce = self.w3.eth.get_transaction_count(self.address, "pending")
-                    latest = self.w3.eth.get_block("latest")
-                    base_fee = latest.get("baseFeePerGas")
-                    if base_fee is not None:
-                        tx = fn.build_transaction({
-                            "from": self.address,
-                            "nonce": nonce,
-                            "gas": gas,
-                            "maxFeePerGas": int(base_fee * 2),
-                            "maxPriorityFeePerGas": self.w3.to_wei(0.1, "gwei"),
-                            "value": value,
-                            "type": 2,
-                        })
-                    else:
-                        tx = fn.build_transaction({
-                            "from": self.address,
-                            "nonce": nonce,
-                            "gas": gas,
-                            "gasPrice": self.w3.eth.gas_price,
-                            "value": value,
-                        })
-                    signed = self.w3.eth.account.sign_transaction(tx, self.account.key)
-                    tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
-                return tx_hash.hex()
-            except ContractLogicError:
-                raise  # Don't retry reverts
-            except Exception as e:
-                # C4: Retry on nonce errors
-                if "nonce" in str(e).lower() and attempt < retries - 1:
-                    logger.warning("Nonce error (attempt %d/%d), retrying: %s", attempt + 1, retries, e)
-                    gas = None  # reset gas for re-estimation
-                    time.sleep(1)
-                    continue
-                raise
+            nonce = self.w3.eth.get_transaction_count(self.address, "pending")
+            tx = fn.build_transaction({
+                "from": self.address,
+                "nonce": nonce,
+                "gas": gas,
+                "gasPrice": self.w3.eth.gas_price,
+                "value": value,
+            })
+            signed = self.w3.eth.account.sign_transaction(tx, self.account.key)
+            tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+        return tx_hash.hex()
 
     def wait_for_receipt(self, tx_hash: str, timeout: int = 120):
         """Wait for a transaction receipt."""

@@ -34,8 +34,6 @@ export type { Escrow } from "./contracts/Escrow.sol/Escrow";
 export { Escrow__factory } from "./factories/contracts/Escrow.sol/Escrow__factory";
 export type { IOrderBook } from "./contracts/Escrow.sol/IOrderBook";
 export { IOrderBook__factory } from "./factories/contracts/Escrow.sol/IOrderBook__factory";
-export type { IReputationToken } from "./contracts/Escrow.sol/IReputationToken";
-export { IReputationToken__factory } from "./factories/contracts/Escrow.sol/IReputationToken__factory";
 export type { MockUSDC } from "./contracts/mocks/MockUSDC";
 export { MockUSDC__factory } from "./factories/contracts/mocks/MockUSDC__factory";
 export type { OrderBook } from "./contracts/OrderBook";

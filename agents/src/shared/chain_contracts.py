@@ -57,8 +57,7 @@ class Contracts:
     escrow: Contract
     agent_registry: Contract
     usdc: Contract           # IERC20 for approve/transfer
-    reputation_token: Optional[Contract] = None
-    addresses: ContractAddresses = None
+    addresses: ContractAddresses
 
 
 def get_contracts(private_key: Optional[str] = None) -> Contracts:
@@ -101,7 +100,6 @@ def get_contracts(private_key: Optional[str] = None) -> Contracts:
         escrow=_contract("Escrow", addresses.escrow),
         agent_registry=_contract("AgentRegistry", addresses.agent_registry),
         usdc=_contract("MockUSDC", addresses.usdc),
-        reputation_token=_contract("ReputationToken", addresses.reputation_token) if addresses.reputation_token else None,
         addresses=addresses,
     )
 
@@ -128,11 +126,10 @@ def _send_tx(contracts: Contracts, fn: Any, value: int = 0, retries: int = 3) ->
                 nonce = contracts.w3.eth.get_transaction_count(
                     contracts.account.address, "pending"
                 )
-                estimated_gas = fn.estimate_gas({"from": contracts.account.address, "value": value})
                 tx = fn.build_transaction({
                     "from": contracts.account.address,
                     "nonce": nonce,
-                    "gas": int(estimated_gas * 1.3),  # 30% safety margin
+                    "gas": 600_000,
                     "gasPrice": contracts.w3.eth.gas_price,
                     "value": value,
                 })
@@ -214,8 +211,7 @@ def fund_job(
     fn_approve = contracts.usdc.functions.approve(
         Web3.to_checksum_address(escrow_addr), amount_raw
     )
-    approve_hash = _send_tx(contracts, fn_approve)
-    _wait(contracts, approve_hash)
+    _send_tx(contracts, fn_approve)
 
     # Step 2: Fund escrow
     fn_fund = contracts.escrow.functions.fundJob(
@@ -262,19 +258,6 @@ def confirm_delivery(contracts: Contracts, job_id: int) -> str:
     return tx_hash
 
 
-def refund_escrow(contracts: Contracts, job_id: int) -> str:
-    """
-    Refund escrow deposit back to poster (owner-only).
-    Calls Escrow.refund(jobId). Returns tx hash.
-
-    Reverts if not funded, already released, or already refunded.
-    """
-    fn = contracts.escrow.functions.refund(job_id)
-    tx_hash = _send_tx(contracts, fn)
-    _wait(contracts, tx_hash)
-    return tx_hash
-
-
 def is_delivery_confirmed(contracts: Contracts, job_id: int) -> bool:
     """Check if delivery has been confirmed."""
     return contracts.escrow.functions.isDeliveryConfirmed(job_id).call()
@@ -294,10 +277,9 @@ def get_job(contracts: Contracts, job_id: int) -> dict:
         "metadata_uri": job[3],
         "budget_usdc": job[4] / 1e6,  # 6 decimals → float
         "deadline": job[5],
-        "status": job[6],  # 0=OPEN, 1=ASSIGNED, 2=COMPLETED, 3=RELEASED, 4=CANCELLED, 5=DISPUTED
+        "status": job[6],  # 0=OPEN, 1=ASSIGNED, 2=COMPLETED, 3=RELEASED, 4=CANCELLED
         "delivery_proof": job[7].hex() if isinstance(job[7], bytes) else job[7],
         "created_at": job[8],
-        "accepted_bid_id": job[9],
     }
 
 
@@ -329,12 +311,10 @@ def register_agent(
     name: str,
     metadata_uri: str,
     capabilities: list[str],
-    agent_address: str | None = None,
 ) -> str:
     """Register as an agent on AgentRegistry. Returns tx hash."""
-    addr = Web3.to_checksum_address(agent_address or contracts.account.address)
     fn = contracts.agent_registry.functions.registerAgent(
-        addr, name, metadata_uri, capabilities
+        name, metadata_uri, capabilities
     )
     tx_hash = _send_tx(contracts, fn)
     _wait(contracts, tx_hash)

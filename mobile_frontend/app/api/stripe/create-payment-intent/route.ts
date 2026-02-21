@@ -16,13 +16,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (typeof agentAddress !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(agentAddress)) {
-      return NextResponse.json(
-        { error: "agentAddress must be a valid Ethereum address" },
-        { status: 400 }
-      );
-    }
-
     if (typeof amount !== "number" || amount <= 0 || amount > 10000) {
       return NextResponse.json(
         { error: "amount must be a number between 0 and 10,000" },

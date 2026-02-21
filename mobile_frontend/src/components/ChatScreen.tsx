@@ -230,7 +230,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
     const escrowInfo = jobResult?.escrow;
     if (!escrowInfo?.needs_user_funding) return;
 
-    const budgetUsdc = escrowInfo.budget_usdc || escrowInfo.budget_usd || 0.02;
+    const budgetUsdc = escrowInfo.budget_usdc || escrowInfo.budget_usd || 1.0;
     const jobId = jobResult.on_chain_job_id;
     const boardJobId = jobResult.job_id;
     const rawWinnerAddr = jobResult.winning_bid?.address;
@@ -256,7 +256,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
     // Attach wallet address
     if (address) jobData.wallet_address = address;
     if (!jobData.budget_usd) {
-      jobData.budget_usd = 0.02;
+      jobData.budget_usd = 1.0;
     }
 
     // Show progress bar during bid collection (15 seconds)
@@ -285,7 +285,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
       // ── Fund escrow via Stripe Apple Pay / card ──
       if (jobResult?.escrow?.needs_user_funding) {
         triggerStripePayment(jobResult);
-        const budgetUsdc = jobResult.escrow.budget_usdc || jobResult.escrow.budget_usd || 0.02;
+        const budgetUsdc = jobResult.escrow.budget_usdc || jobResult.escrow.budget_usd || 1.0;
         return `Job posted — awaiting payment of ${budgetUsdc.toFixed(2)} USDC`;
       }
 
@@ -321,10 +321,6 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
       showToast("Connected – start speaking", "success", 2000);
     },
     onDisconnect: () => {
-      // Show feedback only on unexpected drops (user-initiated ends already have context)
-      if (orbStatus === "listening" || orbStatus === "speaking") {
-        showToast("Voice session ended. Tap the orb to reconnect.", "info");
-      }
       setOrbStatus("idle");
     },
     onMessage: (msg: { message: string; source: string }) => {
@@ -351,45 +347,20 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
 
   const toggleVoice = async () => {
     if (orbStatus === "listening" || orbStatus === "speaking") {
-      try {
-        await conversation.endSession();
-      } catch (err) {
-        console.error("Failed to end voice session:", err);
-      }
+      await conversation.endSession();
       setOrbStatus("idle");
     } else {
       if (!address) {
         showToast("Connect your wallet first", "warning");
         return;
       }
-
-      // Mic permission — separate catch so errors are reported accurately
       try {
         await navigator.mediaDevices.getUserMedia({ audio: true });
-      } catch {
-        showToast("Microphone access denied", "warning");
-        setOrbStatus("idle");
-        return;
-      }
-
-      // Token fetch + session start
-      setOrbStatus("thinking");
-      try {
-        const tokenRes = await fetch("/api/elevenlabs/token");
-        if (!tokenRes.ok) throw new Error("Failed to fetch conversation token");
-        const { token } = await tokenRes.json();
-        if (!token) throw new Error("No conversation token received");
-
+        setOrbStatus("thinking");
         await conversation.startSession({
-          conversationToken: token,
-          connectionType: "webrtc",
-          overrides: {
-            agent: {
-              prompt: {
-                prompt: `The user's wallet address is ${address}. Use this when they ask about their wallet or need to sign transactions.`,
-              },
-            },
-          },
+          agentId: process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID ?? "",
+          connectionType: "websocket",
+          dynamicVariables: { wallet_address: address ?? "" },
           clientTools: {
             /* ── Post job to marketplace ── */
             post_job: async (params: Record<string, any>) => {
@@ -470,15 +441,14 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
             getWalletAddress: async () => address ?? "No wallet connected",
           },
         });
-      } catch (err: any) {
-        console.error("Voice session error:", err);
-        showToast("Failed to start voice session", "error");
+      } catch {
+        showToast("Microphone access denied", "warning");
         setOrbStatus("idle");
       }
     }
   };
 
-  /* ── Send a typed message ── */
+  /* ── Send a typed message directly to the Butler backend ── */
   const handleSendText = async () => {
     const msg = textInput.trim();
     if (!msg || isSending) return;
@@ -487,21 +457,6 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
       return;
     }
     setTextInput("");
-
-    // If a voice session is active, route text through ElevenLabs so the
-    // agent responds with voice and the message goes through the same pipeline.
-    if (conversation.status === "connected") {
-      addLine("user", msg);
-      try {
-        conversation.sendUserMessage(msg);
-      } catch (err: any) {
-        console.error("sendUserMessage error:", err);
-        showToast("Failed to send message", "error");
-      }
-      return;
-    }
-
-    // Fallback: direct Butler API call when no voice session is active
     addLine("user", msg);
     setIsSending(true);
     setOrbStatus("thinking");

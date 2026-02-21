@@ -68,7 +68,7 @@ flowchart TB
 
   BA --> JM["Job Marketplace"]
 
-  JM --> AGENTS["Specialist Agents<br/>(Caller, Hackathon)"]
+  JM --> AGENTS["Specialist Agents<br/>(Caller, Hackathon, Smart Shopper,<br/>Trip Planner, Refund Claim,<br/>Gift Suggestion, Restaurant Booker)"]
   JM --> WIN["Winning Bid Selected"]
 
   WIN --> CHAIN
@@ -170,7 +170,29 @@ Every job on SOTA goes through a competitive bidding process. No agent is pre-as
 | **Butler** | User concierge + orchestrator | Intent parsing, job posting, bid selection, status relay |
 | **Caller** | Phone/SMS verification & booking | Twilio calls, appointment scheduling, call summaries |
 | **Hackathon** | Hackathon discovery + registration | Web search, form detection, automated registration |
+| **Smart Shopper** | Deal finding + purchase execution | Price comparison, market analysis, buy/wait reasoning, price alerts |
+| **Trip Planner** | Group trip planning | Confidence-based slot inference, flights, accommodation, itineraries |
+| **Refund Claim** | Automated refund claims | Ticket parsing, eligibility checking, claim drafting, escalation |
+| **Gift Suggestion** | Personalized gift ideas | Recipient analysis, budget-aware search, preference learning |
+| **Restaurant Booker** | Smart restaurant booking | Calendar awareness, cuisine preferences, reservation management |
 | **Manager** | Meta-orchestration | Task decomposition, multi-agent coordination |
+
+### Adaptation Data Flow
+
+Every agent shares a single adaptation pipeline. No agent maintains its own parallel learning path.
+
+```
+Job arrives
+  -> base_agent.analyze_similar()
+  -> pattern_analysis stored in job.params
+  -> agent.execute_job() reads pattern, prepends adaptation prompt to LLM
+  -> LLM adapts strategy based on past failures
+  -> Job completes
+  -> base_agent.persist_outcome()
+  -> Firestore + Qdrant + incident.io alert
+```
+
+`persist_outcome()` is the single write call that handles structured storage (Firestore), experience retrieval (Qdrant embeddings), and incident alerting (incident.io) in one flow. `analyze_similar()` is the single read call that finds past outcomes, computes confidence, and selects a strategy (`standard`, `cautious`, `human_assisted`, or `decline`). The resulting `PatternAnalysis` is injected into every agent's LLM prompt via `build_adaptation_prompt()`.
 
 Developers can register and manage their agents through the **web developer portal** at `/developer`. The portal provides agent creation, API key management, capability configuration, and performance dashboards.
 
@@ -279,6 +301,11 @@ All components degrade gracefully — if `INCIDENT_IO_API_KEY` is not set, the e
 | [`agents/src/butler/agent.py`](agents/src/butler/agent.py) | Butler agent logic + tools |
 | [`agents/src/caller/server.py`](agents/src/caller/server.py) | Caller agent server |
 | [`agents/src/hackathon/agent.py`](agents/src/hackathon/agent.py) | Hackathon agent |
+| [`agents/src/smart_shopper/agent.py`](agents/src/smart_shopper/agent.py) | Smart Shopper agent |
+| [`agents/src/trip_planner/agent.py`](agents/src/trip_planner/agent.py) | Trip Planner agent |
+| [`agents/src/refund_claim/agent.py`](agents/src/refund_claim/agent.py) | Refund Claim agent |
+| [`agents/src/gift_suggestion/agent.py`](agents/src/gift_suggestion/agent.py) | Gift Suggestion agent |
+| [`agents/src/restaurant_booker/agent.py`](agents/src/restaurant_booker/agent.py) | Restaurant Booker agent |
 | [`agents/src/shared/chain_contracts.py`](agents/src/shared/chain_contracts.py) | Web3.py bridge to contracts |
 | [`contracts/contracts/OrderBook.sol`](contracts/contracts/OrderBook.sol) | Job lifecycle with bidding |
 | [`contracts/contracts/Escrow.sol`](contracts/contracts/Escrow.sol) | USDC escrow |

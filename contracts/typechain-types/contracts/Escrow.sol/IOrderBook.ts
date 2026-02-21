@@ -8,7 +8,6 @@ import type {
   FunctionFragment,
   Result,
   Interface,
-  AddressLike,
   ContractRunner,
   ContractMethod,
   Listener,
@@ -21,58 +20,14 @@ import type {
   TypedContractMethod,
 } from "../../common";
 
-export declare namespace IOrderBook {
-  export type JobInfoStruct = {
-    id: BigNumberish;
-    poster: AddressLike;
-    provider: AddressLike;
-    metadataURI: string;
-    maxBudgetUsdc: BigNumberish;
-    deadline: BigNumberish;
-    status: BigNumberish;
-    deliveryProof: BytesLike;
-    createdAt: BigNumberish;
-    acceptedBidId: BigNumberish;
-  };
-
-  export type JobInfoStructOutput = [
-    id: bigint,
-    poster: string,
-    provider: string,
-    metadataURI: string,
-    maxBudgetUsdc: bigint,
-    deadline: bigint,
-    status: bigint,
-    deliveryProof: string,
-    createdAt: bigint,
-    acceptedBidId: bigint
-  ] & {
-    id: bigint;
-    poster: string;
-    provider: string;
-    metadataURI: string;
-    maxBudgetUsdc: bigint;
-    deadline: bigint;
-    status: bigint;
-    deliveryProof: string;
-    createdAt: bigint;
-    acceptedBidId: bigint;
-  };
-}
-
 export interface IOrderBookInterface extends Interface {
-  getFunction(nameOrSignature: "getJob" | "markReleased"): FunctionFragment;
+  getFunction(nameOrSignature: "markReleased"): FunctionFragment;
 
-  encodeFunctionData(
-    functionFragment: "getJob",
-    values: [BigNumberish]
-  ): string;
   encodeFunctionData(
     functionFragment: "markReleased",
     values: [BigNumberish]
   ): string;
 
-  decodeFunctionResult(functionFragment: "getJob", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "markReleased",
     data: BytesLike
@@ -122,12 +77,6 @@ export interface IOrderBook extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
-  getJob: TypedContractMethod<
-    [jobId: BigNumberish],
-    [IOrderBook.JobInfoStructOutput],
-    "view"
-  >;
-
   markReleased: TypedContractMethod<
     [jobId: BigNumberish],
     [void],
@@ -138,13 +87,6 @@ export interface IOrderBook extends BaseContract {
     key: string | FunctionFragment
   ): T;
 
-  getFunction(
-    nameOrSignature: "getJob"
-  ): TypedContractMethod<
-    [jobId: BigNumberish],
-    [IOrderBook.JobInfoStructOutput],
-    "view"
-  >;
   getFunction(
     nameOrSignature: "markReleased"
   ): TypedContractMethod<[jobId: BigNumberish], [void], "nonpayable">;

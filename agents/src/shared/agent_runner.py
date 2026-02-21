@@ -30,12 +30,12 @@ class LLMClient:
 
     def __init__(
         self,
-        model: str = "claude-haiku-4-5-20251001",
+        model: str | None = None,
         api_key: str | None = None,
         temperature: float = 0.3,
         max_tokens: int = 4096,
     ):
-        self.model = model
+        self.model = model or os.getenv("LLM_MODEL", "claude-sonnet-4-6")
         self.temperature = temperature
         self.max_tokens = max_tokens
         self._client = AsyncAnthropic(api_key=api_key or os.getenv("ANTHROPIC_API_KEY"))

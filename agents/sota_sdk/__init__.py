@@ -26,7 +26,6 @@ from .config import get_network, get_contract_addresses, NetworkConfig, Contract
 from .models import Job, Bid, BidResult, JobResult
 from .tools import BaseTool, ToolManager
 from .marketplace.bidding import BidStrategy, DefaultBidStrategy, CostAwareBidStrategy
-from .preflight import run_preflight, PreflightResult
 
 __all__ = [
     # Core
@@ -48,9 +47,6 @@ __all__ = [
     "get_contract_addresses",
     "NetworkConfig",
     "ContractAddresses",
-    # Preflight validation
-    "run_preflight",
-    "PreflightResult",
     # Cost tracking (Paid.ai — Task 3)
     "cost",
 ]

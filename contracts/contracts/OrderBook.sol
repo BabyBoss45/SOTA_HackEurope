@@ -236,10 +236,6 @@ contract OrderBook is Ownable {
      */
     function markReleased(uint256 jobId) external {
         require(msg.sender == escrow, "OrderBook: not escrow");
-        require(
-            jobs[jobId].status == JobStatus.COMPLETED,
-            "OrderBook: not completed"
-        );
         jobs[jobId].status = JobStatus.RELEASED;
         emit JobReleased(jobId);
     }

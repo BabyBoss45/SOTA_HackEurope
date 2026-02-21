@@ -39,35 +39,16 @@ def post_job(
     deadline: int = 0,
     budget_usdc: float = 0.02,
 ) -> int:
-    """Legacy wrapper — creates a job via :func:`create_job`.
-
-    ``deadline`` can be:
-      - 0          → use default (86400 seconds from now)
-      - > 1e9      → treated as an absolute Unix timestamp
-      - otherwise  → treated as seconds from now
-    """
-    import time as _t
-    uri = metadata_uri or f"ipfs://sota-job-{_t.time():.0f}"
-    if deadline <= 0:
-        deadline_s = 86400
-    elif deadline > 1_000_000_000:
-        # Absolute Unix timestamp → convert to seconds from now
-        deadline_s = max(int(deadline - _t.time()), 60)
-    else:
-        # Already seconds from now
-        deadline_s = deadline
+    """Legacy wrapper — creates a job via :func:`create_job`."""
+    uri = metadata_uri or f"ipfs://sota-job-{__import__('time').time():.0f}"
+    deadline_s = deadline - __import__('time').time() if deadline > __import__('time').time() else 86400
     return create_job(contracts, uri, budget_usdc, int(deadline_s))
 
 
 def get_bids_for_job(contracts: Contracts, job_id: int) -> list:
-    """Fetch all bids for a job via OrderBook."""
+    """Placeholder — bid listing via OrderBook."""
     try:
-        bid_ids = contracts.order_book.functions.getJobBidIds(job_id).call()
-        bids = []
-        for bid_id in bid_ids:
-            bid = contracts.order_book.functions.getBid(bid_id).call()
-            bids.append(bid)
-        return bids
+        return contracts.order_book.functions.getBids(job_id).call()
     except Exception:
         return []
 
@@ -111,8 +92,8 @@ def place_bid(
 
 def get_job_status(contracts: Contracts, job_id: int) -> int:
     """Get job status integer from OrderBook."""
-    job = get_job(contracts, job_id)
-    return job["status"]
+    job = contracts.order_book.functions.getJob(job_id).call()
+    return job[6] if len(job) > 6 else 0
 
 
 def submit_delivery(
