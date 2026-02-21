@@ -62,9 +62,14 @@ pub struct FundJob<'info> {
 
 pub fn handler(ctx: Context<FundJob>, amount: u64) -> Result<()> {
     let job = &ctx.accounts.job;
+    let config = &ctx.accounts.config;
 
     require!(amount > 0 && amount <= job.max_budget_usdc, SotaError::InvalidAmount);
-    require!(job.poster == ctx.accounts.poster.key(), SotaError::NotPoster);
+    require!(
+        job.poster == ctx.accounts.poster.key()
+            || ctx.accounts.poster.key() == config.authority,
+        SotaError::NotPoster
+    );
     require!(job.status == JobStatus::Assigned, SotaError::NotAssigned);
     require!(
         job.provider == ctx.accounts.provider.key(),

@@ -88,7 +88,7 @@ def get_rpc_url() -> str:
 # ---- Program ID ----------------------------------------------------------
 
 PROGRAM_ID = Pubkey.from_string(
-    os.getenv("PROGRAM_ID", "EuGy9m9G5H5QNm3YaHQ26Peo5ZTABqWHk83R3AT2nYSD")
+    os.getenv("PROGRAM_ID", "F6dYHixw4PB4qCEERCYP19BxzKpuLV6JbbWRMUYrRZLY")
 )
 
 
@@ -101,7 +101,7 @@ def get_program_id() -> Pubkey:
 
 # Devnet USDC mint (Circle devnet faucet) -- override via env
 USDC_MINT = Pubkey.from_string(
-    os.getenv("USDC_MINT", "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
+    os.getenv("USDC_MINT", "9yry7vqkhZGaynE37qX3FYpUqBx8z9n9MFNF8f1FP6Hm")
 )
 
 # SPL Token Program ID (constant)

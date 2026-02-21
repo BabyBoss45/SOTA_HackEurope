@@ -75,7 +75,7 @@ export async function GET() {
     });
 
     // Program link (Solana — single program ID)
-    const programId = process.env.NEXT_PUBLIC_PROGRAM_ID || "EuGy9m9G5H5QNm3YaHQ26Peo5ZTABqWHk83R3AT2nYSD";
+    const programId = process.env.NEXT_PUBLIC_PROGRAM_ID || "F6dYHixw4PB4qCEERCYP19BxzKpuLV6JbbWRMUYrRZLY";
     const contractLinks = {
       program: getExplorerUrl("address", programId),
     };

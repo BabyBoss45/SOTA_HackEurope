@@ -7,7 +7,7 @@ pub mod instructions;
 
 use instructions::*;
 
-declare_id!("EuGy9m9G5H5QNm3YaHQ26Peo5ZTABqWHk83R3AT2nYSD");
+declare_id!("F6dYHixw4PB4qCEERCYP19BxzKpuLV6JbbWRMUYrRZLY");
 
 #[program]
 pub mod sota_marketplace {
