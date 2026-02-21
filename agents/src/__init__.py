@@ -1,0 +1,11 @@
+# -*- coding: utf-8 -*-
+"""
+SOTA Agents - Multi-Agent System on Base
+"""
+
+from .hackathon.agent import HackathonAgent, create_hackathon_agent
+
+__all__ = [
+    "HackathonAgent",
+    "create_hackathon_agent",
+]

@@ -1,0 +1,1151 @@
+"""
+Butler Agent Tools
+
+Tools for the Butler to:
+- Query RAG (Qdrant + Mem0) — degrades gracefully if not configured
+- Fill slots with slot_questioning
+- Post jobs to OrderBook
+- Monitor job status and deliveries
+- Handle data requests from worker agents
+- Handle data requests from worker agents
+"""
+
+import os
+import re
+import json
+import time
+import asyncio
+from typing import Any, Optional, Dict, List
+from pydantic import Field
+
+from ..shared.tool_base import BaseTool, ToolManager
+
+# Import incident.io tools — graceful fallback if not configured
+try:
+    from ..shared.incident_tools import create_incident_tools
+except Exception:
+    create_incident_tools = None  # type: ignore
+
+# Import shared tools — graceful fallback for contracts
+try:
+    from ..shared.contracts import (
+        get_contracts, post_job, get_bids_for_job, accept_bid, get_job_status,
+        create_job, fund_job, assign_provider, mark_completed, place_bid,
+        get_job, get_escrow_deposit, is_delivery_confirmed, confirm_delivery,
+        release_payment, register_agent, is_agent_active,
+    )
+except Exception:
+    get_contracts = None  # type: ignore
+    post_job = None  # type: ignore
+    get_bids_for_job = None  # type: ignore
+    accept_bid = None  # type: ignore
+    get_job_status = None  # type: ignore
+    create_job = None  # type: ignore
+    fund_job = None  # type: ignore
+    assign_provider = None  # type: ignore
+    mark_completed = None  # type: ignore
+    place_bid = None  # type: ignore
+    get_job = None  # type: ignore
+    get_escrow_deposit = None  # type: ignore
+    is_delivery_confirmed = None  # type: ignore
+    confirm_delivery = None  # type: ignore
+    release_payment = None  # type: ignore
+    register_agent = None  # type: ignore
+    is_agent_active = None  # type: ignore
+
+# Optional slot filler — may not be available
+try:
+    from ..shared.slot_questioning import SlotFiller
+except Exception:
+    SlotFiller = None  # type: ignore
+
+from ..shared.butler_comms import ButlerDataExchange
+
+
+def strip_markdown(text: str) -> str:
+    """Strip common markdown syntax so text reads as plain text in chat."""
+    # Remove bold: **text** or __text__
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'__(.+?)__', r'\1', text)
+    # Remove italic: *text* or _text_ (but not underscores in URLs)
+    text = re.sub(r'(?<!\w)\*(.+?)\*(?!\w)', r'\1', text)
+    # Convert markdown links: [text](url) → url
+    text = re.sub(r'\[([^\]]*)\]\(([^)]+)\)', r'\2', text)
+    # Remove heading markers: ## text → text
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # Remove bullet markers: - text → text (only at line start)
+    text = re.sub(r'^[-*]\s+', '', text, flags=re.MULTILINE)
+    return text.strip()
+
+
+def format_hackathon_results(data: Any) -> str:
+    """
+    Convert hackathon JSON results to conversational human-readable text.
+    Styled to sound like the butler speaking naturally.
+    """
+    if not data:
+        return "I searched but couldn't find any hackathons matching your criteria. Would you like me to try different dates or locations?"
+
+    # Handle if data is wrapped in a result envelope
+    hackathons = None
+    if isinstance(data, dict):
+        # Check all possible keys from different parts of the system
+        hackathons = (
+            data.get("hackathons")
+            or data.get("results")
+            or data.get("data")
+        )
+        # The executor wraps in {"success": ..., "result": "...", "job_id": ...}
+        if not hackathons and "result" in data:
+            result_val = data["result"]
+            if isinstance(result_val, list):
+                hackathons = result_val
+            elif isinstance(result_val, str):
+                # The LLM may have returned formatted text — pass it through
+                if result_val.strip():
+                    # Try to parse as JSON in case the LLM returned a JSON string
+                    try:
+                        parsed = json.loads(result_val)
+                        if isinstance(parsed, list):
+                            hackathons = parsed
+                        elif isinstance(parsed, dict):
+                            hackathons = parsed.get("hackathons") or parsed.get("results") or []
+                    except (json.JSONDecodeError, ValueError):
+                        # It's plain text from the LLM — return it directly
+                        # but only if it looks like it has actual content
+                        if len(result_val) > 50 and ("hackathon" in result_val.lower() or "found" in result_val.lower()):
+                            return strip_markdown(result_val)
+        if not hackathons:
+            # Maybe data itself is the list
+            if "name" in data or "title" in data:
+                hackathons = [data]
+            else:
+                hackathons = []
+    elif isinstance(data, list):
+        hackathons = data
+    else:
+        return str(data)
+
+    if not hackathons:
+        return "I searched but couldn't find any hackathons matching your criteria. Would you like me to try different dates or locations?"
+    
+    count = len(hackathons)
+    lines = [f"I found {count} hackathon{'s' if count > 1 else ''} for you:\n"]
+    
+    for i, h in enumerate(hackathons, 1):
+        name = h.get("name") or h.get("title") or "Untitled Hackathon"
+        date = h.get("date") or h.get("start_date") or h.get("dates") or "Date TBA"
+        location = h.get("location") or h.get("venue") or "Online"
+        prize = h.get("prize") or h.get("prize_pool") or h.get("prizes") or ""
+        url = h.get("url") or h.get("link") or h.get("website") or ""
+        themes = h.get("themes") or h.get("tracks") or h.get("categories") or []
+        
+        lines.append(f"{i}. {name}")
+        lines.append(f"   {date} • {location}")
+        if prize:
+            lines.append(f"   Prize: {prize}")
+        if themes:
+            theme_str = ', '.join(themes[:4]) if isinstance(themes, list) else str(themes)
+            lines.append(f"   Topics: {theme_str}")
+        if url:
+            lines.append(f"   {url}")
+        lines.append("")
+    
+    lines.append("Would you like more details on any of these, or should I help you register?")
+    return "\n".join(lines)
+
+
+class RAGSearchTool(BaseTool):
+    """
+    Search knowledge base (Qdrant + Mem0) for relevant information.
+    """
+    name: str = "rag_search"
+    description: str = """
+    Search the knowledge base for relevant information to answer user questions.
+    
+    Use this when the user asks informational questions that might be answered
+    from existing knowledge (restaurants, services, general info).
+    
+    Returns: List of relevant knowledge items with context.
+    """
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "The search query"
+            },
+            "user_id": {
+                "type": "string",
+                "description": "User ID for personalized results (optional)"
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum number of results (default 5)"
+            }
+        },
+        "required": ["query"]
+    }
+    
+    async def execute(self, query: str, user_id: str = "anonymous", limit: int = 5) -> str:
+        """Search RAG knowledge base — degrades gracefully if Qdrant/Mem0 not configured."""
+        results = {
+            "query": query,
+            "qdrant_results": [],
+            "mem0_results": [],
+        }
+
+        # Try Qdrant
+        qdrant_url = os.getenv("QDRANT_URL")
+        if qdrant_url:
+            try:
+                from qdrant_client import QdrantClient
+                qdrant = QdrantClient(
+                    url=qdrant_url,
+                    api_key=os.getenv("QDRANT_API_KEY")
+                )
+                # Placeholder search — would be real vector search in production
+                results["qdrant_results"] = []
+            except Exception as e:
+                results["qdrant_error"] = str(e)
+        else:
+            results["qdrant_note"] = "Qdrant not configured — skipped"
+
+        # Try Mem0
+        mem0_key = os.getenv("MEM0_API_KEY")
+        if mem0_key:
+            try:
+                from mem0 import MemoryClient
+                mem0_client = MemoryClient(api_key=mem0_key)
+                mem_results = mem0_client.search(query, user_id=user_id, limit=limit)
+                if mem_results:
+                    results["mem0_results"] = [m.get("memory") for m in mem_results if "memory" in m]
+            except Exception as e:
+                results["mem0_error"] = str(e)
+        else:
+            results["mem0_note"] = "Mem0 not configured — skipped"
+
+        if results["qdrant_results"] or results["mem0_results"]:
+            results["status"] = "match"
+            results["instruction"] = "Use the information above to answer the user's question. Do NOT call any more tools. STOP."
+        else:
+            results["status"] = "no_match"
+            results["instruction"] = "No relevant info found in knowledge base. DECIDE: If user wants a job -> `fill_slots`. If unclear -> Ask user to clarify. STOP."
+
+        return json.dumps(results, indent=2)
+
+
+class SlotFillingTool(BaseTool):
+    """
+    Fill missing slots for job posting using slot_questioning.
+    """
+    name: str = "fill_slots"
+    description: str = """
+    Analyze user request and identify missing required parameters (slots).
+    
+    Use this when the user wants to post a job but hasn't provided all details.
+    Returns: Missing slots and suggested clarifying questions.
+    """
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "user_message": {
+                "type": "string",
+                "description": "The user's request"
+            },
+            "current_slots": {
+                "type": "object",
+                "description": "Already collected slot values"
+            },
+            "candidate_tools": {
+                "type": "array",
+                "description": "Available tools/job types",
+                "items": {
+                    "type": "object"
+                }
+            }
+        },
+        "required": ["user_message"]
+    }
+    
+    async def execute(
+        self, 
+        user_message: str, 
+        current_slots: Optional[Dict] = None,
+        candidate_tools: Optional[List] = None
+    ) -> str:
+        """Fill slots using SlotFiller — falls back to basic extraction if unavailable"""
+        try:
+            if candidate_tools is None:
+                candidate_tools = [
+                    {"name": "hackathon_registration", "required_params": ["location", "theme", "date_range", "online_or_in_person"]},
+                    {"name": "hotel_booking", "required_params": ["location", "check_in", "check_out", "guests", "user_name"]},
+                    {"name": "restaurant_booking", "required_params": ["location", "cuisine", "date", "time", "guests", "user_name"]},
+                    {"name": "call_verification", "required_params": ["phone_number", "purpose"]},
+                    {"name": "web_scraping", "required_params": ["url", "data_points"]},
+                    {"name": "data_analysis", "required_params": ["data_source", "analysis_type"]},
+                ]
+            
+            current_slots = current_slots or {}
+            
+            # Try to use SlotFiller if available
+            if SlotFiller is not None:
+                try:
+                    filler = SlotFiller(user_id="butler")
+                    missing_slots, questions, chosen_tool = filler.fill(
+                        user_message=user_message,
+                        current_slots=current_slots,
+                        candidate_tools=candidate_tools
+                    )
+                    
+                    result = {
+                        "tool": chosen_tool,
+                        "current_slots": current_slots,
+                        "missing_slots": missing_slots,
+                        "questions": questions,
+                        "ready": len(missing_slots) == 0
+                    }
+                    
+                    if not result["ready"]:
+                        result["instruction"] = "CRITICAL: Ask the user the questions in the 'questions' list naturally. Do NOT call this tool again until the user responds."
+                    else:
+                        result["instruction"] = (
+                            "All details gathered. Summarize what you will do and ask the user: "
+                            "'Shall I go ahead?' Do NOT mention jobs, bids, or posting. "
+                            "IMPORTANT: When the user confirms, you MUST call the `post_job` tool "
+                            "with description, tool, and parameters. NEVER output JSON as text."
+                        )
+                    
+                    return json.dumps(result, indent=2)
+                    
+                except Exception as e:
+                    pass  # Fall through to basic extraction
+
+            # Basic slot extraction fallback (no SlotFiller dependency)
+            msg_lower = user_message.lower()
+            chosen_tool = "general_task"
+            for ct in candidate_tools:
+                name = ct.get("name", "")
+                if any(kw in msg_lower for kw in name.replace("_", " ").split()):
+                    chosen_tool = name
+                    break
+
+            tool_def = next((ct for ct in candidate_tools if ct["name"] == chosen_tool), candidate_tools[0])
+            required = tool_def.get("required_params", [])
+            missing = [p for p in required if p not in current_slots]
+            questions = [f"Could you provide the {p.replace('_', ' ')}?" for p in missing]
+
+            result = {
+                "tool": chosen_tool,
+                "current_slots": current_slots,
+                "missing_slots": missing,
+                "questions": questions,
+                "ready": len(missing) == 0,
+            }
+            if not result["ready"]:
+                result["instruction"] = "CRITICAL: Ask the user the questions in the 'questions' list naturally. Do NOT call this tool again until the user responds."
+            else:
+                result["instruction"] = (
+                    "All details gathered. Summarize what you will do and ask the user: "
+                    "'Shall I go ahead?' Do NOT mention jobs, bids, or posting. "
+                    "IMPORTANT: When the user confirms, you MUST call the `post_job` tool "
+                    "with description, tool, and parameters. NEVER output JSON as text."
+                )
+
+            return json.dumps(result, indent=2)
+                
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+
+class PostJobTool(BaseTool):
+    """
+    Post a job to the marketplace and auto-select the best bid.
+    """
+    name: str = "post_job"
+    description: str = """
+    Post a job to the SOTA marketplace.
+
+    This will:
+    1. Broadcast the job to all registered worker agents
+    2. Collect bids for 60 seconds
+    3. Auto-select the best offer (lowest price under budget)
+    4. Optionally accept the winning bid on-chain
+
+    Use after slots are filled and user confirms.
+    Returns the winning bid (or "no bids" if none arrived).
+    """
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "description": {
+                "type": "string",
+                "description": "Job description"
+            },
+            "tool": {
+                "type": "string",
+                "description": "Tool/job type (e.g., hotel_booking, call_verification)"
+            },
+            "parameters": {
+                "type": "object",
+                "description": "Job parameters as key-value pairs"
+            },
+            "budget_usd": {
+                "type": "number",
+                "description": "Maximum budget in USDC (default 0.02)"
+            },
+            "deadline_hours": {
+                "type": "integer",
+                "description": "Deadline in hours from now (default 24)"
+            }
+        },
+        "required": ["description", "tool", "parameters"]
+    }
+
+    async def _get_db(self):
+        """Get the Database singleton (lazy import to avoid circular deps)."""
+        try:
+            from ..shared.database import Database
+            return Database._instance
+        except Exception:
+            return None
+
+    async def _persist_job(self, db, job_id, description, tags, budget_usd, poster, metadata):
+        """Fire-and-forget: persist job to database."""
+        try:
+            await db.create_job(job_id, description, tags, budget_usd, poster, metadata)
+        except Exception as e:
+            print(f"⚠️ DB create_job failed: {e}")
+
+    async def _persist_bid_selection(self, db, job_id, result):
+        """Fire-and-forget: persist bid selection to database."""
+        try:
+            w = result.winning_bid
+            await db.update_job_status(
+                job_id, "assigned",
+                winner=w.bidder_id,
+                winner_price=w.amount_usdc,
+            )
+            # Record each bid as an update
+            for bid in result.all_bids:
+                await db.create_update(
+                    job_id=job_id,
+                    agent=bid.bidder_id,
+                    status="bid_submitted",
+                    message=f"Bid: {bid.amount_usdc:.4f} USDC, ETA: {bid.estimated_seconds}s",
+                    data={
+                        "price_usdc": bid.amount_usdc,
+                        "eta_seconds": bid.estimated_seconds,
+                        "tags": bid.tags,
+                    },
+                )
+        except Exception as e:
+            print(f"⚠️ DB persist_bid_selection failed: {e}")
+
+    async def _persist_no_bids(self, db, job_id):
+        """Fire-and-forget: mark job expired when no bids received."""
+        try:
+            await db.update_job_status(job_id, "expired")
+        except Exception as e:
+            print(f"⚠️ DB persist_no_bids failed: {e}")
+
+    async def execute(
+        self,
+        description: str,
+        tool: str,
+        parameters: Dict[str, Any],
+        budget_usd: float = 0.02,
+        deadline_hours: int = 24,
+    ) -> str:
+        """
+        Post job ON-CHAIN → broadcast to in-process JobBoard for worker
+        matching → return escrow funding info so the USER's wallet can
+        lock USDC. Backend does NOT fund escrow (user's money, user's wallet).
+        """
+        from ..shared.job_board import JobBoard, JobListing, BidResult
+        import uuid
+
+        try:
+            pk = os.getenv("PRIVATE_KEY")
+            poster = "0x0"
+            on_chain_job_id = None
+            escrow_address = None
+            usdc_required = budget_usd  # USDC-only payments
+
+            # ── 1. Create job on-chain via OrderBook ────────
+            if pk and create_job is not None:
+                try:
+                    c = get_contracts(pk)
+                    poster = c.account.address
+                    escrow_address = c.addresses.escrow
+                    metadata_uri = f"ipfs://sota-{tool}-{int(time.time())}"
+                    on_chain_job_id = create_job(
+                        c,
+                        metadata_uri=metadata_uri,
+                        budget_usdc=budget_usd,
+                        deadline_seconds=deadline_hours * 3600,
+                    )
+                    print(f"✅ On-chain job created: #{on_chain_job_id}")
+
+                    # USDC-only: budget is directly in USDC
+                    usdc_required = budget_usd  # 1:1 USD to USDC
+
+                    # NOTE: Escrow funding is NOT done here.
+                    # The user's connected wallet will fund the escrow
+                    # via the frontend after bid acceptance.
+
+                except Exception as chain_err:
+                    print(f"⚠️ On-chain creation failed (continuing off-chain): {chain_err}")
+
+            # ── 2. Broadcast to in-memory JobBoard for worker matching ──
+            job_id_str = str(on_chain_job_id) if on_chain_job_id else str(uuid.uuid4())[:8]
+            deadline = int(time.time()) + (deadline_hours * 3600)
+
+            listing = JobListing(
+                job_id=job_id_str,
+                description=description,
+                tags=[tool],
+                budget_usdc=usdc_required,
+                deadline_ts=deadline,
+                poster=poster,
+                metadata={
+                    "tool": tool,
+                    "parameters": parameters,
+                    "on_chain_job_id": on_chain_job_id,
+                    "posted_at": time.time(),
+                },
+                bid_window_seconds=15,  # 15s for in-process workers
+            )
+
+            print(f"📢 Job {job_id_str} posted — collecting bids for {listing.bid_window_seconds}s…")
+
+            # ── Persist job to database (fire-and-forget) ────────
+            db = await self._get_db()
+            if db:
+                asyncio.ensure_future(self._persist_job(
+                    db, job_id_str, description, [tool], budget_usd, poster, listing.metadata,
+                ))
+
+            # On-chain accept callback: assigns provider on-chain
+            async def _accept_on_chain(winning_bid):
+                if on_chain_job_id and pk and assign_provider is not None:
+                    try:
+                        c = get_contracts(pk)
+                        addr = winning_bid.bidder_address
+                        if addr and addr != "0x0":
+                            assign_provider(c, on_chain_job_id, addr)
+                            print(f"✅ On-chain provider assigned: {addr[:10]}…")
+                    except Exception as exc:
+                        print(f"⚠️ On-chain assign skipped: {exc}")
+
+            board = JobBoard.instance()
+            result: BidResult = await board.post_and_select(
+                listing,
+                on_chain_accept=_accept_on_chain,
+                execute_after_accept=False,  # Execution happens AFTER user funds escrow
+            )
+
+            # ── 3. After winner selected → return result with escrow info ──
+            if result.winning_bid:
+                w = result.winning_bid
+                # Persist bid selection to database
+                if db:
+                    asyncio.ensure_future(self._persist_bid_selection(db, job_id_str, result))
+
+                # Start async monitoring for delivery
+                asyncio.create_task(
+                    self._monitor_and_release(on_chain_job_id, job_id_str)
+                )
+                
+                # Build response with execution results if available
+                response = {
+                    "success": True,
+                    "job_id": job_id_str,
+                    "on_chain_job_id": on_chain_job_id,
+                    "winning_bid": {
+                        "bidder": w.bidder_id,
+                        "address": w.bidder_address,
+                        "price_usdc": w.amount_usdc,
+                        "eta_seconds": w.estimated_seconds,
+                        "tags": w.tags,
+                    },
+                    "total_bids": len(result.all_bids),
+                    "reason": result.reason,
+                    "escrow": {
+                        "address": escrow_address,
+                        "usdc_required": usdc_required,
+                        "budget_usdc": budget_usd,
+                        "budget_usd": budget_usd,
+                        "needs_user_funding": True,
+                    },
+                }
+                
+                # Check if job was executed and include results
+                if result.execution_result:
+                    formatted_results = format_hackathon_results(result.execution_result)
+                    response["execution_result"] = result.execution_result
+                    response["formatted_results"] = formatted_results
+                    response["instruction"] = (
+                        f"Great news — here are the results from your specialist:\n\n{formatted_results}\n\n"
+                        f"The escrow requires {usdc_required:.2f} USDC to lock the payment. "
+                        "Present these results to the user in a friendly, conversational way. "
+                        "Do NOT mention bids, workers, or job IDs."
+                    )
+                else:
+                    response["instruction"] = (
+                        "Great news — a specialist has been assigned and is working on it now. "
+                        f"Estimated time: about {w.estimated_seconds // 60} minutes. "
+                        f"The escrow requires {usdc_required:.2f} USDC to lock the payment. "
+                        "Tell the user you're on it and they can check back for updates. "
+                        "Do NOT mention bids, workers, or job IDs."
+                    )
+                
+                return json.dumps(response, indent=2)
+            else:
+                # Persist expired status to database
+                if db:
+                    asyncio.ensure_future(self._persist_no_bids(db, job_id_str))
+
+                return json.dumps({
+                    "success": False,
+                    "job_id": job_id_str,
+                    "on_chain_job_id": on_chain_job_id,
+                    "total_bids": len(result.all_bids),
+                    "reason": result.reason,
+                    "instruction": (
+                        "No one is available right now. Tell the user: "
+                        "'I wasn't able to find anyone available at the moment — "
+                        "would you like me to try again in a few minutes?' "
+                        "Do NOT mention bids, marketplace, or technical details."
+                    ),
+                }, indent=2)
+
+        except Exception as e:
+            return json.dumps({"error": f"Failed to post job: {str(e)}"})
+
+    async def _monitor_and_release(self, on_chain_job_id: Optional[int], board_job_id: str):
+        """Background task: poll job status → auto-confirm delivery → release payment."""
+        if not on_chain_job_id:
+            return
+        pk = os.getenv("PRIVATE_KEY")
+        if not pk or get_job is None:
+            return
+
+        try:
+            for _ in range(60):  # Poll for up to 10 minutes (every 10s)
+                await asyncio.sleep(10)
+                try:
+                    c = get_contracts(pk)
+                    job_data = get_job(c, on_chain_job_id)
+                    status = job_data.get("status", 0)
+
+                    # Status 2 = COMPLETED (worker submitted delivery)
+                    if status >= 2:
+                        # Testnet: manually confirm delivery
+                        if confirm_delivery is not None:
+                            try:
+                                confirm_delivery(c, on_chain_job_id)
+                                print(f"✅ Delivery confirmed for job #{on_chain_job_id}")
+                            except Exception:
+                                pass  # Already confirmed or not owner
+
+                        # Release escrow payment
+                        if release_payment is not None and is_delivery_confirmed is not None:
+                            try:
+                                if is_delivery_confirmed(c, on_chain_job_id):
+                                    release_payment(c, on_chain_job_id)
+                                    print(f"💰 Payment released for job #{on_chain_job_id}")
+                            except Exception as rel_err:
+                                print(f"⚠️ Release skipped: {rel_err}")
+                        return
+
+                    # Status 3+ = RELEASED/CANCELLED — done
+                    if status >= 3:
+                        return
+
+                except Exception:
+                    pass  # Network error, retry
+
+        except Exception as e:
+            print(f"⚠️ Monitor task error: {e}")
+
+
+class GetBidsTool(BaseTool):
+    """
+    Get bids for a job.
+    """
+    name: str = "get_bids"
+    description: str = """
+    Retrieve all bids for a specific job.
+    
+    Use after posting a job to see which agents have bid.
+    Returns: List of bids with prices, agents, and delivery times.
+    """
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "job_id": {
+                "type": "integer",
+                "description": "The job ID"
+            }
+        },
+        "required": ["job_id"]
+    }
+    
+    async def execute(self, job_id: int) -> str:
+        """Get bids for job — tries on-chain first, falls back to JobBoard."""
+        try:
+            # Try on-chain bids first
+            pk = os.getenv("PRIVATE_KEY")
+            if pk and get_bids_for_job is not None:
+                try:
+                    contracts = get_contracts(pk)
+                    bids = get_bids_for_job(contracts, job_id)
+
+                    formatted_bids = []
+                    for bid in bids:
+                        formatted_bids.append({
+                            "bid_id": bid[0],
+                            "bidder": bid[2],
+                            "price_usdc": bid[3] / 1e6,
+                            "delivery_time_hours": bid[4] / 3600,
+                            "reputation": bid[5],
+                            "accepted": bid[8]
+                        })
+                    formatted_bids.sort(key=lambda x: x["price_usdc"])
+
+                    return json.dumps({
+                        "job_id": job_id,
+                        "source": "on_chain",
+                        "total_bids": len(formatted_bids),
+                        "bids": formatted_bids,
+                        "best_bid": formatted_bids[0] if formatted_bids else None,
+                        "instruction": "Update the user on progress. Do NOT expose bid IDs, prices, or technical details. STOP."
+                    }, indent=2)
+                except Exception:
+                    pass
+
+            # Fallback: check in-memory JobBoard
+            from ..shared.job_board import JobBoard
+            board = JobBoard.instance()
+            board_bids = board.get_bids(str(job_id))
+            if board_bids:
+                formatted = [{
+                    "bidder": b.bidder_id,
+                    "price_usdc": b.amount_usdc,
+                    "eta_seconds": b.estimated_seconds,
+                } for b in board_bids]
+                return json.dumps({
+                    "job_id": job_id,
+                    "source": "job_board",
+                    "total_bids": len(formatted),
+                    "bids": formatted,
+                    "instruction": "Update the user on progress. STOP."
+                }, indent=2)
+
+            return json.dumps({"job_id": job_id, "total_bids": 0, "bids": []}, indent=2)
+
+        except Exception as e:
+            return json.dumps({"error": f"Failed to get bids: {str(e)}"})
+
+
+class AcceptBidTool(BaseTool):
+    """
+    Accept a bid for a job.
+    """
+    name: str = "accept_bid"
+    description: str = """
+    Accept a specific bid for a job, locking funds in escrow.
+    
+    Use after reviewing bids and getting user confirmation.
+    The agent will then start working on the job.
+    """
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "job_id": {
+                "type": "integer",
+                "description": "The job ID"
+            },
+            "bid_id": {
+                "type": "integer",
+                "description": "The bid ID to accept"
+            }
+        },
+        "required": ["job_id", "bid_id"]
+    }
+    
+    async def execute(self, job_id: int, bid_id: int) -> str:
+        """Accept a bid on-chain and fund escrow."""
+        try:
+            pk = os.getenv("PRIVATE_KEY")
+            if not pk or accept_bid is None:
+                return json.dumps({"error": "Contracts not configured"})
+
+            contracts = get_contracts(pk)
+
+            tx_hash = accept_bid(
+                contracts,
+                job_id=job_id,
+                bid_id=bid_id,
+                response_uri=""
+            )
+
+            # Also fund escrow if not already funded
+            if fund_job is not None:
+                try:
+                    job_data = get_job(contracts, job_id) if get_job else {}
+                    budget_usd = job_data.get("budget_usdc", 10.0)
+                    bid_data = get_bids_for_job(contracts, job_id) if get_bids_for_job else []
+                    provider = "0x0"
+                    for b in bid_data:
+                        if b[0] == bid_id:
+                            provider = b[2]
+                            break
+                    if provider != "0x0":
+                        fund_job(contracts, job_id, provider, budget_usd)
+                        print(f"✅ Escrow funded for job #{job_id}")
+                except Exception as fund_err:
+                    print(f"⚠️ Escrow funding after accept: {fund_err}")
+
+            return json.dumps({
+                "success": True,
+                "job_id": job_id,
+                "bid_id": bid_id,
+                "tx_hash": tx_hash,
+                "message": "Bid accepted! Funds locked in escrow. Agent will start work."
+            }, indent=2)
+            
+        except Exception as e:
+            return json.dumps({"error": f"Failed to accept bid: {str(e)}"})
+
+
+class CheckJobStatusTool(BaseTool):
+    """
+    Check the status of a job.
+    """
+    name: str = "check_job_status"
+    description: str = """
+    Check the current status of a job (Open, InProgress, Completed, Cancelled).
+    
+    Use to monitor job progress or check if delivery is complete.
+    """
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "job_id": {
+                "type": "integer",
+                "description": "The job ID"
+            }
+        },
+        "required": ["job_id"]
+    }
+    
+    async def execute(self, job_id: int) -> str:
+        """Check job status on-chain."""
+        try:
+            pk = os.getenv("PRIVATE_KEY")
+            if not pk or get_job is None:
+                return json.dumps({"error": "Contracts not configured"})
+
+            contracts = get_contracts(pk)
+            job_data = get_job(contracts, job_id)
+
+            status_names = ["OPEN", "ASSIGNED", "COMPLETED", "RELEASED", "CANCELLED", "DISPUTED"]
+            status_idx = job_data.get("status", 0)
+            status = status_names[status_idx] if status_idx < len(status_names) else "UNKNOWN"
+
+            # Check delivery confirmation
+            delivery_ok = False
+            if is_delivery_confirmed is not None:
+                try:
+                    delivery_ok = is_delivery_confirmed(contracts, job_id)
+                except Exception:
+                    pass
+
+            # Check escrow
+            escrow_info = {}
+            if get_escrow_deposit is not None:
+                try:
+                    escrow_info = get_escrow_deposit(contracts, job_id)
+                except Exception:
+                    pass
+
+            result = {
+                "job_id": job_id,
+                "status": status,
+                "poster": job_data.get("poster", ""),
+                "provider": job_data.get("provider", ""),
+                "budget_usdc": job_data.get("budget_usdc", 0),
+                "delivery_confirmed": delivery_ok,
+                "escrow_funded": escrow_info.get("funded", False),
+                "escrow_released": escrow_info.get("released", False),
+                "delivery_proof": job_data.get("delivery_proof", ""),
+            }
+            
+            return json.dumps(result, indent=2)
+            
+        except Exception as e:
+            return json.dumps({"error": f"Failed to check status: {str(e)}"})
+
+
+class GetDeliveryTool(BaseTool):
+    """
+    Get delivery results.
+    """
+    name: str = "get_delivery"
+    description: str = """
+    Download and retrieve job delivery results.
+    
+    Use when job is completed to get the actual results/data.
+    """
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "job_id": {
+                "type": "integer",
+                "description": "The job ID"
+            }
+        },
+        "required": ["job_id"]
+    }
+    
+    async def execute(self, job_id: int) -> str:
+        """Get delivery — checks on-chain status and agent updates."""
+        try:
+            pk = os.getenv("PRIVATE_KEY")
+            result = {"job_id": job_id}
+
+            # On-chain job data
+            if pk and get_job is not None:
+                try:
+                    contracts = get_contracts(pk)
+                    job_data = get_job(contracts, job_id)
+                    status_names = ["OPEN", "ASSIGNED", "COMPLETED", "RELEASED", "CANCELLED", "DISPUTED"]
+                    status_idx = job_data.get("status", 0)
+                    result["status"] = status_names[status_idx] if status_idx < len(status_names) else "UNKNOWN"
+                    result["provider"] = job_data.get("provider", "")
+                    result["delivery_proof"] = job_data.get("delivery_proof", "")
+
+                    # Check delivery confirmation
+                    if is_delivery_confirmed is not None:
+                        result["delivery_confirmed"] = is_delivery_confirmed(contracts, job_id)
+                except Exception as e:
+                    result["chain_error"] = str(e)
+
+            # Check agent updates from ButlerDataExchange
+            from ..shared.butler_comms import ButlerDataExchange
+            exchange = ButlerDataExchange.instance()
+            updates = exchange.get_updates(str(job_id))
+            if updates:
+                result["agent_updates"] = updates
+                # Find completed update with results
+                for u in reversed(updates):
+                    if u.get("status") == "completed" and u.get("data"):
+                        result["delivery_data"] = u["data"]
+                        break
+
+            if result.get("delivery_data") or result.get("status") in ("COMPLETED", "RELEASED"):
+                result["instruction"] = (
+                    "The task is done! Share the results with the user in a clear, "
+                    "friendly summary. Do NOT mention technical details."
+                )
+            else:
+                result["instruction"] = (
+                    "The task is still in progress. Let the user know the agent "
+                    "is working on it."
+                )
+
+            return json.dumps(result, indent=2)
+            
+        except Exception as e:
+            return json.dumps({"error": f"Failed to get delivery: {str(e)}"})
+
+
+# ═════════════════════════════════════════════════════════════
+#  Agent ↔ Butler Communication Tools
+# ═════════════════════════════════════════════════════════════
+
+class CheckAgentRequestsTool(BaseTool):
+    """
+    Check for pending data requests from worker agents.
+    """
+    name: str = "check_agent_requests"
+    description: str = """
+    Check if any worker agent (hackathon, caller, etc.) is requesting
+    additional data from the user.
+
+    Worker agents call this when they need info during job execution —
+    for example, the hackathon agent might ask for the user's email
+    or location preference.
+
+    Returns pending requests with questions to relay to the user.
+    Use this after posting a job to see if the assigned agent needs
+    anything.
+    """
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "job_id": {
+                "type": "string",
+                "description": "Job ID to check requests for (optional — omit for all)"
+            }
+        },
+        "required": []
+    }
+
+    async def execute(self, job_id: str = None) -> str:
+        """Check pending requests from agents."""
+        exchange = ButlerDataExchange.instance()
+        pending = exchange.peek_pending_requests(job_id)
+
+        if not pending:
+            return json.dumps({
+                "pending_requests": [],
+                "count": 0,
+                "instruction": "No pending requests from worker agents. The job is proceeding normally.",
+            })
+
+        formatted = []
+        for req in pending:
+            formatted.append({
+                "request_id": req.get("request_id"),
+                "agent": req.get("agent", "unknown"),
+                "data_type": req.get("data_type"),
+                "question": req.get("question"),
+                "fields": req.get("fields", []),
+            })
+
+        return json.dumps({
+            "pending_requests": formatted,
+            "count": len(formatted),
+            "instruction": (
+                "Worker agent(s) need data from the user. "
+                "Present the questions to the user and use `answer_agent_request` "
+                "to relay their answers back. STOP and wait for user input."
+            ),
+        }, indent=2)
+
+
+class AnswerAgentRequestTool(BaseTool):
+    """
+    Answer a data request from a worker agent.
+    """
+    name: str = "answer_agent_request"
+    description: str = """
+    Send an answer back to a worker agent that requested data.
+
+    After the user provides the requested information (profile data,
+    preferences, confirmation, etc.), use this tool to relay the answer
+    back to the waiting agent.
+
+    Parameters:
+      request_id: the ID from check_agent_requests
+      data: key-value pairs of the answer data
+      message: optional message
+    """
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "request_id": {
+                "type": "string",
+                "description": "The request ID to answer"
+            },
+            "data": {
+                "type": "object",
+                "description": "Answer data as key-value pairs"
+            },
+            "message": {
+                "type": "string",
+                "description": "Optional message"
+            },
+        },
+        "required": ["request_id", "data"]
+    }
+
+    async def execute(self, request_id: str, data: dict, message: str = "") -> str:
+        """Submit answer to agent request."""
+        exchange = ButlerDataExchange.instance()
+        exchange.submit_answer(request_id, {
+            "request_id": request_id,
+            "data": data,
+            "message": message or "Answer provided by user via Butler",
+        })
+
+        # Also consume it from pending
+        exchange.get_pending_requests()
+
+        return json.dumps({
+            "success": True,
+            "request_id": request_id,
+            "instruction": "Answer delivered to the worker agent. It will continue processing.",
+        })
+
+
+class GetAgentUpdatesTool(BaseTool):
+    """
+    Get status updates from worker agents.
+    """
+    name: str = "get_agent_updates"
+    description: str = """
+    Check for progress updates from worker agents executing jobs.
+
+    Worker agents push updates like "Found 5 hackathons" or
+    "Registration form filled — awaiting confirmation".
+
+    Use this to keep the user informed about job progress.
+    """
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "job_id": {
+                "type": "string",
+                "description": "Job ID to get updates for"
+            }
+        },
+        "required": ["job_id"]
+    }
+
+    async def execute(self, job_id: str) -> str:
+        """Get updates from agents."""
+        exchange = ButlerDataExchange.instance()
+        updates = exchange.get_updates(job_id)
+
+        if not updates:
+            return json.dumps({
+                "updates": [],
+                "count": 0,
+                "instruction": "No new updates from the worker agent.",
+            })
+
+        return json.dumps({
+            "updates": updates,
+            "count": len(updates),
+            "instruction": "Present these updates to the user. If there are questions, relay them.",
+        }, indent=2)
+
+def create_butler_tools() -> ToolManager:
+    """Create and register all Butler tools"""
+    tools = [
+        # RAG and slot filling
+        RAGSearchTool(),
+        SlotFillingTool(),
+
+        # Job posting and management
+        PostJobTool(),
+        GetBidsTool(),
+        AcceptBidTool(),
+        CheckJobStatusTool(),
+        GetDeliveryTool(),
+
+        # Agent ↔ Butler communication
+        CheckAgentRequestsTool(),
+        AnswerAgentRequestTool(),
+        GetAgentUpdatesTool(),
+    ]
+
+    # incident.io tools (graceful no-op if module unavailable)
+    if create_incident_tools:
+        tools.extend(create_incident_tools())
+
+    return ToolManager(tools=tools)
