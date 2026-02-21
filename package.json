@@ -17,8 +17,10 @@
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
     "@prisma/client": "^6.1.0",
     "@radix-ui/react-slot": "^1.2.4",
+    "@solana/wallet-adapter-react": "^0.15.39",
     "@tanstack/react-query": "^5.64.1",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",

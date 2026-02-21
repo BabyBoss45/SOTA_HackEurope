@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { agentUpdateSchema } from '@/lib/validators';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -62,12 +63,6 @@ async function requireOwnedAgent(request: Request, params: RouteContext['params'
   return { agent };
 }
 
-const UPDATABLE_FIELDS = [
-  'title', 'description', 'category', 'tags', 'apiEndpoint',
-  'capabilities', 'webhookUrl', 'documentation', 'minFeeUsdc',
-  'maxConcurrent', 'bidAggressiveness', 'icon', 'walletAddress',
-] as const;
-
 // PATCH /api/agents/[id] - Update agent (owner only)
 export async function PATCH(request: Request, { params }: RouteContext) {
   try {
@@ -75,10 +70,20 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     if (result.error) return result.error;
 
     const body = await request.json();
+    const validation = agentUpdateSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json({
+        error: 'Validation failed',
+        details: validation.error.flatten(),
+      }, { status: 400 });
+    }
+
+    // Only include fields that were actually sent (not undefined after transform)
     const updateData: Record<string, unknown> = {};
-    for (const field of UPDATABLE_FIELDS) {
-      if (body[field] !== undefined) {
-        updateData[field] = body[field];
+    for (const [key, value] of Object.entries(validation.data)) {
+      if (value !== undefined) {
+        updateData[key] = value;
       }
     }
 

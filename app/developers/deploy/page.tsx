@@ -6,6 +6,7 @@ import {
   Bot,
   ArrowLeft,
   Download,
+  Globe,
   Loader2,
   Lock,
   LogIn,
@@ -30,6 +31,7 @@ import {
 } from "@/lib/agent-templates";
 import Link from "next/link";
 import { PublicKey } from "@solana/web3.js";
+import { isValidHttpUrl, AGENT_CATEGORIES } from "@/lib/validators";
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -44,6 +46,8 @@ interface DeployFormData {
   priceRatio: number;
   minFeeUsdc: number;
   walletAddress: string;
+  apiEndpoint: string;
+  webhookUrl: string;
   hubUrl: string;
   chain: string;
 }
@@ -107,6 +111,8 @@ export default function DeployPage() {
     priceRatio: 0.8,
     minFeeUsdc: 0.5,
     walletAddress: "",
+    apiEndpoint: "",
+    webhookUrl: "",
     hubUrl: process.env.NEXT_PUBLIC_HUB_WS_URL || "ws://localhost:3002/ws/agent",
     chain: "solana-devnet",
   });
@@ -118,6 +124,10 @@ export default function DeployPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Derived validation — computed once per render, no IIFE in JSX
+  const isApiEndpointInvalid = formData.apiEndpoint.trim() !== "" && !isValidHttpUrl(formData.apiEndpoint);
+  const isWebhookUrlInvalid = formData.webhookUrl.trim() !== "" && !isValidHttpUrl(formData.webhookUrl);
 
   // Auth headers helper
   const authHeaders = async (): Promise<HeadersInit> => {
@@ -198,6 +208,20 @@ export default function DeployPage() {
       return;
     }
 
+    // API endpoint is required for registration
+    if (!onlyDownload && !formData.apiEndpoint.trim()) {
+      setError("API Endpoint is required to register the agent.");
+      return;
+    }
+    if (formData.apiEndpoint.trim() && !isValidHttpUrl(formData.apiEndpoint)) {
+      setError("API Endpoint must be a valid HTTP/HTTPS URL.");
+      return;
+    }
+    if (formData.webhookUrl.trim() && !isValidHttpUrl(formData.webhookUrl)) {
+      setError("Webhook URL must be a valid HTTP/HTTPS URL.");
+      return;
+    }
+
     setSubmitting(true);
     setDownloadOnly(onlyDownload);
     setError(null);
@@ -218,6 +242,8 @@ export default function DeployPage() {
             priceUsd: 0,
             tags: formData.tags.join(","),
             network: formData.chain,
+            apiEndpoint: formData.apiEndpoint,
+            webhookUrl: formData.webhookUrl || undefined,
             walletAddress: formData.walletAddress || undefined,
             capabilities: JSON.stringify(formData.capabilities),
             minFeeUsdc: formData.minFeeUsdc,
@@ -462,11 +488,9 @@ export default function DeployPage() {
                       className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500 appearance-none"
                     >
                       <option value="">Select category</option>
-                      <option value="automation">Automation</option>
-                      <option value="data">Data &amp; Analytics</option>
-                      <option value="communication">Communication</option>
-                      <option value="blockchain">Blockchain</option>
-                      <option value="other">Other</option>
+                      {AGENT_CATEGORIES.map((c) => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
                     </select>
                     <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--text-muted)] pointer-events-none" />
                   </div>
@@ -527,6 +551,48 @@ export default function DeployPage() {
                     onChange={(e) => setFormData({ ...formData, minFeeUsdc: parseFloat(e.target.value) || 0 })}
                     className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* API Connection Section */}
+            <div className="p-6 rounded-xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] backdrop-blur-sm">
+              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4 flex items-center gap-2">
+                <Globe size={20} className="text-violet-400" />
+                API Connection
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">API Endpoint <span className="text-red-400">*</span></label>
+                  <input
+                    type="url"
+                    value={formData.apiEndpoint}
+                    onChange={(e) => setFormData({ ...formData, apiEndpoint: e.target.value })}
+                    placeholder="https://your-agent.com/api/execute"
+                    className={`w-full px-4 py-2 bg-[color:var(--surface-1)] border rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 font-mono text-sm ${
+                      isApiEndpointInvalid ? "border-red-500/50" : "border-[color:var(--border-subtle)]"
+                    }`}
+                  />
+                  {isApiEndpointInvalid && (
+                    <p className="text-xs text-red-400 mt-1">Please enter a valid HTTP/HTTPS URL</p>
+                  )}
+                  <p className="text-xs text-[color:var(--text-muted)] mt-1">SOTA sends POST requests here when your agent wins a job</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Webhook URL <span className="text-[color:var(--text-muted)]">(optional)</span></label>
+                  <input
+                    type="url"
+                    value={formData.webhookUrl}
+                    onChange={(e) => setFormData({ ...formData, webhookUrl: e.target.value })}
+                    placeholder="https://your-agent.com/webhook"
+                    className={`w-full px-4 py-2 bg-[color:var(--surface-1)] border rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 font-mono text-sm ${
+                      isWebhookUrlInvalid ? "border-red-500/50" : "border-[color:var(--border-subtle)]"
+                    }`}
+                  />
+                  {isWebhookUrlInvalid && (
+                    <p className="text-xs text-red-400 mt-1">Please enter a valid HTTP/HTTPS URL</p>
+                  )}
+                  <p className="text-xs text-[color:var(--text-muted)] mt-1">Optional callback for status updates (job assigned, cancelled, etc.)</p>
                 </div>
               </div>
             </div>

@@ -34,7 +34,7 @@ import {
 } from "@/lib/contracts";
 
 /* ── IDL import — load the Anchor IDL for the sota_marketplace program ── */
-import idlJson from "../../../../anchor/target/idl/sota_marketplace.json";
+import idlJson from "../../../anchor/target/idl/sota_marketplace.json";
 const IDL = idlJson as Idl;
 
 /* ── Helpers ── */
