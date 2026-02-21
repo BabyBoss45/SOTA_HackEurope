@@ -1,0 +1,5 @@
+# Ignore all lockfiles that aren't part of the Python backend
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+node_modules/
