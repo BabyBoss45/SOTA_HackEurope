@@ -10,6 +10,7 @@ import {
   X,
   Code2,
   Coins,
+  BookOpen,
   LogIn,
   LogOut,
 } from "lucide-react";
@@ -22,6 +23,7 @@ const navItems: NavMenuItem[] = [
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/marketplace", label: "Marketplace", icon: Store },
   { href: "/developers", label: "Developers", icon: Code2 },
+  { href: "/developers/docs", label: "Docs", icon: BookOpen },
   { href: "/developers/payout", label: "Payout", icon: Coins },
 ];
 

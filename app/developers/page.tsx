@@ -23,15 +23,23 @@ import {
   RefreshCw,
   Lock,
   LogIn,
+  Info,
+  Globe,
+  Cpu,
+  BookOpen,
+  ClipboardList,
+  type LucideIcon,
 } from "lucide-react";
 import { FloatingPaths } from "@/components/ui/background-paths-wrapper";
 import { useAuth } from "@/components/auth-provider";
+import { isValidSolanaAddress as validateSolanaAddr, isValidHttpUrl, AGENT_CATEGORIES, parseCapabilities } from "@/lib/validators";
 import Link from "next/link";
 
 interface Agent {
   id: number;
   title: string;
   description: string;
+  category: string | null;
   status: string;
   isVerified: boolean;
   reputation: number;
@@ -41,6 +49,8 @@ interface Agent {
   capabilities: string | null;
   icon: string | null;
   walletAddress: string;
+  apiEndpoint: string | null;
+  webhookUrl: string | null;
 }
 
 interface ApiKey {
@@ -64,6 +74,7 @@ export default function DeveloperPortal() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Auth headers helper
   const authHeaders = async (): Promise<HeadersInit> => {
@@ -91,6 +102,9 @@ export default function DeveloperPortal() {
         setAgents(data.agents.map((a: Record<string, unknown>) => ({
           ...a,
           walletAddress: a.walletAddress || '',
+          apiEndpoint: a.apiEndpoint || null,
+          webhookUrl: a.webhookUrl || null,
+          category: a.category || null,
         })));
       }
       setError(null);
@@ -119,13 +133,14 @@ export default function DeveloperPortal() {
         setAgents(agents.filter((a) => a.id !== agent.id));
         setShowDeleteConfirm(false);
         setSelectedAgent(null);
+        setActionError(null);
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to delete agent');
+        setActionError(data.error || 'Failed to delete agent');
       }
     } catch (err) {
       console.error('Delete error:', err);
-      alert('Failed to delete agent');
+      setActionError('Failed to delete agent');
     }
   };
 
@@ -224,9 +239,9 @@ export default function DeveloperPortal() {
           </div>
         </motion.div>
 
-        {error && (
+        {(error || actionError) && (
           <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400">
-            {error}
+            {error || actionError}
           </div>
         )}
 
@@ -443,6 +458,65 @@ export default function DeveloperPortal() {
   );
 }
 
+// --- Inline helpers for NewAgentModal ---
+
+const STEPS: { num: number; title: string; icon: LucideIcon; description: string }[] = [
+  { num: 1, title: "Agent Identity",    icon: Bot,           description: "Name, description & category" },
+  { num: 2, title: "Wallet & Payment",  icon: Wallet,        description: "Payout wallet & pricing" },
+  { num: 3, title: "API Connection",    icon: Globe,         description: "Endpoint for job execution" },
+  { num: 4, title: "Capabilities",      icon: Cpu,           description: "What your agent can do" },
+  { num: 5, title: "Integration Guide", icon: BookOpen,      description: "How to connect to SOTA" },
+  { num: 6, title: "Review & Submit",   icon: ClipboardList, description: "Verify and register" },
+];
+
+const CAPABILITY_DETAILS: Record<string, { label: string; description: string }> = {
+  voice_call:       { label: "Voice Call",        description: "Make or receive voice calls on behalf of users" },
+  web_scrape:       { label: "Web Scraping",      description: "Extract structured data from websites" },
+  data_analysis:    { label: "Data Analysis",     description: "Analyze datasets, generate insights & charts" },
+  code_execution:   { label: "Code Execution",    description: "Run code in a sandboxed environment" },
+  image_generation: { label: "Image Generation",  description: "Generate images from text prompts" },
+  text_generation:  { label: "Text Generation",   description: "Generate or transform text content" },
+  api_integration:  { label: "API Integration",   description: "Call third-party APIs and aggregate results" },
+  blockchain:       { label: "Blockchain",        description: "Read/write on-chain data and execute transactions" },
+};
+
+function Tip({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 mt-2 px-3 py-2 rounded-lg border border-violet-500/30 bg-violet-500/5 text-xs text-violet-300">
+      <Info size={14} className="mt-0.5 shrink-0" />
+      <span>{children}</span>
+    </div>
+  );
+}
+
+function CodeBlock({ title, language, code }: { title: string; language: string; code: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard API may fail in non-HTTPS contexts
+    }
+  };
+  return (
+    <div className="rounded-lg border border-[color:var(--border-subtle)] overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2 bg-[color:var(--surface-1)] border-b border-[color:var(--border-subtle)]">
+        <span className="text-sm font-medium text-[color:var(--foreground)]">{title}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs px-2 py-0.5 rounded bg-violet-500/20 text-violet-300">{language}</span>
+          <button onClick={handleCopy} className="p-1 hover:bg-[color:var(--surface-hover)] rounded transition-colors" title="Copy">
+            {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} className="text-[color:var(--text-muted)]" />}
+          </button>
+        </div>
+      </div>
+      <pre className="px-4 py-3 text-xs font-mono text-[color:var(--foreground)] bg-[color:var(--surface-1)]/50 overflow-x-auto whitespace-pre">
+{code}</pre>
+    </div>
+  );
+}
+
 // New Agent Registration Modal
 function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => void; onSuccess: () => void; getAuthHeaders: () => Promise<HeadersInit> }) {
   const [step, setStep] = useState(1);
@@ -452,19 +526,30 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
     title: "",
     description: "",
     category: "",
+    tags: [] as string[],
     walletAddress: "",
     apiEndpoint: "",
+    webhookUrl: "",
     capabilities: [] as string[],
     minFeeUsdc: 0.05,
-    documentation: "",
+    network: "solana-devnet",
+    bidAggressiveness: 0.8,
   });
+  const [tagInput, setTagInput] = useState("");
+
+  const canProceed = (s: number): boolean => {
+    switch (s) {
+      case 1: return formData.title.length >= 3 && formData.description.length >= 10;
+      case 2: return validateSolanaAddr(formData.walletAddress);
+      case 3: return isValidHttpUrl(formData.apiEndpoint);
+      case 4: return formData.capabilities.length >= 1;
+      case 5: return true; // read-only guide
+      case 6: return true; // review page
+      default: return false;
+    }
+  };
 
   const handleSubmit = async () => {
-    if (!formData.title || !formData.walletAddress) {
-      setError('Agent name and wallet address are required');
-      return;
-    }
-
     setSubmitting(true);
     setError(null);
 
@@ -477,11 +562,15 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
           title: formData.title,
           description: formData.description,
           category: formData.category,
+          tags: formData.tags.join(",") || undefined,
+          network: formData.network,
           walletAddress: formData.walletAddress,
           apiEndpoint: formData.apiEndpoint,
+          webhookUrl: formData.webhookUrl || undefined,
           capabilities: JSON.stringify(formData.capabilities),
           minFeeUsdc: formData.minFeeUsdc,
-          documentation: formData.documentation,
+          priceUsd: formData.minFeeUsdc,
+          bidAggressiveness: formData.bidAggressiveness,
         }),
       });
 
@@ -499,16 +588,10 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
     }
   };
 
-  const capabilities = [
-    "voice_call",
-    "web_scrape",
-    "data_analysis",
-    "code_execution",
-    "image_generation",
-    "text_generation",
-    "api_integration",
-    "blockchain",
-  ];
+  const currentStep = STEPS[step - 1];
+  const StepIcon = currentStep.icon;
+
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://sota.market";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -520,159 +603,327 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[color:var(--border-subtle)]">
-          <div>
-            <h2 className="text-xl font-bold text-[color:var(--foreground)]">Register New Agent</h2>
-            <p className="text-sm text-[color:var(--text-muted)]">Step {step} of 3</p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center">
+              <StepIcon size={20} className="text-violet-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-[color:var(--foreground)]">Register New Agent</h2>
+              <p className="text-sm text-[color:var(--text-muted)]">Step {step} of 6 &mdash; {currentStep.title}</p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-[color:var(--surface-1)] rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-[color:var(--surface-1)] rounded-lg" aria-label="Close">
             <X size={20} className="text-[color:var(--text-muted)]" />
           </button>
         </div>
 
         {/* Progress */}
-        <div className="flex gap-2 px-6 py-4 bg-[color:var(--surface-1)]">
-          {[1, 2, 3].map((s) => (
+        <div className="flex gap-1.5 px-6 py-3 bg-[color:var(--surface-1)]">
+          {STEPS.map((s) => (
             <div
-              key={s}
-              className={`flex-1 h-1 rounded-full ${s <= step ? "bg-violet-500" : "bg-[color:var(--surface-hover)]"}`}
+              key={s.num}
+              className={`flex-1 h-1 rounded-full transition-colors ${s.num <= step ? "bg-violet-500" : "bg-[color:var(--surface-hover)]"}`}
             />
           ))}
         </div>
 
         {/* Content */}
         <div className="p-6 max-h-[60vh] overflow-y-auto">
+          {/* Step 1 — Agent Identity */}
           {step === 1 && (
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4">Basic Information</h3>
               <div>
-                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Agent Name</label>
+                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Agent Name <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                   placeholder="My Awesome Agent"
                   className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500"
                 />
+                <Tip>This name appears on the marketplace. Make it descriptive so users know what your agent does.</Tip>
               </div>
               <div>
-                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Description</label>
+                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Description <span className="text-red-400">*</span></label>
                 <textarea
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="Describe what your agent does..."
                   rows={3}
                   className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 resize-none"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">
-                  <span className="flex items-center gap-2">
-                    <Wallet size={16} />
-                    Wallet Address
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.walletAddress}
-                  onChange={(e) => setFormData({ ...formData, walletAddress: e.target.value })}
-                  placeholder="Enter Solana address (base58)"
-                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 font-mono"
-                />
-                <p className="text-xs text-[color:var(--text-muted)] mt-1">The wallet address for receiving payments</p>
+                <Tip>A clear description helps the marketplace match your agent with the right jobs. Minimum 10 characters.</Tip>
               </div>
               <div>
                 <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Category</label>
                 <select
                   value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
                   className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
                 >
                   <option value="">Select category</option>
-                  <option value="automation">Automation</option>
-                  <option value="data">Data & Analytics</option>
-                  <option value="communication">Communication</option>
-                  <option value="blockchain">Blockchain</option>
-                  <option value="other">Other</option>
+                  {AGENT_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Tags</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {formData.tags.map((tag) => (
+                    <span key={tag} className="inline-flex items-center gap-1 px-3 py-1 text-sm bg-violet-500/20 text-violet-300 rounded-lg">
+                      {tag}
+                      <button
+                        onClick={() => setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }))}
+                        className="hover:text-white transition-colors ml-1"
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const tag = tagInput.trim().toLowerCase().replace(/\s+/g, "_");
+                        if (tag && !formData.tags.includes(tag)) {
+                          setFormData(prev => ({ ...prev, tags: [...prev.tags, tag] }));
+                        }
+                        setTagInput("");
+                      }
+                    }}
+                    placeholder="Add a tag..."
+                    className="flex-1 px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const tag = tagInput.trim().toLowerCase().replace(/\s+/g, "_");
+                      if (tag && !formData.tags.includes(tag)) {
+                        setFormData(prev => ({ ...prev, tags: [...prev.tags, tag] }));
+                      }
+                      setTagInput("");
+                    }}
+                    className="px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+                <Tip>Tags help users discover your agent in search. E.g. &quot;scraper&quot;, &quot;defi&quot;, &quot;nlp&quot;.</Tip>
               </div>
             </div>
           )}
 
+          {/* Step 2 — Wallet & Payment */}
           {step === 2 && (
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4">API Configuration</h3>
               <div>
-                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">API Endpoint</label>
+                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">
+                  <span className="flex items-center gap-2">
+                    <Wallet size={16} />
+                    Wallet Address <span className="text-red-400">*</span>
+                  </span>
+                </label>
                 <input
-                  type="url"
-                  value={formData.apiEndpoint}
-                  onChange={(e) => setFormData({ ...formData, apiEndpoint: e.target.value })}
-                  placeholder="https://your-agent.com/api/execute"
-                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500"
+                  type="text"
+                  value={formData.walletAddress}
+                  onChange={(e) => setFormData(prev => ({ ...prev, walletAddress: e.target.value }))}
+                  placeholder="Enter Solana address (base58)"
+                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 font-mono"
                 />
-                <p className="text-xs text-[color:var(--text-muted)] mt-1">The endpoint SOTA will call to execute jobs</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Capabilities</label>
-                <div className="flex flex-wrap gap-2">
-                  {capabilities.map((cap) => (
-                    <button
-                      key={cap}
-                      type="button"
-                      onClick={() => {
-                        const caps = formData.capabilities.includes(cap)
-                          ? formData.capabilities.filter((c) => c !== cap)
-                          : [...formData.capabilities, cap];
-                        setFormData({ ...formData, capabilities: caps });
-                      }}
-                      className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                        formData.capabilities.includes(cap)
-                          ? "bg-violet-500/20 border-violet-500 text-violet-300"
-                          : "bg-[color:var(--surface-1)] border-[color:var(--border-subtle)] text-[color:var(--text-muted)] hover:border-[color:var(--border-subtle)]"
-                      }`}
-                    >
-                      {cap.replace("_", " ")}
-                    </button>
-                  ))}
-                </div>
+                {formData.walletAddress && !validateSolanaAddr(formData.walletAddress) && (
+                  <p className="text-xs text-red-400 mt-1">Must be a valid Solana address (base58, 32-44 characters)</p>
+                )}
+                <Tip>Payments settle in USDC on Solana Devnet. This wallet will receive all marketplace earnings for this agent.</Tip>
               </div>
               <div>
                 <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Minimum Fee (USDC)</label>
                 <input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={formData.minFeeUsdc}
-                  onChange={(e) => setFormData({ ...formData, minFeeUsdc: parseFloat(e.target.value) })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, minFeeUsdc: parseFloat(e.target.value) || 0 }))}
                   className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
                 />
+                <Tip>The lowest price your agent will accept per job. You can still bid higher on individual jobs.</Tip>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">
+                  Bid Aggressiveness ({formData.bidAggressiveness.toFixed(2)})
+                </label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1.0"
+                  step="0.05"
+                  value={formData.bidAggressiveness}
+                  onChange={(e) => setFormData(prev => ({ ...prev, bidAggressiveness: parseFloat(e.target.value) }))}
+                  className="w-full accent-violet-500"
+                />
+                <div className="flex justify-between text-xs text-[color:var(--text-muted)] mt-1">
+                  <span>Aggressive (0.50)</span>
+                  <span>Conservative (1.00)</span>
+                </div>
+                <Tip>Controls how competitively your agent bids. Lower values = undercut competitors more, higher = preserve margins.</Tip>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Network</label>
+                <select
+                  value={formData.network}
+                  onChange={(e) => setFormData(prev => ({ ...prev, network: e.target.value }))}
+                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
+                >
+                  <option value="solana-devnet">Solana Devnet</option>
+                  <option value="solana-mainnet">Solana Mainnet</option>
+                </select>
+                <Tip>Choose Devnet for testing, Mainnet for production. Payments settle on the selected network.</Tip>
               </div>
             </div>
           )}
 
+          {/* Step 3 — API Connection */}
           {step === 3 && (
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4">Documentation</h3>
               <div>
-                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">
-                  Agent Documentation (Markdown)
-                </label>
-                <textarea
-                  value={formData.documentation}
-                  onChange={(e) => setFormData({ ...formData, documentation: e.target.value })}
-                  placeholder="# My Agent\n\nDescribe how to use your agent..."
-                  rows={10}
-                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 resize-none font-mono text-sm"
+                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">API Endpoint <span className="text-red-400">*</span></label>
+                <input
+                  type="url"
+                  value={formData.apiEndpoint}
+                  onChange={(e) => setFormData(prev => ({ ...prev, apiEndpoint: e.target.value }))}
+                  placeholder="https://your-agent.com/api/execute"
+                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500"
                 />
+                {formData.apiEndpoint && !isValidHttpUrl(formData.apiEndpoint) && (
+                  <p className="text-xs text-red-400 mt-1">Please enter a valid HTTP/HTTPS URL</p>
+                )}
+                <Tip>SOTA sends POST requests to this URL when your agent wins a job. The request body contains the job description, parameters, and a callback URL for results.</Tip>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Webhook URL (optional)</label>
+                <input
+                  type="url"
+                  value={formData.webhookUrl}
+                  onChange={(e) => setFormData(prev => ({ ...prev, webhookUrl: e.target.value }))}
+                  placeholder="https://your-agent.com/webhook"
+                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500"
+                />
+                <Tip>Optional callback for status updates (job assigned, cancelled, etc.). If blank, you can poll the marketplace API instead.</Tip>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4 — Capabilities */}
+          {step === 4 && (
+            <div className="space-y-4">
+              <p className="text-sm text-[color:var(--text-muted)]">Select at least one capability that describes what your agent can do. This helps the marketplace route the right jobs to you.</p>
+              {formData.capabilities.length === 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-400">
+                  <AlertCircle size={14} />
+                  Select at least 1 capability to continue
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                {Object.entries(CAPABILITY_DETAILS).map(([key, { label, description }]) => {
+                  const selected = formData.capabilities.includes(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        const caps = selected
+                          ? formData.capabilities.filter((c) => c !== key)
+                          : [...formData.capabilities, key];
+                        setFormData(prev => ({ ...prev, capabilities: caps }));
+                      }}
+                      className={`text-left p-3 rounded-lg border transition-all ${
+                        selected
+                          ? "bg-violet-500/15 border-violet-500 ring-1 ring-violet-500/50"
+                          : "bg-[color:var(--surface-1)] border-[color:var(--border-subtle)] hover:border-violet-500/40"
+                      }`}
+                    >
+                      <div className={`text-sm font-medium mb-0.5 ${selected ? "text-violet-300" : "text-[color:var(--foreground)]"}`}>
+                        {label}
+                      </div>
+                      <div className="text-xs text-[color:var(--text-muted)]">{description}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Step 5 — Integration Guide */}
+          {step === 5 && (
+            <div className="space-y-5">
+              <p className="text-sm text-[color:var(--text-muted)]">
+                Use these endpoints to integrate your agent with the SOTA marketplace. Generate an API key after registration from the agent details panel.
+              </p>
+
+              <CodeBlock
+                title="1. Authenticate"
+                language="HTTP"
+                code={`# Include this header in every request\nAuthorization: ApiKey ak_xxx.secret\n\n# Generate your key from the Developer Portal\n# after registering this agent.`}
+              />
+
+              <CodeBlock
+                title="2. Poll for Jobs"
+                language="HTTP"
+                code={`GET ${baseUrl}/api/marketplace/bid\n\n# Response\n{\n  "jobs": [\n    {\n      "id": "job_abc123",\n      "description": "Scrape product prices from ...",\n      "budget": 0.50,\n      "requiredCapabilities": ["web_scrape"]\n    }\n  ]\n}`}
+              />
+
+              <CodeBlock
+                title="3. Submit a Bid"
+                language="HTTP"
+                code={`POST ${baseUrl}/api/marketplace/bid\nContent-Type: application/json\n\n{\n  "jobId": "job_abc123",\n  "bidPrice": 0.35\n}`}
+              />
+
+              <CodeBlock
+                title="4. Execute & Report"
+                language="HTTP"
+                code={`POST ${baseUrl}/api/marketplace/execute\nContent-Type: application/json\n\n{\n  "jobId": "job_abc123",\n  "result": { "data": "..." },\n  "status": "completed"\n}`}
+              />
+            </div>
+          )}
+
+          {/* Step 6 — Review & Submit */}
+          {step === 6 && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-[color:var(--border-subtle)] overflow-hidden">
+                {[
+                  { label: "Name",          value: formData.title },
+                  { label: "Description",   value: formData.description },
+                  { label: "Category",      value: formData.category || "Not set" },
+                  { label: "Tags",          value: formData.tags.length > 0 ? formData.tags.join(", ") : "None" },
+                  { label: "Wallet",        value: formData.walletAddress, mono: true },
+                  { label: "Min Fee",       value: `$${formData.minFeeUsdc} USDC` },
+                  { label: "Bid Strategy",  value: `${formData.bidAggressiveness.toFixed(2)} (${formData.bidAggressiveness <= 0.6 ? "Aggressive" : formData.bidAggressiveness >= 0.9 ? "Conservative" : "Moderate"})` },
+                  { label: "Network",       value: formData.network === "solana-mainnet" ? "Solana Mainnet" : "Solana Devnet" },
+                  { label: "API Endpoint",  value: formData.apiEndpoint, mono: true },
+                  { label: "Webhook",       value: formData.webhookUrl || "Not set", mono: !!formData.webhookUrl },
+                  { label: "Capabilities",  value: formData.capabilities.map(c => CAPABILITY_DETAILS[c]?.label ?? c).join(", ") },
+                ].map(({ label, value, mono }, i) => (
+                  <div key={label} className={`flex items-start gap-4 px-4 py-3 ${i % 2 === 0 ? "bg-[color:var(--surface-1)]" : ""}`}>
+                    <span className="text-sm text-[color:var(--text-muted)] w-32 shrink-0">{label}</span>
+                    <span className={`text-sm text-[color:var(--foreground)] break-all ${mono ? "font-mono" : ""}`}>{value}</span>
+                  </div>
+                ))}
+              </div>
+
               <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
                 <div className="flex items-start gap-3">
                   <AlertCircle size={20} className="text-amber-400 mt-0.5" />
                   <div>
                     <h4 className="font-medium text-amber-400">Before submitting</h4>
                     <ul className="text-sm text-[color:var(--text-muted)] mt-1 space-y-1">
-                      <li>• Your agent will be in &quot;pending&quot; status until verified</li>
-                      <li>• SOTA will test your API endpoint for connectivity</li>
-                      <li>• An API key will be generated for marketplace authentication</li>
+                      <li>&bull; Your agent will be in &quot;pending&quot; status until verified</li>
+                      <li>&bull; SOTA will test your API endpoint for connectivity</li>
+                      <li>&bull; Generate an API key after registration to start receiving jobs</li>
                     </ul>
                   </div>
                 </div>
@@ -697,16 +948,16 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
             {step > 1 ? "Back" : "Cancel"}
           </button>
           <button
-            onClick={() => (step < 3 ? setStep(step + 1) : handleSubmit())}
-            disabled={submitting}
-            className="inline-flex items-center gap-2 px-6 py-2 bg-violet-600 hover:bg-violet-500 text-white font-medium rounded-lg transition-all disabled:opacity-50"
+            onClick={() => (step < 6 ? setStep(step + 1) : handleSubmit())}
+            disabled={submitting || (step < 6 && !canProceed(step))}
+            className="inline-flex items-center gap-2 px-6 py-2 bg-violet-600 hover:bg-violet-500 text-white font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
                 Creating...
               </>
-            ) : step < 3 ? (
+            ) : step < 6 ? (
               <>
                 Next
                 <ChevronRight size={16} />
@@ -732,9 +983,10 @@ function ViewAgentModal({ agent, onClose, getAuthHeaders }: { agent: Agent; onCl
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
   const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
+  const [keyError, setKeyError] = useState<string | null>(null);
 
   const successRate = agent.totalRequests === 0 ? 100 : Math.round((agent.successfulRequests / agent.totalRequests) * 100);
-  const capabilities = agent.capabilities ? JSON.parse(agent.capabilities) : [];
+  const capabilities = parseCapabilities(agent.capabilities);
 
   // Fetch API keys for this agent
   const fetchApiKeys = async () => {
@@ -774,14 +1026,15 @@ function ViewAgentModal({ agent, onClose, getAuthHeaders }: { agent: Agent; onCl
         const data = await res.json();
         setGeneratedKey(data.apiKey.fullKey);
         setNewKeyName('');
+        setKeyError(null);
         fetchApiKeys();
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to generate API key');
+        setKeyError(data.error || 'Failed to generate API key');
       }
     } catch (err) {
       console.error('Generate key error:', err);
-      alert('Failed to generate API key');
+      setKeyError('Failed to generate API key');
     } finally {
       setGeneratingKey(false);
       setShowNewKeyModal(false);
@@ -800,14 +1053,15 @@ function ViewAgentModal({ agent, onClose, getAuthHeaders }: { agent: Agent; onCl
       });
       
       if (res.ok) {
+        setKeyError(null);
         fetchApiKeys();
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to revoke API key');
+        setKeyError(data.error || 'Failed to revoke API key');
       }
     } catch (err) {
       console.error('Revoke key error:', err);
-      alert('Failed to revoke API key');
+      setKeyError('Failed to revoke API key');
     } finally {
       setRevokingKeyId(null);
     }
@@ -815,9 +1069,13 @@ function ViewAgentModal({ agent, onClose, getAuthHeaders }: { agent: Agent; onCl
 
   // Copy key to clipboard
   const handleCopyKey = async (key: string) => {
-    await navigator.clipboard.writeText(key);
-    setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 2000);
+    try {
+      await navigator.clipboard.writeText(key);
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 2000);
+    } catch {
+      // clipboard API may fail in non-HTTPS contexts
+    }
   };
 
   return (
@@ -921,7 +1179,7 @@ function ViewAgentModal({ agent, onClose, getAuthHeaders }: { agent: Agent; onCl
                   <div className="flex flex-wrap gap-2">
                     {capabilities.map((cap: string) => (
                       <span key={cap} className="px-3 py-1 text-sm bg-violet-500/20 text-violet-300 rounded-lg">
-                        {cap.replace("_", " ")}
+                        {cap.replace(/_/g, " ")}
                       </span>
                     ))}
                   </div>
@@ -987,6 +1245,12 @@ function ViewAgentModal({ agent, onClose, getAuthHeaders }: { agent: Agent; onCl
                   Generate Key
                 </button>
               </div>
+
+              {keyError && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                  {keyError}
+                </div>
+              )}
 
               {/* API Keys List */}
               {loadingKeys ? (
@@ -1131,21 +1395,13 @@ function EditAgentModal({
   const [formData, setFormData] = useState({
     title: agent.title,
     description: agent.description,
+    category: agent.category || '',
     walletAddress: agent.walletAddress || '',
+    apiEndpoint: agent.apiEndpoint || '',
+    webhookUrl: agent.webhookUrl || '',
     minFeeUsdc: agent.minFeeUsdc,
-    capabilities: agent.capabilities ? JSON.parse(agent.capabilities) : [],
+    capabilities: parseCapabilities(agent.capabilities),
   });
-
-  const capabilities = [
-    "voice_call",
-    "web_scrape",
-    "data_analysis",
-    "code_execution",
-    "image_generation",
-    "text_generation",
-    "api_integration",
-    "blockchain",
-  ];
 
   const handleSave = async () => {
     setSaving(true);
@@ -1159,7 +1415,10 @@ function EditAgentModal({
         body: JSON.stringify({
           title: formData.title,
           description: formData.description,
+          category: formData.category || undefined,
           walletAddress: formData.walletAddress,
+          apiEndpoint: formData.apiEndpoint,
+          webhookUrl: formData.webhookUrl || undefined,
           minFeeUsdc: formData.minFeeUsdc,
           capabilities: JSON.stringify(formData.capabilities),
         }),
@@ -1170,7 +1429,10 @@ function EditAgentModal({
           ...agent,
           title: formData.title,
           description: formData.description,
+          category: formData.category || null,
           walletAddress: formData.walletAddress,
+          apiEndpoint: formData.apiEndpoint || null,
+          webhookUrl: formData.webhookUrl || null,
           minFeeUsdc: formData.minFeeUsdc,
           capabilities: JSON.stringify(formData.capabilities),
         });
@@ -1212,7 +1474,7 @@ function EditAgentModal({
             <input
               type="text"
               value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
               className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
             />
           </div>
@@ -1221,9 +1483,50 @@ function EditAgentModal({
             <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Description</label>
             <textarea
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
               rows={3}
               className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500 resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Category</label>
+            <select
+              value={formData.category}
+              onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
+            >
+              <option value="">Select category</option>
+              {AGENT_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">
+              <span className="flex items-center gap-2">
+                <Globe size={16} />
+                API Endpoint
+              </span>
+            </label>
+            <input
+              type="url"
+              value={formData.apiEndpoint}
+              onChange={(e) => setFormData(prev => ({ ...prev, apiEndpoint: e.target.value }))}
+              placeholder="https://your-agent.com/api/execute"
+              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] font-mono focus:outline-none focus:border-violet-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Webhook URL</label>
+            <input
+              type="url"
+              value={formData.webhookUrl}
+              onChange={(e) => setFormData(prev => ({ ...prev, webhookUrl: e.target.value }))}
+              placeholder="https://your-agent.com/webhook"
+              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] font-mono focus:outline-none focus:border-violet-500"
             />
           </div>
 
@@ -1237,7 +1540,7 @@ function EditAgentModal({
             <input
               type="text"
               value={formData.walletAddress}
-              onChange={(e) => setFormData({ ...formData, walletAddress: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, walletAddress: e.target.value }))}
               className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] font-mono focus:outline-none focus:border-violet-500"
             />
           </div>
@@ -1248,7 +1551,7 @@ function EditAgentModal({
               type="number"
               step="0.01"
               value={formData.minFeeUsdc}
-              onChange={(e) => setFormData({ ...formData, minFeeUsdc: parseFloat(e.target.value) })}
+              onChange={(e) => setFormData(prev => ({ ...prev, minFeeUsdc: parseFloat(e.target.value) || 0 }))}
               className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
             />
           </div>
@@ -1256,15 +1559,17 @@ function EditAgentModal({
           <div>
             <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Capabilities</label>
             <div className="flex flex-wrap gap-2">
-              {capabilities.map((cap) => (
+              {Object.entries(CAPABILITY_DETAILS).map(([cap, { label }]) => (
                 <button
                   key={cap}
                   type="button"
                   onClick={() => {
-                    const caps = formData.capabilities.includes(cap)
-                      ? formData.capabilities.filter((c: string) => c !== cap)
-                      : [...formData.capabilities, cap];
-                    setFormData({ ...formData, capabilities: caps });
+                    setFormData(prev => ({
+                      ...prev,
+                      capabilities: prev.capabilities.includes(cap)
+                        ? prev.capabilities.filter((c) => c !== cap)
+                        : [...prev.capabilities, cap],
+                    }));
                   }}
                   className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                     formData.capabilities.includes(cap)
@@ -1272,7 +1577,7 @@ function EditAgentModal({
                       : "bg-[color:var(--surface-1)] border-[color:var(--border-subtle)] text-[color:var(--text-muted)] hover:border-[color:var(--border-subtle)]"
                   }`}
                 >
-                  {cap.replace("_", " ")}
+                  {label}
                 </button>
               ))}
             </div>
