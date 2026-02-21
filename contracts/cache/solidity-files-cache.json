@@ -453,8 +453,8 @@
       ]
     },
     "/Users/macbook/Projects/Euro_SOTA/contracts/contracts/Escrow.sol": {
-      "lastModificationDate": 1771621872726,
-      "contentHash": "02e6549e912dd9944929e9909d296ec0",
+      "lastModificationDate": 1771678571472,
+      "contentHash": "0ca4fd30324abd52098b2dcc7701b2b9",
       "sourceName": "contracts/Escrow.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -570,8 +570,8 @@
       ]
     },
     "/Users/macbook/Projects/Euro_SOTA/contracts/contracts/ReputationToken.sol": {
-      "lastModificationDate": 1771621066972,
-      "contentHash": "07317e08afb207a579b243de0e35dcda",
+      "lastModificationDate": 1771678571473,
+      "contentHash": "4ec033fb0e0f7fb539452cf3625c362c",
       "sourceName": "contracts/ReputationToken.sol",
       "solcConfig": {
         "version": "0.8.24",

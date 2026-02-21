@@ -81,7 +81,10 @@ function CheckoutForm({
       {/* Express Checkout (Apple Pay / Google Pay) */}
       <ExpressCheckoutElement
         onConfirm={handleExpressCheckout}
-        options={{ buttonType: { applePay: "buy", googlePay: "buy" } }}
+        options={{
+          buttonType: { applePay: "buy", googlePay: "buy" },
+          paymentMethods: { applePay: "always", googlePay: "always" },
+        }}
       />
 
       <div className="stripe-divider">
