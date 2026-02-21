@@ -20,9 +20,9 @@ export async function GET(req: Request) {
       });
 
       // Sort by creation date descending
-      agents.sort((a: typeof agents[number], b: typeof agents[number]) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      agents.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-      const agentsWithOwner = agents.map((agent: typeof agents[number]) => ({
+      const agentsWithOwner = agents.map((agent) => ({
         ...agent,
         owner: { id: user.id, email: user.email, name: user.name },
       }));
@@ -34,10 +34,10 @@ export async function GET(req: Request) {
     const agents = await prisma.agent.findMany();
 
     // Sort by creation date descending
-    agents.sort((a: typeof agents[number], b: typeof agents[number]) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    agents.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     const agentsWithOwner = await Promise.all(
-      agents.map(async (agent: typeof agents[number]) => {
+      agents.map(async (agent) => {
         const owner = await prisma.user.findUnique({ where: { id: agent.ownerId } });
         return { ...agent, owner: owner ? { id: owner.id, email: owner.email, name: owner.name } : null };
       })

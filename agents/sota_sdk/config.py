@@ -51,7 +51,6 @@ class ContractAddresses:
     escrow: str = ""
     agent_registry: str = ""
     usdc: str = ""
-    reputation_token: str = ""
 
 
 BASE_SEPOLIA = NetworkConfig(
@@ -92,7 +91,6 @@ def get_contract_addresses() -> ContractAddresses:
             escrow=os.getenv("ESCROW_ADDRESS", ""),
             agent_registry=os.getenv("AGENT_REGISTRY_ADDRESS", ""),
             usdc=os.getenv("USDC_ADDRESS", ""),
-            reputation_token=os.getenv("REPUTATION_TOKEN_ADDRESS", ""),
         )
 
     # Allow explicit override of the contracts directory
@@ -119,15 +117,9 @@ def get_contract_addresses() -> ContractAddresses:
                         escrow=c.get("Escrow", ""),
                         agent_registry=c.get("AgentRegistry", ""),
                         usdc=c.get("USDC", ""),
-                        reputation_token=c.get("ReputationToken", ""),
                     )
             except (json.JSONDecodeError, KeyError) as e:
                 logger.warning("Failed to parse deployment file %s: %s", path, e)
                 continue
 
-    logger.debug(
-        "No contract addresses found. Searched env vars "
-        "(ORDERBOOK_ADDRESS, etc.) and deployment dir: %s",
-        contracts_dir,
-    )
     return ContractAddresses()

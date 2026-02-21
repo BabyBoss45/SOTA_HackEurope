@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { ethers } from "ethers";
-import { prisma } from "@/src/lib/prisma";
 
 export const runtime = "nodejs";
 
@@ -97,43 +96,10 @@ export async function POST(request: NextRequest) {
       console.log(`Escrow funded: ${fundTx.hash}`);
 
       console.log(`All on-chain operations complete for job ${jobId}`);
-
-      // Persist Payment record (funded)
-      try {
-        await prisma.payment.create({
-          data: {
-            jobId: jobId,
-            onChainJobId: boardJobId ? parseInt(boardJobId) : null,
-            paymentIntentId: paymentIntent.id,
-            amountCents: paymentIntent.amount,
-            usdcAmountRaw: usdcAmountRaw,
-            agentAddress: agentAddress,
-            status: "funded",
-          },
-        });
-        console.log(`Payment record created (funded) for job ${jobId}`);
-      } catch (dbErr: any) {
-        console.error("Failed to create Payment record:", dbErr);
-      }
     } catch (chainErr: any) {
       console.error("On-chain operations failed:", chainErr);
       // Payment succeeded but chain ops failed — log for manual resolution
-      // Still create a Payment record so we can track the Stripe charge
-      try {
-        await prisma.payment.create({
-          data: {
-            jobId: jobId,
-            paymentIntentId: paymentIntent.id,
-            amountCents: paymentIntent.amount,
-            usdcAmountRaw: usdcAmountRaw,
-            agentAddress: agentAddress,
-            status: "pending",
-          },
-        });
-        console.log(`Payment record created (pending — chain ops failed) for job ${jobId}`);
-      } catch (dbErr: any) {
-        console.error("Failed to create Payment record:", dbErr);
-      }
+      // Don't return error to Stripe (payment is still valid)
     }
   }
 

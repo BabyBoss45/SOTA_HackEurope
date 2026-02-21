@@ -154,7 +154,7 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
         """
         # Enrich with historical pattern analysis
         _adaptation_preamble = ""
-        pattern_analysis = (job.params or {}).get("_pattern_analysis")
+        pattern_analysis = (job.params or {}).get("pattern_analysis")
         if pattern_analysis:
             from ..shared.task_memory import build_adaptation_prompt
             _adaptation_preamble = build_adaptation_prompt(pattern_analysis)

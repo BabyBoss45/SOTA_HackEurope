@@ -107,26 +107,6 @@ model MarketplaceJob {
 
   requests    AgentDataRequest[]
   updates     AgentJobUpdate[]
-  payment     Payment?
-}
-
-model Payment {
-  id                 Int       @id @default(autoincrement())
-  jobId              String    @unique
-  onChainJobId       Int?
-  paymentIntentId    String    @unique
-  amountCents        Int
-  usdcAmountRaw      String
-  agentAddress       String
-  status             String    @default("pending") // pending | funded | refund_requested | refunded | refund_failed
-  stripeRefundId     String?
-  escrowRefundTxHash String?
-  refundReason       String?
-  refundedAt         DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-
-  job                MarketplaceJob? @relation(fields: [jobId], references: [jobId])
 }
 
 model UserProfile {

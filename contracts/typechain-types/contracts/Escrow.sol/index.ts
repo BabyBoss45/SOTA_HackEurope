@@ -3,4 +3,3 @@
 /* eslint-disable */
 export type { Escrow } from "./Escrow";
 export type { IOrderBook } from "./IOrderBook";
-export type { IReputationToken } from "./IReputationToken";

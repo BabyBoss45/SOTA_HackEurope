@@ -283,6 +283,11 @@ class SlotFillingTool(BaseTool):
                     {"name": "restaurant_booking", "required_params": ["location", "cuisine", "date", "time", "guests", "user_name"]},
                     {"name": "call_verification", "required_params": ["phone_number", "purpose"]},
                     {"name": "web_scraping", "required_params": ["url", "data_points"]},
+                    {"name": "smart_shopping", "required_params": ["product_query", "max_budget", "currency"]},
+                    {"name": "trip_planning", "required_params": ["destination", "trip_duration", "group_size", "date_range"]},
+                    {"name": "refund_claim", "required_params": ["service_type", "booking_reference", "delay_details"]},
+                    {"name": "gift_suggestion", "required_params": ["recipient_name"]},
+                    {"name": "restaurant_booking_smart", "required_params": ["date"]},
                     {"name": "data_analysis", "required_params": ["data_source", "analysis_type"]},
                 ]
             
@@ -392,7 +397,7 @@ class PostJobTool(BaseTool):
             },
             "budget_usd": {
                 "type": "number",
-                "description": "Maximum budget in USDC (default 0.02)"
+                "description": "Maximum budget in USDC (default 1.0)"
             },
             "deadline_hours": {
                 "type": "integer",
@@ -411,14 +416,14 @@ class PostJobTool(BaseTool):
             return None
 
     async def _persist_job(self, db, job_id, description, tags, budget_usd, poster, metadata):
-        """Fire-and-forget: persist job to Firestore."""
+        """Fire-and-forget: persist job to database."""
         try:
             await db.create_job(job_id, description, tags, budget_usd, poster, metadata)
         except Exception as e:
             print(f"⚠️ DB create_job failed: {e}")
 
     async def _persist_bid_selection(self, db, job_id, result):
-        """Fire-and-forget: persist bid selection to Firestore."""
+        """Fire-and-forget: persist bid selection to database."""
         try:
             w = result.winning_bid
             await db.update_job_status(
@@ -454,7 +459,7 @@ class PostJobTool(BaseTool):
         description: str,
         tool: str,
         parameters: Dict[str, Any],
-        budget_usd: float = 0.02,
+        budget_usd: float = 1.0,
         deadline_hours: int = 24,
     ) -> str:
         """
@@ -519,7 +524,7 @@ class PostJobTool(BaseTool):
 
             print(f"📢 Job {job_id_str} posted — collecting bids for {listing.bid_window_seconds}s…")
 
-            # ── Persist job to Firestore (fire-and-forget) ────────
+            # ── Persist job to database (fire-and-forget) ────────
             db = await self._get_db()
             if db:
                 asyncio.ensure_future(self._persist_job(
@@ -538,17 +543,19 @@ class PostJobTool(BaseTool):
                     except Exception as exc:
                         print(f"⚠️ On-chain assign skipped: {exc}")
 
+            auto_execute = os.getenv("BUTLER_AUTO_EXECUTE", "true").lower() in ("true", "1", "yes")
+
             board = JobBoard.instance()
             result: BidResult = await board.post_and_select(
                 listing,
                 on_chain_accept=_accept_on_chain,
-                execute_after_accept=False,  # Execution happens AFTER user funds escrow
+                execute_after_accept=auto_execute,
             )
 
             # ── 3. After winner selected → return result with escrow info ──
             if result.winning_bid:
                 w = result.winning_bid
-                # Persist bid selection to Firestore
+                # Persist bid selection to database
                 if db:
                     asyncio.ensure_future(self._persist_bid_selection(db, job_id_str, result))
 
@@ -602,7 +609,7 @@ class PostJobTool(BaseTool):
                 
                 return json.dumps(response, indent=2)
             else:
-                # Persist expired status to Firestore
+                # Persist expired status to database
                 if db:
                     asyncio.ensure_future(self._persist_no_bids(db, job_id_str))
 

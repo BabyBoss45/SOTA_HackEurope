@@ -42,7 +42,8 @@ handling their request behind the scenes.
 For EVERY user request, follow this sequence:
 
 1. **UNDERSTAND THE REQUEST**:
-   - If the user wants something done (book, find hackathon, call, search, etc.) → call `fill_slots`.
+   - If the user wants something done (book, find hackathon, call, search, shop,
+     plan a trip, claim a refund, suggest a gift, etc.) → call `fill_slots`.
    - If unclear → ask a natural clarifying question and STOP.
    - After `fill_slots`:
      - If missing info → ask the user naturally and STOP.
@@ -57,7 +58,8 @@ For EVERY user request, follow this sequence:
    Do NOT write JSON. Do NOT show parameters as text.
    You must make a FUNCTION CALL to `post_job` with these arguments:
    - description: a natural language description of the task
-   - tool: the job type (e.g. "hackathon_registration", "hotel_booking", "call_verification")
+   - tool: the job type (e.g. "hackathon_registration", "hotel_booking", "call_verification",
+     "smart_shopping", "trip_planning", "refund_claim", "gift_suggestion", "restaurant_booking_smart")
    - parameters: an object with the gathered details
 
    ⚠️ VIOLATION: Outputting JSON like ```json {...}``` as text is FORBIDDEN.
@@ -97,12 +99,12 @@ class ButlerAgent:
         self,
         private_key: Optional[str] = None,
         anthropic_api_key: Optional[str] = None,
-        model: str = "claude-haiku-4-5-20251001",
+        model: Optional[str] = None,
     ):
         """Initialize Butler Agent."""
         self.private_key = private_key or os.getenv("PRIVATE_KEY")
         self.anthropic_api_key = anthropic_api_key or os.getenv("ANTHROPIC_API_KEY")
-        self.model = model
+        self.model = model or os.getenv("LLM_MODEL", "claude-sonnet-4-6")
 
         if not self.private_key:
             raise ValueError("PRIVATE_KEY required")
@@ -332,7 +334,7 @@ class ButlerAgent:
 def create_butler_agent(
     private_key: Optional[str] = None,
     anthropic_api_key: Optional[str] = None,
-    model: str = "claude-haiku-4-5-20251001",
+    model: Optional[str] = None,
 ) -> ButlerAgent:
     """Factory function to create Butler Agent."""
     return ButlerAgent(

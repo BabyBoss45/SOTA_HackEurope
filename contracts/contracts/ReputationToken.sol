@@ -45,11 +45,6 @@ contract ReputationToken is Ownable {
     function recordSuccess(address agent, uint256 payoutAmount) external onlyEscrow {
         AgentStats storage agentStat = stats[agent];
         agentStat.jobsCompleted += 1;
-        require(payoutAmount <= type(uint128).max, "Reputation: payout exceeds uint128");
-        require(
-            uint256(agentStat.totalEarned) + payoutAmount <= type(uint128).max,
-            "Reputation: totalEarned overflow"
-        );
         agentStat.totalEarned += uint128(payoutAmount);
         agentStat.lastUpdated = uint64(block.timestamp);
 
@@ -85,10 +80,7 @@ contract ReputationToken is Ownable {
 
     function _syncAgentRegistry(address agent) internal {
         if (agentRegistry != address(0)) {
-            try IAgentRegistrySync(agentRegistry).syncReputation(agent, scores[agent]) {
-            } catch {
-                // Agent not registered in registry — skip sync silently
-            }
+            IAgentRegistrySync(agentRegistry).syncReputation(agent, scores[agent]);
         }
     }
 }

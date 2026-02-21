@@ -27,7 +27,23 @@ logger = logging.getLogger(__name__)
 
 QDRANT_COLLECTION = "task_outcomes"
 SIMILARITY_THRESHOLD = 0.70
-DEFAULT_EMBED_DIM = 3072  # text-embedding-3-large
+_EMBED_DIM: Optional[int] = None
+
+
+def _get_embed_dim() -> int:
+    """Detect embedding dimension from the active model (cached after first call)."""
+    global _EMBED_DIM
+    if _EMBED_DIM is not None:
+        return _EMBED_DIM
+    try:
+        import asyncio
+        from .embedding import embed_text
+        vec = asyncio.get_event_loop().run_until_complete(embed_text("dim_probe"))
+        _EMBED_DIM = len(vec)
+    except Exception:
+        _EMBED_DIM = 384  # safe fallback for all-MiniLM-L6-v2
+    logger.info("Detected embedding dimension: %d", _EMBED_DIM)
+    return _EMBED_DIM
 
 
 # ─── Failure Classification ──────────────────────────────────
@@ -213,9 +229,10 @@ class TaskPatternMemory:
         try:
             from qdrant_client.models import Distance, VectorParams  # type: ignore
             if not self.qdrant.collection_exists(QDRANT_COLLECTION):
+                dim = _get_embed_dim()
                 self.qdrant.create_collection(
                     collection_name=QDRANT_COLLECTION,
-                    vectors_config=VectorParams(size=DEFAULT_EMBED_DIM, distance=Distance.COSINE),
+                    vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
                 )
                 logger.info("Created Qdrant collection '%s'", QDRANT_COLLECTION)
         except Exception as exc:

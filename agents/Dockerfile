@@ -13,9 +13,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 RUN pip install -e .
 
-RUN useradd -m -u 1000 appuser
-USER appuser
-
 EXPOSE 3001
 
 CMD ["python", "butler_api.py"]

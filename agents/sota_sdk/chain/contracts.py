@@ -66,10 +66,6 @@ def get_job(wallet: AgentWallet, job_id: int) -> dict:
     """Fetch job details from OrderBook."""
     ob = _order_book(wallet)
     job = ob.functions.getJob(job_id).call()
-    if len(job) < 9:
-        raise ValueError(
-            f"Unexpected getJob() response: expected 9 fields, got {len(job)}"
-        )
     return {
         "id": job[0],
         "poster": job[1],

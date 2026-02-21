@@ -10,22 +10,7 @@
       "Bash(python:*)",
       "Bash(ls:*)",
       "WebFetch(domain:github.com)",
-      "Bash(PYTHONIOENCODING=utf-8 python:*)",
-      "Bash(npm install:*)",
-      "Bash(npx tsc:*)",
-      "Bash(npx next build)",
-      "Bash(npx prisma generate:*)",
-      "Bash(pip install:*)",
-      "Bash(pip show:*)",
-      "Bash(cd:*)",
-      "WebFetch(domain:devpost.com)",
-      "WebFetch(domain:mlh.io)",
-      "WebFetch(domain:ethglobal.com)",
-      "WebFetch(domain:www.mlh.com)",
-      "WebFetch(domain:www.eventbrite.com)",
-      "WebFetch(domain:lu.ma)",
-      "WebFetch(domain:luma.com)",
-      "WebFetch(domain:api.lu.ma)"
+      "Bash(PYTHONIOENCODING=utf-8 python:*)"
     ]
   }
 }

@@ -44,7 +44,7 @@ def _load_module_from_file(name: str, filepath: Path) -> ModuleType:
 # dotted name before loading task_memory.
 _embedding_stub = ModuleType("agents.src.shared.embedding")
 async def _noop_embed(text, model=None):
-    return [0.0] * 3072
+    return [0.0] * 384
 _embedding_stub.embed_text = _noop_embed  # type: ignore[attr-defined]
 sys.modules["agents.src.shared.embedding"] = _embedding_stub
 
@@ -111,11 +111,11 @@ EMBED_PATCH_TARGET = "agents.src.shared.embedding.embed_text"
 
 # ─── Helpers ──────────────────────────────────────────────────
 
-EMBED_DIM = 3072
+EMBED_DIM = 384
 
 
 async def fake_embed_text(text: str, model: str | None = None) -> list[float]:
-    """Deterministic 3072-dim vector from hash of input."""
+    """Deterministic 384-dim vector from hash of input."""
     h = hashlib.sha256(text.encode()).digest()
     return [b / 255.0 for b in h] * (EMBED_DIM // 32)
 

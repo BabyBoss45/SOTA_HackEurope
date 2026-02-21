@@ -107,52 +107,42 @@ def sign_message(message: A2AMessage, account: LocalAccount) -> A2AMessage:
 
 def verify_message(
     message: A2AMessage,
-    expected_signer: Optional[str] = None,
-    check_freshness: bool = True,
+    expected_signer: Optional[str] = None
 ) -> tuple[bool, Optional[str]]:
     """
-    Verify an A2A message signature and optionally check freshness.
-
+    Verify an A2A message signature.
+    
     Args:
         message: The signed A2A message
         expected_signer: Optional expected signer address
-        check_freshness: Whether to reject stale messages (default True)
-
+        
     Returns:
         Tuple of (is_valid, recovered_signer_address)
     """
     if not message.signature or not message.sender or not message.timestamp:
         return False, None
-
-    # C7: Check message freshness before doing expensive crypto
-    if check_freshness and not is_message_fresh(message):
-        import logging as _logging
-        _logging.getLogger(__name__).warning(
-            "Message from %s is stale (timestamp: %s)", message.sender, message.timestamp
-        )
-        return False, None
-
+    
     try:
         # Recreate message hash (exclude signature field)
         message_data = message.model_dump(exclude={'signature'})
         message_json = json.dumps(message_data, sort_keys=True)
         message_hash = hashlib.keccak_256(message_json.encode()).hexdigest()
-
+        
         # Recover signer
         signable = encode_defunct(text=message_hash)
         recovered = Account.recover_message(
             signable,
             signature=bytes.fromhex(message.signature.replace('0x', ''))
         )
-
+        
         # Validate
         if expected_signer:
             is_valid = recovered.lower() == expected_signer.lower()
         else:
             is_valid = recovered.lower() == message.sender.lower()
-
+        
         return is_valid, recovered
-
+        
     except Exception as e:
         print(f"Signature verification failed: {e}")
         return False, None

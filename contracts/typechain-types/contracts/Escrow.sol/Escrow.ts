@@ -53,10 +53,8 @@ export declare namespace Escrow {
 export interface EscrowInterface extends Interface {
   getFunction(
     nameOrSignature:
-      | "DISPUTE_WINDOW"
       | "confirmDelivery"
       | "deliveryConfirmed"
-      | "deliveryConfirmedAt"
       | "deposits"
       | "feeCollector"
       | "fundJob"
@@ -68,10 +66,8 @@ export interface EscrowInterface extends Interface {
       | "refund"
       | "releaseToProvider"
       | "renounceOwnership"
-      | "reputationToken"
       | "setFeeCollector"
       | "setOrderBook"
-      | "setReputationToken"
       | "transferOwnership"
       | "usdc"
   ): FunctionFragment;
@@ -86,19 +82,11 @@ export interface EscrowInterface extends Interface {
   ): EventFragment;
 
   encodeFunctionData(
-    functionFragment: "DISPUTE_WINDOW",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
     functionFragment: "confirmDelivery",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "deliveryConfirmed",
-    values: [BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "deliveryConfirmedAt",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
@@ -140,19 +128,11 @@ export interface EscrowInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "reputationToken",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
     functionFragment: "setFeeCollector",
     values: [AddressLike, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "setOrderBook",
-    values: [AddressLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "setReputationToken",
     values: [AddressLike]
   ): string;
   encodeFunctionData(
@@ -162,19 +142,11 @@ export interface EscrowInterface extends Interface {
   encodeFunctionData(functionFragment: "usdc", values?: undefined): string;
 
   decodeFunctionResult(
-    functionFragment: "DISPUTE_WINDOW",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "confirmDelivery",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "deliveryConfirmed",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "deliveryConfirmedAt",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "deposits", data: BytesLike): Result;
@@ -204,19 +176,11 @@ export interface EscrowInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "reputationToken",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "setFeeCollector",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "setOrderBook",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "setReputationToken",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -362,8 +326,6 @@ export interface Escrow extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
-  DISPUTE_WINDOW: TypedContractMethod<[], [bigint], "view">;
-
   confirmDelivery: TypedContractMethod<
     [jobId: BigNumberish],
     [void],
@@ -373,12 +335,6 @@ export interface Escrow extends BaseContract {
   deliveryConfirmed: TypedContractMethod<
     [arg0: BigNumberish],
     [boolean],
-    "view"
-  >;
-
-  deliveryConfirmedAt: TypedContractMethod<
-    [arg0: BigNumberish],
-    [bigint],
     "view"
   >;
 
@@ -433,8 +389,6 @@ export interface Escrow extends BaseContract {
 
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
 
-  reputationToken: TypedContractMethod<[], [string], "view">;
-
   setFeeCollector: TypedContractMethod<
     [collector: AddressLike, bps: BigNumberish],
     [void],
@@ -442,12 +396,6 @@ export interface Escrow extends BaseContract {
   >;
 
   setOrderBook: TypedContractMethod<[ob: AddressLike], [void], "nonpayable">;
-
-  setReputationToken: TypedContractMethod<
-    [rt: AddressLike],
-    [void],
-    "nonpayable"
-  >;
 
   transferOwnership: TypedContractMethod<
     [newOwner: AddressLike],
@@ -462,17 +410,11 @@ export interface Escrow extends BaseContract {
   ): T;
 
   getFunction(
-    nameOrSignature: "DISPUTE_WINDOW"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
     nameOrSignature: "confirmDelivery"
   ): TypedContractMethod<[jobId: BigNumberish], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "deliveryConfirmed"
   ): TypedContractMethod<[arg0: BigNumberish], [boolean], "view">;
-  getFunction(
-    nameOrSignature: "deliveryConfirmedAt"
-  ): TypedContractMethod<[arg0: BigNumberish], [bigint], "view">;
   getFunction(
     nameOrSignature: "deposits"
   ): TypedContractMethod<
@@ -528,9 +470,6 @@ export interface Escrow extends BaseContract {
     nameOrSignature: "renounceOwnership"
   ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "reputationToken"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
     nameOrSignature: "setFeeCollector"
   ): TypedContractMethod<
     [collector: AddressLike, bps: BigNumberish],
@@ -540,9 +479,6 @@ export interface Escrow extends BaseContract {
   getFunction(
     nameOrSignature: "setOrderBook"
   ): TypedContractMethod<[ob: AddressLike], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "setReputationToken"
-  ): TypedContractMethod<[rt: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;

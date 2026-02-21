@@ -453,8 +453,8 @@
       ]
     },
     "/Users/macbook/Projects/Euro_SOTA/contracts/contracts/Escrow.sol": {
-      "lastModificationDate": 1771678571472,
-      "contentHash": "0ca4fd30324abd52098b2dcc7701b2b9",
+      "lastModificationDate": 1771589982831,
+      "contentHash": "8aa53591c47fec29c314d3d7e7ac587a",
       "sourceName": "contracts/Escrow.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -491,8 +491,7 @@
       ],
       "artifacts": [
         "Escrow",
-        "IOrderBook",
-        "IReputationToken"
+        "IOrderBook"
       ]
     },
     "/Users/macbook/Projects/Euro_SOTA/contracts/node_modules/@openzeppelin/contracts/utils/ReentrancyGuard.sol": {
@@ -570,8 +569,8 @@
       ]
     },
     "/Users/macbook/Projects/Euro_SOTA/contracts/contracts/ReputationToken.sol": {
-      "lastModificationDate": 1771678571473,
-      "contentHash": "4ec033fb0e0f7fb539452cf3625c362c",
+      "lastModificationDate": 1771578465894,
+      "contentHash": "50612c3f7c43821b7fddc56df8c2862f",
       "sourceName": "contracts/ReputationToken.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -609,8 +608,8 @@
       ]
     },
     "/Users/macbook/Projects/Euro_SOTA/contracts/contracts/OrderBook.sol": {
-      "lastModificationDate": 1771621866269,
-      "contentHash": "ac9ee5589dc6047d270d6c63556b39f4",
+      "lastModificationDate": 1771578465895,
+      "contentHash": "ac5e73580aae20019d3243117488792f",
       "sourceName": "contracts/OrderBook.sol",
       "solcConfig": {
         "version": "0.8.24",

@@ -44,17 +44,19 @@ class GetJobDetailsTool(BaseTool):
         
         try:
             job = get_job(self._contracts, job_id)
-
+            
+            # Parse job tuple (structure depends on contract)
             return json.dumps({
                 "success": True,
                 "job_id": job_id,
-                "poster": job["poster"],
-                "provider": job["provider"],
-                "metadata_uri": job["metadata_uri"],
-                "budget_usdc": job["budget_usdc"],
-                "deadline": job["deadline"],
-                "status": job["status"],
-                "status_label": ["OPEN","ASSIGNED","COMPLETED","RELEASED","CANCELLED","DISPUTED"][job["status"]] if job["status"] <= 5 else "UNKNOWN",
+                "description": job[0] if len(job) > 0 else "",
+                "job_type": job[1] if len(job) > 1 else 0,
+                "job_type_label": JOB_TYPE_LABELS.get(JobType(job[1]), "Unknown") if len(job) > 1 else "Unknown",
+                "budget": job[2] if len(job) > 2 else 0,
+                "budget_usdc": (job[2] / 10**6) if len(job) > 2 else 0,
+                "client": job[3] if len(job) > 3 else "",
+                "deadline": job[4] if len(job) > 4 else 0,
+                "status": job[5] if len(job) > 5 else 0,
             }, indent=2)
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
@@ -93,14 +95,12 @@ class ListJobBidsTool(BaseTool):
             
             parsed_bids = []
             for i, bid in enumerate(bids):
-                # Bid struct: id(0), jobId(1), agent(2), priceUsdc(3),
-                #             estimatedTime(4), proposal(5), createdAt(6), accepted(7)
                 parsed_bids.append({
-                    "bid_id": bid[0] if len(bid) > 0 else i,
-                    "bidder": bid[2] if len(bid) > 2 else "",
-                    "amount": bid[3] if len(bid) > 3 else 0,
-                    "amount_usdc": (bid[3] / 10**6) if len(bid) > 3 else 0,
-                    "estimated_time": bid[4] if len(bid) > 4 else 0,
+                    "bid_id": i,
+                    "bidder": bid[0] if len(bid) > 0 else "",
+                    "amount": bid[1] if len(bid) > 1 else 0,
+                    "amount_usdc": (bid[1] / 10**6) if len(bid) > 1 else 0,
+                    "estimated_time": bid[2] if len(bid) > 2 else 0,
                 })
             
             return json.dumps({

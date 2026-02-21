@@ -32,10 +32,8 @@ def register_agent(
     capabilities: List[str],
 ) -> str:
     """Register as an agent on-chain. Returns tx hash."""
-    if not wallet.address:
-        raise ValueError("Wallet has no address — private key required for registration")
     registry = _agent_registry(wallet)
-    fn = registry.functions.registerAgent(wallet.address, name, metadata_uri, capabilities)
+    fn = registry.functions.registerAgent(name, metadata_uri, capabilities)
     tx_hash = wallet.build_and_send(fn)
     wallet.wait_for_receipt(tx_hash)
     logger.info("Agent registered on-chain | name=%s tx=%s", name, tx_hash)

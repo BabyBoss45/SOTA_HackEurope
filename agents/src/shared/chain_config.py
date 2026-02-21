@@ -36,7 +36,6 @@ class ContractAddresses:
     escrow: str = ""
     agent_registry: str = ""
     usdc: str = ""
-    reputation_token: str = ""
 
 
 @dataclass
@@ -45,6 +44,11 @@ class AgentEndpoints:
     manager: str = "http://localhost:3001"
     caller: str = "http://localhost:3003"
     hackathon: str = "http://localhost:3005"
+    gift_suggestion: str = "http://localhost:3007"
+    restaurant_booker: str = "http://localhost:3008"
+    refund_claim: str = "http://localhost:3009"
+    smart_shopper: str = "http://localhost:3010"
+    trip_planner: str = "http://localhost:3011"
 
 
 # ─── Networks ────────────────────────────────────────────────
@@ -94,7 +98,6 @@ def get_contract_addresses() -> ContractAddresses:
             escrow=os.getenv("ESCROW_ADDRESS", ""),
             agent_registry=os.getenv("AGENT_REGISTRY_ADDRESS", ""),
             usdc=os.getenv("USDC_ADDRESS", ""),
-            reputation_token=os.getenv("REPUTATION_TOKEN_ADDRESS", ""),
         )
 
     # Try deployment file
@@ -116,7 +119,6 @@ def get_contract_addresses() -> ContractAddresses:
                     escrow=c.get("Escrow", ""),
                     agent_registry=c.get("AgentRegistry", ""),
                     usdc=c.get("USDC", ""),
-                    reputation_token=c.get("ReputationToken", ""),
                 )
 
     # Empty fallback
@@ -129,6 +131,11 @@ def get_agent_endpoints() -> AgentEndpoints:
         manager=os.getenv("MANAGER_ENDPOINT", "http://localhost:3001"),
         caller=os.getenv("CALLER_ENDPOINT", "http://localhost:3003"),
         hackathon=os.getenv("HACKATHON_ENDPOINT", "http://localhost:3005"),
+        gift_suggestion=os.getenv("GIFT_AGENT_ENDPOINT", "http://localhost:3007"),
+        restaurant_booker=os.getenv("RESTAURANT_AGENT_ENDPOINT", "http://localhost:3008"),
+        refund_claim=os.getenv("REFUND_AGENT_ENDPOINT", "http://localhost:3009"),
+        smart_shopper=os.getenv("SHOPPER_AGENT_ENDPOINT", "http://localhost:3010"),
+        trip_planner=os.getenv("TRIP_AGENT_ENDPOINT", "http://localhost:3011"),
     )
 
 
@@ -143,6 +150,11 @@ class JobType(IntEnum):
     CALL_VERIFICATION = 5
     GENERIC = 6
     JOB_SCOURING = 7
+    SMART_SHOPPING = 8
+    TRIP_PLANNING = 9
+    REFUND_CLAIM = 10
+    GIFT_SUGGESTION = 11
+    RESTAURANT_BOOKING_SMART = 12
 
 
 JOB_TYPE_LABELS = {
@@ -153,6 +165,11 @@ JOB_TYPE_LABELS = {
     JobType.CALL_VERIFICATION: "Call Verification",
     JobType.GENERIC: "Generic Task",
     JobType.JOB_SCOURING: "Job Scouring",
+    JobType.SMART_SHOPPING: "Smart Shopping",
+    JobType.TRIP_PLANNING: "Trip Planning",
+    JobType.REFUND_CLAIM: "Refund Claim",
+    JobType.GIFT_SUGGESTION: "Gift Suggestion",
+    JobType.RESTAURANT_BOOKING_SMART: "Restaurant Booking (Smart)",
 }
 
 
@@ -160,6 +177,11 @@ AGENT_CAPABILITIES = {
     "BUTLER": ["job_planning", "agent_coordination", "user_interaction"],
     "CALLER": ["phone_call", "voice_verification", "reservation_booking"],
     "HACKATHON": ["hackathon_search", "web_scraping", "event_filtering"],
+    "SMART_SHOPPER": ["price_comparison", "market_analysis", "purchase_execution"],
+    "TRIP_PLANNER": ["flight_search", "accommodation_search", "itinerary_building", "confidence_inference"],
+    "REFUND_CLAIM": ["ticket_parsing", "eligibility_checking", "claim_generation", "escalation"],
+    "GIFT_SUGGESTION": ["recipient_analysis", "gift_search", "preference_learning"],
+    "RESTAURANT_BOOKER": ["calendar_checking", "restaurant_search", "reservation_booking", "preference_learning"],
 }
 
 
@@ -170,6 +192,11 @@ def get_private_key(agent_type: str = "butler") -> Optional[str]:
         "worker": "WORKER_PRIVATE_KEY",
         "caller": "CALLER_PRIVATE_KEY",
         "hackathon": "HACKATHON_PRIVATE_KEY",
+        "smart_shopper": "SHOPPER_PRIVATE_KEY",
+        "trip_planner": "TRIP_PRIVATE_KEY",
+        "refund_claim": "REFUND_PRIVATE_KEY",
+        "gift_suggestion": "GIFT_PRIVATE_KEY",
+        "restaurant_booker": "RESTAURANT_PRIVATE_KEY",
     }
     env_var = key_map.get(agent_type.lower(), "PRIVATE_KEY")
     return os.getenv(env_var)
