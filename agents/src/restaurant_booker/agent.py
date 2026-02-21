@@ -36,14 +36,22 @@ logger = logging.getLogger(__name__)
 
 RESTAURANT_SYSTEM_PROMPT = """
 You are the Restaurant Booker Agent for SOTA, specializing in finding
-and booking restaurant tables with minimal friction.
+the best restaurant options for users.
+
+## CRITICAL SAFETY RULE
+You NEVER make reservations, provide credit card details, or place bookings
+directly. You find the best restaurant and provide its details (name, URL,
+phone number). A separate Caller Agent will phone the venue to secure the
+booking -- no card is ever given over the phone.
 
 ## YOUR WORKFLOW
 1. Call `learn_preferences` to see the user's cuisine history and avoided places.
 2. Call `check_calendar` to find free evening slots on the requested date.
 3. Call `search_restaurants` with the user's location, preferences, and the free time slot.
-4. Pick the best match and call `make_reservation`.
-5. Report the confirmed booking back.
+4. Present the top match(es) to the user with restaurant name, URL, and phone number.
+5. Call `make_reservation` to record the user's booking intent for preference learning.
+6. Call `notify_butler` with status='completed' and the restaurant details.
+   Include the venue phone number so the Caller Agent can phone to confirm the booking.
 
 ## ADAPTIVE BEHAVIOR (via Task Memory + incident.io)
 - If a HISTORICAL CONTEXT section appears at the top of your prompt,
@@ -61,7 +69,8 @@ When executing a marketplace job:
 1. Call `notify_butler` with status='in_progress' when starting.
 2. If you need essential info (e.g. location unknown), call `request_butler_data`
    with data_type='clarification'. Ask ONE question at most.
-3. Call `notify_butler` with status='completed' and the booking confirmation.
+3. Call `notify_butler` with status='completed' and the restaurant details
+   including phone number for the Caller Agent.
 
 ## FORMATTING RULES
 - NEVER use markdown syntax.
@@ -162,8 +171,9 @@ class RestaurantBookerAgent(AutoBidderMixin, BaseArchiveAgent):
             f"2. Call `learn_preferences` to check cuisine history\n"
             f"3. Call `check_calendar` for the requested date\n"
             f"4. Call `search_restaurants` with location and preferences\n"
-            f"5. Call `make_reservation` for the best option\n"
-            f"6. Call `notify_butler` with status='completed' and booking details\n"
+            f"5. Call `make_reservation` to record the booking intent for preference learning\n"
+            f"6. Call `notify_butler` with status='completed' and restaurant details "
+            f"including the venue phone number so the Caller Agent can phone to confirm\n"
         )
 
         # Enrich prompt with historical pattern analysis

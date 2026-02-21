@@ -157,7 +157,7 @@ def _make_mock_memory() -> Tuple[TaskPatternMemory, AsyncMock, MagicMock, list]:
         captured.extend(points)
 
     mock_qdrant.upsert.side_effect = _capture_upsert
-    mock_qdrant.search.return_value = []  # default: no history
+    mock_qdrant.query_points.return_value = SimpleNamespace(points=[])  # default: no history
 
     mem = TaskPatternMemory.__new__(TaskPatternMemory)
     mem.db = mock_db
@@ -521,7 +521,7 @@ async def test_memory_analyze_after_multiple_outcomes():
     assert outcome_fail.failure_type == "timeout"
 
     # Now configure Qdrant to return these as similar past outcomes
-    mock_qdrant.search.return_value = [
+    mock_qdrant.query_points.return_value = SimpleNamespace(points=[
         _scored_point(0.90, {
             "outcome_id": outcome_ok.outcome_id,
             "job_id": str(job.job_id),
@@ -548,7 +548,7 @@ async def test_memory_analyze_after_multiple_outcomes():
             "strategy_used": "standard",
             "created_at": time.time(),
         }),
-    ]
+    ])
 
     # Patch embed_text for the analyze_similar call
     async def _fake_embed(text, model=None):
@@ -583,7 +583,7 @@ async def test_memory_adaptation_prompt_generation():
     mem, _, mock_qdrant, _ = _make_mock_memory()
 
     # Set up a pattern with failures
-    mock_qdrant.search.return_value = [
+    mock_qdrant.query_points.return_value = SimpleNamespace(points=[
         _scored_point(0.88, {
             "outcome_id": "o1", "job_id": "1", "agent_id": "hackathon",
             "task_type": "hackathon_registration", "success": False,
@@ -598,7 +598,7 @@ async def test_memory_adaptation_prompt_generation():
             "recoverable": True, "execution_time_ms": 4500,
             "strategy_used": "standard", "created_at": time.time(),
         }),
-    ]
+    ])
 
     async def _fake_embed(text, model=None):
         return [0.1] * 384

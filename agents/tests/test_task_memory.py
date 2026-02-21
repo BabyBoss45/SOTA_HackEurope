@@ -140,6 +140,11 @@ def _make_scored_point(score: float, payload: dict) -> SimpleNamespace:
     return SimpleNamespace(score=score, payload=payload)
 
 
+def make_query_response(scored_points: list) -> SimpleNamespace:
+    """Mimics a qdrant_client QueryResponse (returned by query_points)."""
+    return SimpleNamespace(points=scored_points)
+
+
 def _failure_payload(
     failure_type: str = "captcha",
     success: bool = False,
@@ -478,7 +483,7 @@ class TestAnalyzeSimilar:
     @patch(EMBED_PATCH_TARGET, new=fake_embed_text)
     async def test_qdrant_empty_results(self, mock_db):
         mock_q = MagicMock()
-        mock_q.search.return_value = []
+        mock_q.query_points.return_value = make_query_response([])
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("test", [], "hackathon")
@@ -488,10 +493,10 @@ class TestAnalyzeSimilar:
     @patch(EMBED_PATCH_TARGET, new=fake_embed_text)
     async def test_below_threshold_filtered(self, mock_db):
         mock_q = MagicMock()
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.5, _failure_payload("captcha")),
             _make_scored_point(0.3, _failure_payload("timeout")),
-        ]
+        ])
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("test", [], "hackathon")
@@ -501,11 +506,11 @@ class TestAnalyzeSimilar:
     @patch(EMBED_PATCH_TARGET, new=fake_embed_text)
     async def test_all_failures(self, mock_db):
         mock_q = MagicMock()
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.85, _failure_payload("captcha")),
             _make_scored_point(0.80, _failure_payload("captcha")),
             _make_scored_point(0.75, _failure_payload("timeout")),
-        ]
+        ])
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("EU hackathons", [], "hackathon")
@@ -520,11 +525,11 @@ class TestAnalyzeSimilar:
     @patch(EMBED_PATCH_TARGET, new=fake_embed_text)
     async def test_mixed_results(self, mock_db):
         mock_q = MagicMock()
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.90, _failure_payload("captcha", success=False)),
             _make_scored_point(0.85, _failure_payload("", success=True)),
             _make_scored_point(0.80, _failure_payload("", success=True)),
-        ]
+        ])
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("EU hackathons", [], "hackathon")
@@ -552,7 +557,7 @@ class TestAnalyzeSimilar:
     @patch(EMBED_PATCH_TARGET, new=fake_embed_text)
     async def test_qdrant_search_error_graceful(self, mock_db):
         mock_q = MagicMock()
-        mock_q.search.side_effect = RuntimeError("Qdrant connection lost")
+        mock_q.query_points.side_effect = RuntimeError("Qdrant connection lost")
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("test", [], "hackathon")
@@ -563,11 +568,11 @@ class TestAnalyzeSimilar:
     async def test_confidence_and_strategy_thresholds(self, mock_db):
         """success_rate=0.33 * mean_sim=0.85 => confidence ~0.28 => cautious"""
         mock_q = MagicMock()
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.85, _failure_payload("captcha", success=False)),
             _make_scored_point(0.85, _failure_payload("timeout", success=False)),
             _make_scored_point(0.85, _failure_payload("", success=True)),
-        ]
+        ])
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("test", [], "hackathon")
@@ -577,10 +582,10 @@ class TestAnalyzeSimilar:
     @patch(EMBED_PATCH_TARGET, new=fake_embed_text)
     async def test_avg_execution_time(self, mock_db):
         mock_q = MagicMock()
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.90, _failure_payload(execution_time_ms=1000)),
             _make_scored_point(0.80, _failure_payload(execution_time_ms=3000)),
-        ]
+        ])
         mem = self._make_memory(mock_db, qdrant=mock_q)
 
         pattern = await mem.analyze_similar("test", [], "hackathon")
@@ -632,9 +637,9 @@ class TestEndToEnd:
         assert upserted["payload"]["failure_type"] == "captcha"
         assert upserted["payload"]["success"] is False
 
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.92, upserted["payload"]),
-        ]
+        ])
 
         pattern = await mem.analyze_similar(
             "Sign up for European hackathons on devpost",
@@ -684,11 +689,11 @@ class TestEndToEnd:
 
         assert len(captured) == 3
 
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.88, captured[0]["payload"]),
             _make_scored_point(0.85, captured[1]["payload"]),
             _make_scored_point(0.82, captured[2]["payload"]),
-        ]
+        ])
 
         pattern = await mem.analyze_similar("EU hackathons", [], "hackathon")
 
@@ -723,9 +728,9 @@ class TestEndToEnd:
             elapsed_ms=4000,
         )
 
-        mock_q.search.return_value = [
+        mock_q.query_points.return_value = make_query_response([
             _make_scored_point(0.91, captured[0]["payload"]),
-        ]
+        ])
 
         pattern = await mem.analyze_similar("EU hackathons", [], "hackathon")
         prompt = build_adaptation_prompt(pattern)

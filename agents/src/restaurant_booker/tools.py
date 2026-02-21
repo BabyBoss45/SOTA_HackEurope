@@ -402,12 +402,14 @@ class SearchRestaurantsTool(BaseTool):
 
 
 class MakeReservationTool(BaseTool):
-    """Book a table at a restaurant (simulated, with real venue URLs)."""
+    """Record a booking intent for preference learning. Does NOT place a real reservation."""
 
     name: str = "make_reservation"
     description: str = """
-    Make a restaurant reservation. In demo mode this simulates the booking.
-    Records the booking for preference learning.
+    Record the user's booking intent for preference learning and history tracking.
+    Does NOT place an actual reservation -- the Caller Agent will phone the venue
+    to secure the booking separately. Returns the restaurant details and a
+    reference ID for tracking.
     """
     parameters: dict = {
         "type": "object",
@@ -466,7 +468,7 @@ class MakeReservationTool(BaseTool):
             "party_size": party_size,
             "booking_ref": booking_ref,
             "booking_url": booking_url,
-            "status": "confirmed",
+            "status": "pending_call",
             "booked_at": datetime.now(timezone.utc).isoformat(),
         })
 
@@ -482,7 +484,7 @@ class MakeReservationTool(BaseTool):
             try:
                 await mem0.remember(
                     user_id,
-                    f"Booked {restaurant_name} ({cuisine}) for {party_size} on {date} at {time}",
+                    f"Wants to book {restaurant_name} ({cuisine}) for {party_size} on {date} at {time}",
                     category="restaurant_booking",
                     metadata={"restaurant": restaurant_name, "cuisine": cuisine},
                 )
@@ -491,17 +493,18 @@ class MakeReservationTool(BaseTool):
 
         return json.dumps({
             "success": True,
-            "booking": {
+            "booking_intent": {
                 "reference": booking_ref,
                 "restaurant": restaurant_name,
                 "date": date,
                 "time": time,
                 "party_size": party_size,
-                "status": "confirmed",
+                "status": "pending_call",
                 "booking_url": booking_url,
             },
             "message": (
-                f"Table for {party_size} booked at {restaurant_name} on {date} at {time}. Reference: {booking_ref}"
+                f"Recorded intent: {restaurant_name} for {party_size} on {date} at {time}. "
+                f"Ref: {booking_ref}. The Caller Agent will phone the venue to confirm."
                 + (f"\nVenue page: {booking_url}" if booking_url else "")
             ),
         }, indent=2)

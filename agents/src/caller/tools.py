@@ -57,11 +57,12 @@ class MakePhoneCallTool(BaseTool):
         phone_number: str,
         script: str,
         gather_input: bool = False,
-        record: bool = True
+        record: bool = True,
+        confirmation_script: str = "",
     ) -> str:
         """Make a phone call using Twilio"""
         from twilio.rest import Client
-        from twilio.twiml.voice_response import VoiceResponse, Gather
+        from twilio.twiml.voice_response import VoiceResponse, Gather, Pause
         
         account_sid = os.getenv("TWILIO_ACCOUNT_SID")
         auth_token = os.getenv("TWILIO_AUTH_TOKEN")
@@ -76,7 +77,6 @@ class MakePhoneCallTool(BaseTool):
         try:
             client = Client(account_sid, auth_token)
             
-            # Build TwiML
             response = VoiceResponse()
             
             if gather_input:
@@ -89,9 +89,22 @@ class MakePhoneCallTool(BaseTool):
                 response.append(gather)
                 response.say("We didn't receive any input. Goodbye!")
             else:
+                # Say the booking request
                 response.say(script, language="en-US")
+                # Wait for the venue to respond (keeps line open, recorded)
+                response.pause(length=20)
+                # Follow-up confirmation
+                if confirmation_script:
+                    response.say(confirmation_script, language="en-US")
+                else:
+                    response.say(
+                        "Thank you for the information. "
+                        "We appreciate your help. Goodbye!",
+                        language="en-US",
+                    )
+                # Final pause to capture any last words
+                response.pause(length=5)
             
-            # Make the call
             call = client.calls.create(
                 to=phone_number,
                 from_=from_number,

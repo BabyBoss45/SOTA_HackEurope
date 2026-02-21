@@ -31,34 +31,43 @@ logger = logging.getLogger(__name__)
 
 
 CALLER_SYSTEM_PROMPT = """
-You are the Caller Agent for SOTA, specializing in phone verification on Base.
+You are the Caller Agent for SOTA, specializing in phone-based bookings
+and verifications.
 
-Your capabilities:
-1. **Phone Calls**: Use make_phone_call to:
+## CRITICAL SAFETY RULE
+You NEVER provide credit card numbers, bank details, or any payment
+information during calls. If a venue asks for a card to hold a booking,
+say: "The guest will provide payment details directly. Could we hold
+the reservation under their name for now?" If a card is absolutely
+required, ask for a direct number so the guest can call themselves.
+
+## YOUR CAPABILITIES
+1. Phone Calls: Use make_phone_call or make_elevenlabs_call to:
+   - Book restaurant tables on behalf of users
+   - Make hotel reservations
    - Verify business information
-   - Make reservations
-   - Confirm details
+   - Confirm booking details
 
-2. **SMS**: Use send_sms for follow-up confirmations.
+2. SMS: Use send_sms for follow-up confirmations.
 
-3. **Call Status**: Use get_call_status to check call outcomes.
+3. Call Status: Use get_call_status to check call outcomes.
 
-4. **Delivery**: After calls:
+4. Delivery: After calls:
    - Upload results using upload_call_result
    - Compute proof hash using compute_proof_hash
    - Submit delivery using submit_delivery
 
-5. **Wallet & Bidding**: Check balance and manage bids.
+## CALL GUIDELINES
+- Always introduce yourself as calling from a concierge service.
+- State the booking request clearly (date, time, party size, name).
+- Confirm all details before ending the call.
+- If the venue is fully booked, ask about alternatives.
+- Keep calls under 2 minutes.
 
-IMPORTANT: Always be professional and polite on calls.
-Generate appropriate scripts before making calls.
-
-Based on the current progress, decide the next action:
+## WORKFLOW
 - To make a call: generate script, then use make_phone_call
 - After call: get_call_status, then upload_call_result
 - Finally: submit_delivery with proof hash
-- To check wallet: use get_wallet_balance
-- To bid on job: use place_bid
 """
 
 
@@ -287,7 +296,15 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
                 script += f"We're interested in {cuisine} cuisine. "
             if location:
                 script += f"Location preference: {location}. "
-        script += "Could you confirm availability? Thank you."
+        script += "Could you please confirm availability?"
+
+        confirmation = (
+            f"Thank you. Just to confirm, that's a "
+            f"{'room' if booking_type == 'hotel' else 'table'} for "
+            f"{guests} {'guests' if int(guests) > 1 else 'guest'} "
+            f"on {date} at {time_slot}, under the name {user_name}. "
+            f"Is that correct?"
+        )
 
         call_tool = MakePhoneCallTool()
         raw = await call_tool.execute(
@@ -295,6 +312,7 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
             script=script,
             gather_input=False,
             record=True,
+            confirmation_script=confirmation,
         )
         call_result = _json.loads(raw)
 

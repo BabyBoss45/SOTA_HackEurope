@@ -446,13 +446,13 @@ class SetPriceAlertTool(BaseTool):
 
 
 class ExecutePurchaseTool(BaseTool):
-    """Execute a product purchase (simulated, with real product URLs)."""
+    """Record a product recommendation and provide the purchase link to the user."""
 
     name: str = "execute_purchase"
     description: str = """
-    Execute a purchase from a specific retailer. In demo mode, this simulates
-    the purchase and returns a confirmation with the real product URL.
-    Records the purchase in history.
+    Record a product recommendation for the user. Does NOT make any real purchase.
+    Returns the product URL so the user can buy it themselves if they choose.
+    Records the recommendation in history for future reference.
     """
     parameters: dict = {
         "type": "object",
@@ -521,17 +521,17 @@ class ExecutePurchaseTool(BaseTool):
 
         return json.dumps({
             "success": True,
-            "order_id": order_id,
+            "recommendation_id": order_id,
             "product": product_name,
             "retailer": retailer,
             "price": price,
             "currency": currency,
             "url": url,
             "message": (
-                f"Purchase simulated: {product_name} from {retailer} "
-                f"for {price} {currency}. Order ID: {order_id}\n\n"
-                f"To complete the real purchase, visit: {url}" if url else
-                f"Purchase simulated: {product_name} from {retailer} for {price} {currency}. Order ID: {order_id}"
+                f"Best deal found: {product_name} from {retailer} "
+                f"for {price} {currency}.\n"
+                f"Buy it here: {url}" if url else
+                f"Best deal found: {product_name} from {retailer} for {price} {currency}."
             ),
         }, indent=2)
 

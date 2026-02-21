@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useAccount, useSendTransaction } from "wagmi";
+import { useAccount } from "wagmi";
 import { encodeFunctionData } from "viem";
 import { useConversation } from "@elevenlabs/react";
 import { motion, AnimatePresence } from "motion/react";
@@ -170,7 +170,6 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { address } = useAccount();
-  const { sendTransactionAsync } = useSendTransaction();
   const { showToast } = useToast();
   const [textInput, setTextInput] = useState("");
   const [stripePayment, setStripePayment] = useState<{
@@ -422,23 +421,6 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
                 return `Error fetching marketplace jobs: ${err}`;
               }
             },
-
-            /* ── Wallet tools ── */
-            transferFunds: async ({ amount, to }: { amount: string; to: string }) => {
-              try {
-                const { parseEther } = await import("viem");
-                const hash = await sendTransactionAsync({
-                  to: to as `0x${string}`,
-                  value: parseEther(amount),
-                });
-                showToast("Transaction sent!", "success");
-                return `Transaction sent: ${hash}`;
-              } catch (e: any) {
-                showToast("Transfer failed", "error");
-                return `Transfer failed: ${e.message}`;
-              }
-            },
-            getWalletAddress: async () => address ?? "No wallet connected",
           },
         });
       } catch {

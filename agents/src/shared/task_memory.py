@@ -419,12 +419,13 @@ class TaskPatternMemory:
                 must=[FieldCondition(key="agent_id", match=MatchValue(value=agent_id))]
             )
 
-            results = self.qdrant.search(
+            response = self.qdrant.query_points(
                 collection_name=QDRANT_COLLECTION,
-                query_vector=vector,
+                query=vector,
                 limit=5,
                 query_filter=query_filter,
             )
+            results = response.points
         except Exception as exc:
             logger.warning("Qdrant search failed: %s", exc)
             return _empty_pattern()

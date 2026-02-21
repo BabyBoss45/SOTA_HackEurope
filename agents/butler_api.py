@@ -211,7 +211,16 @@ async def startup_event():
     try:
         from agents.src.shared.task_memory import TaskPatternMemory
         task_memory = TaskPatternMemory(db=db, incident_io_client=_incident_io)
-        print(f"TaskPatternMemory initialized (qdrant={'yes' if task_memory.qdrant else 'no'}, incident_io={'yes' if _incident_io else 'no'})")
+        qdrant_ok = "yes" if task_memory.qdrant else "no"
+        print(f"TaskPatternMemory initialized (qdrant={qdrant_ok}, incident_io={'yes' if _incident_io else 'no'})")
+        if task_memory.qdrant:
+            try:
+                cols = task_memory.qdrant.get_collections().collections
+                for c in cols:
+                    info = task_memory.qdrant.get_collection(c.name)
+                    print(f"  Qdrant collection '{c.name}': {info.points_count} points")
+            except Exception:
+                pass
     except Exception as e:
         print(f"TaskPatternMemory init failed (non-critical): {e}")
 

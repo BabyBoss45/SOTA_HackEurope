@@ -200,12 +200,33 @@ class RAGSearchTool(BaseTool):
         if qdrant_url:
             try:
                 from qdrant_client import QdrantClient
+                from qdrant_client.models import Filter, FieldCondition, MatchValue
+                from ..shared.embedding import embed_text
+
                 qdrant = QdrantClient(
                     url=qdrant_url,
-                    api_key=os.getenv("QDRANT_API_KEY")
+                    api_key=os.getenv("QDRANT_API_KEY"),
                 )
-                # Placeholder search — would be real vector search in production
-                results["qdrant_results"] = []
+                collection = "butler_restaurant_kb"
+                if qdrant.collection_exists(collection):
+                    query_vector = await embed_text(query)
+                    q_filter = Filter(
+                        must=[FieldCondition(key="privacy", match=MatchValue(value="anonymized"))]
+                    )
+                    response = qdrant.query_points(
+                        collection_name=collection,
+                        query=query_vector,
+                        limit=limit,
+                        query_filter=q_filter,
+                    )
+                    for hit in response.points:
+                        payload = getattr(hit, "payload", {}) or {}
+                        results["qdrant_results"].append({
+                            "title": payload.get("title", ""),
+                            "content": payload.get("content", ""),
+                            "category": payload.get("category", ""),
+                            "score": round(getattr(hit, "score", 0.0), 4),
+                        })
             except Exception as e:
                 results["qdrant_error"] = str(e)
         else:
