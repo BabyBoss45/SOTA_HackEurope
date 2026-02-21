@@ -80,7 +80,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="SOTA Manager Agent",
-    description="Job orchestration agent for SOTA on Base",
+    description="Job orchestration agent for SOTA on Solana",
     version="0.1.0",
     lifespan=lifespan
 )

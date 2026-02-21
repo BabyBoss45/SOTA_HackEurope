@@ -28,7 +28,7 @@ from ..shared.wallet_tools import create_wallet_tools
 from ..shared.booking import analyze_slots
 from ..shared.bevec import BeVecClient, VectorRecord, create_bevec_client
 from ..shared.embedding import embed_text
-from ..shared.contracts import get_contracts, post_job
+from ..shared.contracts import get_program, post_job
 from .tools import get_manager_tools
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 
 ORCHESTRATION_SYSTEM_PROMPT = """
-You are the Manager Agent for SOTA, a decentralized multi-agent system on Base blockchain.
+You are the Manager Agent for SOTA, a decentralized multi-agent system on Solana.
 
 Your role is to ORCHESTRATE job execution - you create jobs and coordinate worker agents to complete them.
 
@@ -175,7 +175,7 @@ class ManagerAgent:
         # Initialize contracts for job posting
         if self.wallet:
             try:
-                self._contracts = get_contracts(self.wallet.private_key)
+                self._contracts = get_program(self.wallet.keypair)
                 logger.info("  Connected to blockchain contracts")
             except Exception as e:
                 logger.warning(f"  Could not connect to contracts: {e}")
@@ -200,7 +200,7 @@ class ManagerAgent:
 
         agent = AgentRunner(
             name=self.agent_name,
-            description="SOTA job orchestrator on Base",
+            description="SOTA job orchestrator on Solana",
             system_prompt=ORCHESTRATION_SYSTEM_PROMPT,
             max_steps=15,
             tools=ToolManager(tools),

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-SOTA Agents - Multi-Agent System on Base
+SOTA Agents - Multi-Agent System on Solana
 """
 
 from .hackathon.agent import HackathonAgent, create_hackathon_agent

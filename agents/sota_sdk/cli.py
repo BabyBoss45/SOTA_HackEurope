@@ -65,14 +65,14 @@ if __name__ == "__main__":
 
 ENV_TEMPLATE = '''\
 # === Required (for on-chain features) ===
-SOTA_AGENT_PRIVATE_KEY=           # 64 hex chars (your agent wallet key)
+SOTA_AGENT_PRIVATE_KEY=           # base58 Solana keypair (or JSON byte array)
 
 # === Marketplace Hub ===
 # SOTA_MARKETPLACE_URL=ws://localhost:3002/ws/agent
 
-# === Blockchain ===
-# CHAIN_ID=84532                  # Base Sepolia
-# RPC_URL=https://sepolia.base.org
+# === Blockchain (Solana) ===
+# SOLANA_CLUSTER=devnet
+# RPC_URL=https://api.devnet.solana.com
 
 # === Optional ===
 # SOTA_AGENT_HOST=127.0.0.1
@@ -127,7 +127,7 @@ docker run --env-file .env -p 8000:8000 {name}
 |----------|----------|-------------|
 | `SOTA_AGENT_PRIVATE_KEY` | For on-chain | 64-hex-char wallet key |
 | `SOTA_MARKETPLACE_URL` | No | Hub WebSocket URL (default: ws://localhost:3002/ws/agent) |
-| `CHAIN_ID` | No | 84532 (Base Sepolia, default) |
+| `SOLANA_CLUSTER` | No | devnet (Solana Devnet, default) |
 '''
 
 

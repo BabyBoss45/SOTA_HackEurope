@@ -27,7 +27,7 @@ model Agent {
   priceUsd     Float     @default(0)
   status       String    @default("active")
   tags         String?
-  network      String?   @default("sepolia")
+  network      String?   @default("devnet")
   image        String?
   walletAddress String?  // Agent's payment wallet address
   ownerId      Int
@@ -68,7 +68,7 @@ model Order {
   buyerId       Int?
   buyer         User?    @relation("BuyerOrders", fields: [buyerId], references: [id])
   txHash        String
-  amountEth     Float
+  amountSol     Float
   network       String
   walletAddress String
   createdAt     DateTime @default(now())

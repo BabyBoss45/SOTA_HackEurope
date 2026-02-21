@@ -2,17 +2,21 @@
 SOTA Agent SDK Configuration
 
 Loads settings from environment variables with sensible defaults.
-Chain config mirrors agents/src/shared/chain_config.py but is self-contained.
+Chain config mirrors agents/src/shared/chain_config.py but is self-contained
+for the Solana Devnet deployment.
 """
 
 import json
 import logging
 import os
+import base64
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from dotenv import find_dotenv, load_dotenv
+from solders.pubkey import Pubkey
+from solders.keypair import Keypair
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +39,142 @@ WS_RECONNECT_MIN: float = float(os.getenv("SOTA_WS_RECONNECT_MIN", "1"))
 WS_RECONNECT_MAX: float = float(os.getenv("SOTA_WS_RECONNECT_MAX", "60"))
 
 
-# -- Network -------------------------------------------------------------------
+# -- Cluster Configuration ----------------------------------------------------
 
 @dataclass
-class NetworkConfig:
+class ClusterConfig:
+    """Solana cluster configuration."""
     rpc_url: str
-    chain_id: int
+    ws_url: str
+    cluster_name: str  # "devnet", "mainnet-beta", "localnet"
     explorer_url: str
-    native_currency: str = "ETH"
+    native_currency: str = "SOL"
 
+
+# Backward-compatible alias
+NetworkConfig = ClusterConfig
+
+
+SOLANA_DEVNET = ClusterConfig(
+    rpc_url=os.getenv("RPC_URL", "https://api.devnet.solana.com"),
+    ws_url=os.getenv("WS_URL", "wss://api.devnet.solana.com"),
+    cluster_name="devnet",
+    explorer_url="https://explorer.solana.com/?cluster=devnet",
+)
+
+SOLANA_MAINNET = ClusterConfig(
+    rpc_url="https://api.mainnet-beta.solana.com",
+    ws_url="wss://api.mainnet-beta.solana.com",
+    cluster_name="mainnet-beta",
+    explorer_url="https://explorer.solana.com",
+)
+
+SOLANA_LOCALNET = ClusterConfig(
+    rpc_url="http://127.0.0.1:8899",
+    ws_url="ws://127.0.0.1:8900",
+    cluster_name="localnet",
+    explorer_url="",
+)
+
+# Backward-compatible aliases
+BASE_SEPOLIA = SOLANA_DEVNET
+BASE_MAINNET = SOLANA_MAINNET
+HARDHAT_LOCAL = SOLANA_LOCALNET
+
+
+def get_cluster() -> ClusterConfig:
+    """Get the current cluster configuration based on SOLANA_CLUSTER env."""
+    cluster = os.getenv("SOLANA_CLUSTER", "devnet").lower()
+    if cluster in ("mainnet-beta", "mainnet"):
+        return SOLANA_MAINNET
+    elif cluster in ("localnet", "localhost"):
+        return SOLANA_LOCALNET
+    return SOLANA_DEVNET
+
+
+# Backward-compatible alias
+get_network = get_cluster
+
+
+# -- Program / Token Constants ------------------------------------------------
+
+PROGRAM_ID = Pubkey.from_string(
+    os.getenv("PROGRAM_ID", "EuGy9m9G5H5QNm3YaHQ26Peo5ZTABqWHk83R3AT2nYSD")
+)
+
+USDC_MINT = Pubkey.from_string(
+    os.getenv("USDC_MINT", "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
+)
+
+TOKEN_PROGRAM_ID = Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+
+ASSOCIATED_TOKEN_PROGRAM_ID = Pubkey.from_string(
+    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+)
+
+SYSTEM_PROGRAM_ID = Pubkey.from_string("11111111111111111111111111111111")
+
+
+def get_program_id() -> Pubkey:
+    """Get the marketplace program ID."""
+    return PROGRAM_ID
+
+
+# -- Keypair Loading ----------------------------------------------------------
+
+def get_keypair(key_string: Optional[str] = None) -> Optional[Keypair]:
+    """
+    Parse a Solana Keypair from a string.
+
+    Supports:
+      - base58-encoded secret key
+      - JSON array of bytes (e.g. from solana-keygen)
+      - base64-encoded secret key
+
+    Args:
+        key_string: Raw key material. If None, reads SOTA_AGENT_PRIVATE_KEY.
+
+    Returns:
+        Keypair or None if no key provided.
+    """
+    raw = key_string or SOTA_AGENT_PRIVATE_KEY
+    if not raw:
+        return None
+
+    raw = raw.strip()
+
+    # Try JSON array first: [12, 34, 56, ...]
+    if raw.startswith("["):
+        try:
+            byte_list = json.loads(raw)
+            return Keypair.from_bytes(bytes(byte_list))
+        except (json.JSONDecodeError, ValueError, OverflowError):
+            pass
+
+    # Try base58
+    try:
+        return Keypair.from_base58_string(raw)
+    except Exception:
+        pass
+
+    # Try base64
+    try:
+        decoded = base64.b64decode(raw)
+        return Keypair.from_bytes(decoded)
+    except Exception:
+        pass
+
+    raise ValueError(
+        "Cannot parse keypair. "
+        "Provide a base58 string, base64 string, or JSON byte array."
+    )
+
+
+# -- Backward-compatible stubs ------------------------------------------------
 
 @dataclass
 class ContractAddresses:
+    """Backward-compatible stub. On Solana, addresses are PDAs."""
     order_book: str = ""
     escrow: str = ""
     agent_registry: str = ""
@@ -54,80 +182,12 @@ class ContractAddresses:
     reputation_token: str = ""
 
 
-BASE_SEPOLIA = NetworkConfig(
-    rpc_url=os.getenv("RPC_URL", "https://sepolia.base.org"),
-    chain_id=84532,
-    explorer_url="https://sepolia.basescan.org",
-)
-
-BASE_MAINNET = NetworkConfig(
-    rpc_url=os.getenv("RPC_URL_MAINNET", "https://mainnet.base.org"),
-    chain_id=8453,
-    explorer_url="https://basescan.org",
-)
-
-HARDHAT_LOCAL = NetworkConfig(
-    rpc_url=os.getenv("RPC_URL_LOCAL", "http://127.0.0.1:8545"),
-    chain_id=31337,
-    explorer_url="",
-)
-
-
-def get_network() -> NetworkConfig:
-    """Current network based on CHAIN_ID env."""
-    chain_id = int(os.getenv("CHAIN_ID", "84532"))
-    if chain_id == 8453:
-        return BASE_MAINNET
-    if chain_id == 31337:
-        return HARDHAT_LOCAL
-    return BASE_SEPOLIA
-
-
 def get_contract_addresses() -> ContractAddresses:
-    """Load contract addresses from env vars or deployment JSON."""
-    order_book = os.getenv("ORDERBOOK_ADDRESS")
-    if order_book:
-        return ContractAddresses(
-            order_book=order_book,
-            escrow=os.getenv("ESCROW_ADDRESS", ""),
-            agent_registry=os.getenv("AGENT_REGISTRY_ADDRESS", ""),
-            usdc=os.getenv("USDC_ADDRESS", ""),
-            reputation_token=os.getenv("REPUTATION_TOKEN_ADDRESS", ""),
-        )
-
-    # Allow explicit override of the contracts directory
-    contracts_dir = Path(
-        os.getenv(
-            "SOTA_CONTRACTS_DIR",
-            str(Path(__file__).resolve().parent.parent.parent / "contracts" / "deployments"),
-        )
+    """Return a namespace with Solana program/mint addresses for backward compat."""
+    return ContractAddresses(
+        order_book=str(PROGRAM_ID),
+        escrow=str(PROGRAM_ID),
+        agent_registry=str(PROGRAM_ID),
+        usdc=str(USDC_MINT),
+        reputation_token="",
     )
-
-    network = get_network()
-    for name in [
-        f"base-sepolia-{network.chain_id}.json",
-        f"hardhat-local-{network.chain_id}.json",
-        f"base-mainnet-{network.chain_id}.json",
-    ]:
-        path = contracts_dir / name
-        if path.exists():
-            try:
-                with open(path) as f:
-                    c = json.load(f).get("contracts", {})
-                    return ContractAddresses(
-                        order_book=c.get("OrderBook", ""),
-                        escrow=c.get("Escrow", ""),
-                        agent_registry=c.get("AgentRegistry", ""),
-                        usdc=c.get("USDC", ""),
-                        reputation_token=c.get("ReputationToken", ""),
-                    )
-            except (json.JSONDecodeError, KeyError) as e:
-                logger.warning("Failed to parse deployment file %s: %s", path, e)
-                continue
-
-    logger.debug(
-        "No contract addresses found. Searched env vars "
-        "(ORDERBOOK_ADDRESS, etc.) and deployment dir: %s",
-        contracts_dir,
-    )
-    return ContractAddresses()

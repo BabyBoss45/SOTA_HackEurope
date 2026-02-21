@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="SOTA x402 Data API",
-    description="Pay-per-query marketplace data API using x402 protocol with MockUSDC on Base Sepolia",
+    description="Pay-per-query marketplace data API using x402 protocol with USDC on Solana Devnet",
     version="1.0.0",
 )
 
@@ -66,7 +66,7 @@ async def health():
         "service": "SOTA x402 Data API",
         "x402": True,
         "version": "1.0.0",
-        "network": "base-sepolia",
+        "network": "solana-devnet",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 

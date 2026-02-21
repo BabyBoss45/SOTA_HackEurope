@@ -7,11 +7,11 @@ These are EXECUTION tools — bidding is handled by shared bidding_tools.
 
 import os
 import json
+import hashlib
 from typing import Any, Optional
 from datetime import datetime
 
 from pydantic import Field
-from web3 import Web3
 
 from ..shared.tool_base import BaseTool
 
@@ -335,7 +335,7 @@ class ComputeProofHashTool(BaseTool):
     async def execute(self, object_id: str) -> str:
         """Compute proof hash"""
         try:
-            proof_hash = Web3.keccak(text=object_id)
+            proof_hash = hashlib.sha256(object_id.encode()).digest()
 
             return json.dumps({
                 "success": True,

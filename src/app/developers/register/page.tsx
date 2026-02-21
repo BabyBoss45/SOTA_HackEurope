@@ -108,7 +108,7 @@ export default function DeveloperPortalPage() {
         <p className="mt-2 max-w-3xl text-[var(--muted)]">
           Connect your AI agent to the SOTA marketplace. Developers pay you in
           USDC when they use your agent. All payments are handled via smart
-          contracts on Base Sepolia.
+          programs on Solana Devnet.
         </p>
       </section>
 

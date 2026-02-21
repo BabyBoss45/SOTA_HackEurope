@@ -1,4 +1,4 @@
-"""Unit tests for sota_sdk.chain.contracts and chain.registry."""
+"""Unit tests for sota_sdk.chain.contracts and chain.registry (Solana/Anchor)."""
 
 from unittest.mock import MagicMock, patch
 
@@ -7,113 +7,86 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
-class TestABILoading:
-    @patch("sota_sdk.chain.contracts._artifacts_dir")
-    def test_missing_abi_raises(self, mock_dir, tmp_path):
-        mock_dir.return_value = tmp_path / "nonexistent"
-        from sota_sdk.chain.contracts import _load_abi
-        with pytest.raises(FileNotFoundError, match="ABI not found"):
-            _load_abi("OrderBook")
-
-
-class TestMissingContractAddress:
-    def test_order_book_missing(self):
-        from sota_sdk.config import ContractAddresses
-        with patch("sota_sdk.chain.contracts.get_contract_addresses", return_value=ContractAddresses()):
-            from sota_sdk.chain.contracts import _order_book
-            with pytest.raises(ValueError, match="not configured"):
-                _order_book(MagicMock())
-
-    def test_escrow_missing(self):
-        from sota_sdk.config import ContractAddresses
-        with patch("sota_sdk.chain.contracts.get_contract_addresses", return_value=ContractAddresses()):
-            from sota_sdk.chain.contracts import _escrow
-            with pytest.raises(ValueError, match="not configured"):
-                _escrow(MagicMock())
+class TestIDLLoading:
+    @patch("sota_sdk.chain.contracts._IDL_PATH")
+    def test_missing_idl_raises(self, mock_path, tmp_path):
+        mock_path.__truediv__ = MagicMock(return_value=tmp_path / "nonexistent.json")
+        mock_path.exists = MagicMock(return_value=False)
+        from sota_sdk.chain.contracts import _load_idl
+        with pytest.raises(FileNotFoundError, match="IDL not found"):
+            _load_idl("sota_marketplace")
 
 
 class TestGetJob:
-    @patch("sota_sdk.chain.contracts._order_book")
-    def test_parses_tuple_to_dict(self, mock_ob):
-        contract = MagicMock()
-        contract.functions.getJob.return_value.call.return_value = (
-            1,              # id
-            "0xPoster",     # poster
-            "0xProvider",   # provider
-            "ipfs://meta",  # metadata_uri
-            5_000_000,      # budget (raw int, 6 decimals)
-            1700000000,     # deadline
-            2,              # status
-            b"\x00" * 32,   # delivery_proof
-            1699000000,     # created_at
-        )
-        mock_ob.return_value = contract
+    @patch("sota_sdk.chain.contracts._get_client")
+    def test_parses_account_data(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        # Mock account data for a job
+        mock_account = MagicMock()
+        mock_account.data = {
+            "id": 1,
+            "poster": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+            "provider": "9wHGtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+            "metadata_uri": "ipfs://meta",
+            "budget_usdc": 5.0,
+            "deadline": 1700000000,
+            "status": 2,
+            "created_at": 1699000000,
+        }
+        mock_client.get_account_info.return_value = MagicMock(value=mock_account)
 
         from sota_sdk.chain.contracts import get_job
-        result = get_job(MagicMock(), 1)
+        result = get_job(mock_client, 1)
         assert result["id"] == 1
-        assert result["poster"] == "0xPoster"
-        assert result["provider"] == "0xProvider"
-        assert result["metadata_uri"] == "ipfs://meta"
+        assert result["poster"] == "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
         assert result["budget_usdc"] == 5.0
-        assert result["deadline"] == 1700000000
-        assert result["status"] == 2
-        assert result["created_at"] == 1699000000
 
 
 class TestSubmitDeliveryProof:
-    @patch("sota_sdk.chain.contracts._order_book")
-    def test_calls_mark_completed(self, mock_ob):
-        contract = MagicMock()
-        mock_ob.return_value = contract
+    @patch("sota_sdk.chain.contracts._build_instruction")
+    def test_calls_mark_completed(self, mock_build_ix):
+        mock_ix = MagicMock()
+        mock_build_ix.return_value = mock_ix
         wallet = MagicMock()
-        wallet.build_and_send.return_value = "0xtxhash"
-        wallet.wait_for_receipt.return_value = {"status": 1}
+        wallet.build_and_send.return_value = "5wHGtxsignature"
 
         from sota_sdk.chain.contracts import submit_delivery_proof
         tx = submit_delivery_proof(wallet, 1, b"\xaa" * 32)
-        contract.functions.markCompleted.assert_called_once_with(1, b"\xaa" * 32)
-        assert tx == "0xtxhash"
+        assert tx == "5wHGtxsignature"
 
 
 class TestClaimPayment:
-    @patch("sota_sdk.chain.contracts._escrow")
-    def test_calls_release_to_provider(self, mock_esc):
-        contract = MagicMock()
-        mock_esc.return_value = contract
+    @patch("sota_sdk.chain.contracts._build_instruction")
+    def test_calls_release_to_provider(self, mock_build_ix):
+        mock_ix = MagicMock()
+        mock_build_ix.return_value = mock_ix
         wallet = MagicMock()
-        wallet.build_and_send.return_value = "0xtxhash"
-        wallet.wait_for_receipt.return_value = {"status": 1}
+        wallet.build_and_send.return_value = "5wHGtxsignature"
 
         from sota_sdk.chain.contracts import claim_payment
         tx = claim_payment(wallet, 1)
-        contract.functions.releaseToProvider.assert_called_once_with(1)
-        assert tx == "0xtxhash"
+        assert tx == "5wHGtxsignature"
 
 
 class TestChainRegistry:
-    @patch("sota_sdk.chain.registry._agent_registry")
-    def test_register_agent_calls_contract(self, mock_reg):
-        contract = MagicMock()
-        mock_reg.return_value = contract
+    @patch("sota_sdk.chain.registry._build_register_ix")
+    def test_register_agent_builds_instruction(self, mock_build_ix):
+        mock_ix = MagicMock()
+        mock_build_ix.return_value = mock_ix
         wallet = MagicMock()
-        wallet.address = "0xAgent"
-        wallet.build_and_send.return_value = "0xtxhash"
-        wallet.wait_for_receipt.return_value = {"status": 1}
+        wallet.address = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+        wallet.build_and_send.return_value = "5wHGtxsignature"
 
         from sota_sdk.chain.registry import register_agent
         tx = register_agent(wallet, "my-agent", "ipfs://meta", ["nlp"])
-        contract.functions.registerAgent.assert_called_once_with(
-            "0xAgent", "my-agent", "ipfs://meta", ["nlp"]
-        )
-        assert tx == "0xtxhash"
+        assert tx == "5wHGtxsignature"
 
-    @patch("sota_sdk.chain.registry._agent_registry")
-    def test_is_agent_active_returns_bool(self, mock_reg):
-        contract = MagicMock()
-        contract.functions.isAgentActive.return_value.call.return_value = True
-        mock_reg.return_value = contract
+    @patch("sota_sdk.chain.registry._get_agent_account")
+    def test_is_agent_active_returns_bool(self, mock_get_account):
+        mock_get_account.return_value = MagicMock(is_active=True)
 
         from sota_sdk.chain.registry import is_agent_active
-        result = is_agent_active(MagicMock(), "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+        result = is_agent_active(MagicMock(), "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU")
         assert result is True

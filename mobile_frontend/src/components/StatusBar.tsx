@@ -1,24 +1,23 @@
 "use client";
 
-import { useAccount, useChainId } from "wagmi";
+import { useWallet } from "@solana/wallet-adapter-react";
 
 export default function StatusBar() {
-  const { address, isConnected } = useAccount();
-  const chainId = useChainId();
+  const { publicKey, connected } = useWallet();
 
-  const networkName = chainId === 84532 ? "Base Sepolia" : `Chain ${chainId}`;
+  const address = publicKey?.toBase58() ?? null;
   const shortAddr = address
-    ? `${address.slice(0, 6)}…${address.slice(-4)}`
+    ? `${address.slice(0, 4)}...${address.slice(-4)}`
     : null;
 
   return (
     <header className="status-bar">
       <div className="status-bar-left">
         <span className="status-logo">SOTA</span>
-        <span className="status-badge">{networkName}</span>
+        <span className="status-badge">Solana Devnet</span>
       </div>
       <div className="status-bar-right">
-        {isConnected && shortAddr ? (
+        {connected && shortAddr ? (
           <span className="status-wallet-chip">{shortAddr}</span>
         ) : (
           <span className="status-wallet-chip disconnected">No Wallet</span>

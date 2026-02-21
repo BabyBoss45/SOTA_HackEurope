@@ -113,24 +113,22 @@ if __name__ == "__main__":
 }
 
 export function generateEnv(c: AgentTemplateConfig): string {
-  const chainId = c.chain === 'base-mainnet' ? '8453' : '84532';
-  const rpc =
-    c.chain === 'base-mainnet'
-      ? 'https://mainnet.base.org'
-      : 'https://sepolia.base.org';
+  const cluster = c.chain === 'solana-mainnet' ? 'mainnet-beta' : 'devnet';
+  const rpc = c.chain === 'solana-mainnet' ? 'https://api.mainnet-beta.solana.com'
+    : 'https://api.devnet.solana.com';
 
   return `\
 # === Required (for on-chain features) ===
-SOTA_AGENT_PRIVATE_KEY=           # 64 hex chars (your agent wallet key)
+SOTA_AGENT_PRIVATE_KEY=           # base58-encoded keypair or JSON byte array
 
 # === Wallet ===
 WALLET_ADDRESS=${c.walletAddress || ''}
 
 # === Marketplace Hub ===
-SOTA_MARKETPLACE_URL=${c.hubUrl || 'ws://localhost:3002/ws/agent'}
+SOTA_MARKETPLACE_URL=${c.hubUrl || process.env.NEXT_PUBLIC_HUB_WS_URL || 'ws://localhost:3002/ws/agent'}
 
-# === Blockchain ===
-CHAIN_ID=${chainId}
+# === Blockchain (Solana) ===
+SOLANA_CLUSTER=${cluster}
 RPC_URL=${rpc}
 
 # === Optional ===
@@ -169,9 +167,8 @@ export function generateRequirements(): string {
 
 export function generateReadme(c: AgentTemplateConfig): string {
   const safeName = sanitiseName(c.name || 'my-agent');
-  const chainLabel =
-    c.chain === 'base-mainnet' ? 'Base Mainnet' : 'Base Sepolia';
-  const chainId = c.chain === 'base-mainnet' ? '8453' : '84532';
+  const chainLabel = c.chain === 'solana-mainnet' ? 'Solana Mainnet' : 'Solana Devnet';
+  const cluster = c.chain === 'solana-mainnet' ? 'mainnet-beta' : 'devnet';
 
   return `\
 # ${safeName}
@@ -197,8 +194,8 @@ docker run --env-file .env -p 8000:8000 ${safeName}
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| \`SOTA_AGENT_PRIVATE_KEY\` | For on-chain | 64-hex-char wallet key |
-| \`SOTA_MARKETPLACE_URL\` | No | Hub WebSocket URL (default: ws://localhost:3002/ws/agent) |
-| \`CHAIN_ID\` | No | ${chainId} (${chainLabel}, default) |
+| \`SOTA_AGENT_PRIVATE_KEY\` | For on-chain | base58-encoded keypair or JSON byte array |
+| \`SOTA_MARKETPLACE_URL\` | No | Hub WebSocket URL (default: ${process.env.NEXT_PUBLIC_HUB_WS_URL || 'ws://localhost:3002/ws/agent'}) |
+| \`SOLANA_CLUSTER\` | No | ${cluster} (${chainLabel}, default) |
 `;
 }

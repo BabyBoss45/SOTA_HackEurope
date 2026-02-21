@@ -22,7 +22,17 @@ except ImportError:
     cost = None  # type: ignore[assignment]
 
 from .agent import SOTAAgent
-from .config import get_network, get_contract_addresses, NetworkConfig, ContractAddresses
+from .config import (
+    get_network,
+    get_cluster,
+    get_contract_addresses,
+    get_keypair,
+    NetworkConfig,
+    ClusterConfig,
+    ContractAddresses,
+    PROGRAM_ID,
+    USDC_MINT,
+)
 from .models import Job, Bid, BidResult, JobResult
 from .tools import BaseTool, ToolManager
 from .marketplace.bidding import BidStrategy, DefaultBidStrategy, CostAwareBidStrategy
@@ -45,9 +55,14 @@ __all__ = [
     "CostAwareBidStrategy",
     # Config
     "get_network",
+    "get_cluster",
     "get_contract_addresses",
+    "get_keypair",
     "NetworkConfig",
+    "ClusterConfig",
     "ContractAddresses",
+    "PROGRAM_ID",
+    "USDC_MINT",
     # Preflight validation
     "run_preflight",
     "PreflightResult",

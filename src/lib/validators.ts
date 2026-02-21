@@ -24,7 +24,7 @@ export const agentSchema = z.object({
 export const profileSchema = z.object({
   walletAddress: z
     .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/, "Must be a valid EVM address")
+    .regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, "Must be a valid Solana address")
     .optional(),
   name: z.string().min(2).optional(),
 });

@@ -2,8 +2,8 @@
 SOTA Agents — Shared Utilities
 
 Provides common functionality used across all agents:
-- chain_config: Network settings (Base Sepolia, Base Mainnet)
-- chain_contracts: Smart contract interaction (OrderBook, Escrow, etc.)
+- chain_config: Network settings (Solana Devnet, Solana Mainnet)
+- chain_contracts: Solana program interaction (Anchor)
 - a2a: Agent-to-Agent communication protocol
 - config: Re-exports from chain_config (backward compat)
 - contracts: Re-exports from chain_contracts (backward compat)

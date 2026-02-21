@@ -415,7 +415,7 @@ class PostJobTool(BaseTool):
         try:
             await db.create_job(job_id, description, tags, budget_usd, poster, metadata)
         except Exception as e:
-            print(f"⚠️ DB create_job failed: {e}")
+            print(f"DB create_job failed: {e}")
 
     async def _persist_bid_selection(self, db, job_id, result):
         """Fire-and-forget: persist bid selection to Firestore."""
@@ -440,14 +440,14 @@ class PostJobTool(BaseTool):
                     },
                 )
         except Exception as e:
-            print(f"⚠️ DB persist_bid_selection failed: {e}")
+            print(f"DB persist_bid_selection failed: {e}")
 
     async def _persist_no_bids(self, db, job_id):
         """Fire-and-forget: mark job expired when no bids received."""
         try:
             await db.update_job_status(job_id, "expired")
         except Exception as e:
-            print(f"⚠️ DB persist_no_bids failed: {e}")
+            print(f"DB persist_no_bids failed: {e}")
 
     async def execute(
         self,
@@ -467,17 +467,18 @@ class PostJobTool(BaseTool):
 
         try:
             pk = os.getenv("PRIVATE_KEY")
-            poster = "0x0"
+            # Solana system program as default empty address
+            poster = "11111111111111111111111111111111"
             on_chain_job_id = None
-            escrow_address = None
+            program_id_str = None
             usdc_required = budget_usd  # USDC-only payments
 
-            # ── 1. Create job on-chain via OrderBook ────────
+            # ── 1. Create job on-chain via Solana program ────────
             if pk and create_job is not None:
                 try:
                     c = get_contracts(pk)
-                    poster = c.account.address
-                    escrow_address = c.addresses.escrow
+                    poster = str(c.keypair.pubkey()) if c.keypair else poster
+                    program_id_str = str(c.program_id)
                     metadata_uri = f"ipfs://sota-{tool}-{int(time.time())}"
                     on_chain_job_id = create_job(
                         c,
@@ -485,7 +486,7 @@ class PostJobTool(BaseTool):
                         budget_usdc=budget_usd,
                         deadline_seconds=deadline_hours * 3600,
                     )
-                    print(f"✅ On-chain job created: #{on_chain_job_id}")
+                    print(f"On-chain job created: #{on_chain_job_id}")
 
                     # USDC-only: budget is directly in USDC
                     usdc_required = budget_usd  # 1:1 USD to USDC
@@ -495,7 +496,7 @@ class PostJobTool(BaseTool):
                     # via the frontend after bid acceptance.
 
                 except Exception as chain_err:
-                    print(f"⚠️ On-chain creation failed (continuing off-chain): {chain_err}")
+                    print(f"On-chain creation failed (continuing off-chain): {chain_err}")
 
             # ── 2. Broadcast to in-memory JobBoard for worker matching ──
             job_id_str = str(on_chain_job_id) if on_chain_job_id else str(uuid.uuid4())[:8]
@@ -517,7 +518,7 @@ class PostJobTool(BaseTool):
                 bid_window_seconds=15,  # 15s for in-process workers
             )
 
-            print(f"📢 Job {job_id_str} posted — collecting bids for {listing.bid_window_seconds}s…")
+            print(f"Job {job_id_str} posted -- collecting bids for {listing.bid_window_seconds}s...")
 
             # ── Persist job to Firestore (fire-and-forget) ────────
             db = await self._get_db()
@@ -532,11 +533,13 @@ class PostJobTool(BaseTool):
                     try:
                         c = get_contracts(pk)
                         addr = winning_bid.bidder_address
-                        if addr and addr != "0x0":
-                            assign_provider(c, on_chain_job_id, addr)
-                            print(f"✅ On-chain provider assigned: {addr[:10]}…")
+                        # base58 system program address = empty/unset
+                        if addr and addr != "11111111111111111111111111111111":
+                            from solders.pubkey import Pubkey as _Pubkey
+                            assign_provider(c, on_chain_job_id, _Pubkey.from_string(addr))
+                            print(f"On-chain provider assigned: {addr[:12]}...")
                     except Exception as exc:
-                        print(f"⚠️ On-chain assign skipped: {exc}")
+                        print(f"On-chain assign skipped: {exc}")
 
             board = JobBoard.instance()
             result: BidResult = await board.post_and_select(
@@ -572,7 +575,7 @@ class PostJobTool(BaseTool):
                     "total_bids": len(result.all_bids),
                     "reason": result.reason,
                     "escrow": {
-                        "address": escrow_address,
+                        "program_id": program_id_str,
                         "usdc_required": usdc_required,
                         "budget_usdc": budget_usd,
                         "budget_usd": budget_usd,
@@ -645,7 +648,7 @@ class PostJobTool(BaseTool):
                         if confirm_delivery is not None:
                             try:
                                 confirm_delivery(c, on_chain_job_id)
-                                print(f"✅ Delivery confirmed for job #{on_chain_job_id}")
+                                print(f"Delivery confirmed for job #{on_chain_job_id}")
                             except Exception:
                                 pass  # Already confirmed or not owner
 
@@ -654,9 +657,9 @@ class PostJobTool(BaseTool):
                             try:
                                 if is_delivery_confirmed(c, on_chain_job_id):
                                     release_payment(c, on_chain_job_id)
-                                    print(f"💰 Payment released for job #{on_chain_job_id}")
+                                    print(f"Payment released for job #{on_chain_job_id}")
                             except Exception as rel_err:
-                                print(f"⚠️ Release skipped: {rel_err}")
+                                print(f"Release skipped: {rel_err}")
                         return
 
                     # Status 3+ = RELEASED/CANCELLED — done
@@ -667,7 +670,7 @@ class PostJobTool(BaseTool):
                     pass  # Network error, retry
 
         except Exception as e:
-            print(f"⚠️ Monitor task error: {e}")
+            print(f"Monitor task error: {e}")
 
 
 class GetBidsTool(BaseTool):
@@ -705,12 +708,12 @@ class GetBidsTool(BaseTool):
                     formatted_bids = []
                     for bid in bids:
                         formatted_bids.append({
-                            "bid_id": bid[0],
-                            "bidder": bid[2],
-                            "price_usdc": bid[3] / 1e6,
-                            "delivery_time_hours": bid[4] / 3600,
-                            "reputation": bid[5],
-                            "accepted": bid[8]
+                            "bid_id": bid["id"],
+                            "bidder": bid["agent"],
+                            "price_usdc": bid["price_usdc"],
+                            "delivery_time_hours": bid["estimated_time"] / 3600,
+                            "proposal": bid.get("proposal", ""),
+                            "accepted": bid["accepted"],
                         })
                     formatted_bids.sort(key=lambda x: x["price_usdc"])
 
@@ -788,25 +791,26 @@ class AcceptBidTool(BaseTool):
                 contracts,
                 job_id=job_id,
                 bid_id=bid_id,
-                response_uri=""
             )
 
             # Also fund escrow if not already funded
             if fund_job is not None:
                 try:
+                    from solders.pubkey import Pubkey as _Pubkey
                     job_data = get_job(contracts, job_id) if get_job else {}
                     budget_usd = job_data.get("budget_usdc", 10.0)
                     bid_data = get_bids_for_job(contracts, job_id) if get_bids_for_job else []
-                    provider = "0x0"
+                    # Solana system program as default empty address
+                    provider = "11111111111111111111111111111111"
                     for b in bid_data:
-                        if b[0] == bid_id:
-                            provider = b[2]
+                        if b["id"] == bid_id:
+                            provider = b["agent"]
                             break
-                    if provider != "0x0":
-                        fund_job(contracts, job_id, provider, budget_usd)
-                        print(f"✅ Escrow funded for job #{job_id}")
+                    if provider != "11111111111111111111111111111111":
+                        fund_job(contracts, job_id, _Pubkey.from_string(provider), budget_usd)
+                        print(f"Escrow funded for job #{job_id}")
                 except Exception as fund_err:
-                    print(f"⚠️ Escrow funding after accept: {fund_err}")
+                    print(f"Escrow funding after accept: {fund_err}")
 
             return json.dumps({
                 "success": True,

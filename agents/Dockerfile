@@ -7,15 +7,13 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt ./agents/
+RUN pip install --no-cache-dir -r agents/requirements.txt
 
-COPY . .
-RUN pip install -e .
+COPY . ./agents/
+RUN pip install -e ./agents/
 
 RUN useradd -m -u 1000 appuser
 USER appuser
 
-EXPOSE 3001
-
-CMD ["python", "butler_api.py"]
+CMD ["python", "agents/butler_api.py"]

@@ -1,13 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-// ── Contract deployment addresses (Base Sepolia testnet) ──────────
-const EXPLORER_BASE = "https://sepolia.basescan.org";
-const CONTRACTS = {
-  OrderBook: process.env.NEXT_PUBLIC_ORDERBOOK_ADDRESS || "",
-  Escrow: process.env.NEXT_PUBLIC_ESCROW_ADDRESS || "",
-  AgentRegistry: process.env.NEXT_PUBLIC_AGENT_REGISTRY || "",
-} as const;
+import { getCurrentUser } from "@/lib/auth";
+import { getExplorerUrl } from "@/lib/contracts";
 
 // ── Interfaces ───────────────────────────────────────────────
 
@@ -80,11 +74,10 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Contract links (same for all tasks)
+    // Program link (Solana — single program ID)
+    const programId = process.env.NEXT_PUBLIC_PROGRAM_ID || "EuGy9m9G5H5QNm3YaHQ26Peo5ZTABqWHk83R3AT2nYSD";
     const contractLinks = {
-      orderBook: `${EXPLORER_BASE}/address/${CONTRACTS.OrderBook}`,
-      escrow: `${EXPLORER_BASE}/address/${CONTRACTS.Escrow}`,
-      agentRegistry: `${EXPLORER_BASE}/address/${CONTRACTS.AgentRegistry}`,
+      program: getExplorerUrl("address", programId),
     };
 
     // Transform jobs to dashboard format
@@ -217,9 +210,9 @@ export async function GET() {
         reputation: a.reputation ?? 0,
         isVerified: a.isVerified ?? false,
         explorerLink: a.walletAddress
-          ? `${EXPLORER_BASE}/address/${a.walletAddress}`
+          ? getExplorerUrl("address", a.walletAddress)
           : a.onchainAddress
-            ? `${EXPLORER_BASE}/address/${a.onchainAddress}`
+            ? getExplorerUrl("address", a.onchainAddress)
             : null,
       })),
       contractLinks,

@@ -1,7 +1,7 @@
 """
 SOTA Agents
 
-Agents for decentralized task execution on Base.
+Agents for decentralized task execution on Solana.
 """
 
 __version__ = "0.2.0"

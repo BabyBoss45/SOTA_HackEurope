@@ -1,10 +1,10 @@
 """
-Base Archive Agent
+Base Archive Agent -- Solana Edition
 
 Abstract base class for all Archive Protocol agents.
 Provides:
-- Wallet management
-- Event subscription
+- Wallet management (Solana keypair)
+- Event subscription (Anchor program log polling)
 - Bidding workflow
 - Job execution framework
 """
@@ -24,7 +24,8 @@ from pydantic import Field
 from .tool_base import BaseTool, ToolManager
 from .agent_runner import AgentRunner, LLMClient
 
-from .config import JobType, JOB_TYPE_LABELS, get_contract_addresses
+from .config import JobType, JOB_TYPE_LABELS
+from .chain_config import get_keypair
 from .wallet import AgentWallet, create_wallet_from_env
 from .events import EventListener, JobPostedEvent, BidAcceptedEvent
 from .contracts import get_contracts, place_bid, get_job
@@ -69,25 +70,25 @@ class ActiveJob:
 class BaseArchiveAgent(ABC):
     """
     Base class for Archive Protocol agents.
-    
+
     Each agent:
-    - Has its own wallet
-    - Listens for relevant events
+    - Has its own Solana wallet (keypair)
+    - Listens for relevant Anchor program events
     - Evaluates jobs and decides whether to bid
     - Executes accepted jobs
     """
-    
+
     # Agent configuration (override in subclass)
     agent_type: str = "base"
     agent_name: str = "Archive Agent"
     capabilities: list[AgentCapability] = []
     supported_job_types: list[JobType] = []
-    
+
     # Bidding configuration
     min_profit_margin: float = 0.1  # 10%
     max_concurrent_jobs: int = 5
     auto_bid_enabled: bool = True
-    
+
     def __init__(self):
         """Initialize the base agent"""
         self.wallet: Optional[AgentWallet] = None
@@ -95,102 +96,106 @@ class BaseArchiveAgent(ABC):
         self.active_jobs: dict[int, ActiveJob] = {}
         self.llm_agent: Optional[AgentRunner] = None
         self.task_memory: Optional[Any] = None
-        
+
         self._running = False
         self._contracts = None
         self._initialized = False
-    
+
     async def initialize(self):
         """Initialize agent components"""
         if self._initialized:
             return
         logger.info(f"Initializing {self.agent_name}...")
-        
-        # Initialize wallet
+
+        # Initialize wallet (Solana keypair)
         self.wallet = create_wallet_from_env(self.agent_type)
         if self.wallet:
             balance = self.wallet.get_balance()
             logger.info(f"  Wallet: {self.wallet.address}")
-            logger.info(f"  Balance: {balance.native} GAS, {balance.usdc} USDC")
+            logger.info(f"  Balance: {balance.native} SOL, {balance.usdc} USDC")
         else:
             logger.warning(f"  No wallet configured for {self.agent_type}")
-        
-        # Initialize contracts
-        private_key = os.getenv(f"{self.agent_type.upper()}_PRIVATE_KEY")
-        if private_key:
+
+        # Initialize contracts (Solana program connection)
+        raw_key = os.getenv(f"{self.agent_type.upper()}_PRIVATE_KEY")
+        if not raw_key:
+            raw_key = os.getenv("PRIVATE_KEY")
+        if raw_key:
             try:
-                self._contracts = get_contracts(private_key)
-                logger.info("  Connected to blockchain contracts")
+                self._contracts = get_contracts(raw_key)
+                logger.info("  Connected to Solana program")
             except Exception as e:
-                logger.warning(f"  Could not connect to contracts: {e}")
-        
-        # Initialize event listener
+                logger.warning(f"  Could not connect to program: {e}")
+
+        # Initialize event listener (Solana log polling)
         self.event_listener = EventListener()
         self.event_listener.on_job_posted(self._on_job_posted)
         self.event_listener.on_bid_accepted(self._on_bid_accepted)
         logger.info("  Event listener configured")
-        
+
         # Initialize LLM agent with tools
         self.llm_agent = await self._create_llm_agent()
         logger.info("  LLM agent initialized")
-        
-        logger.info(f"✅ {self.agent_name} ready")
+
+        logger.info(f"{self.agent_name} ready")
         self._initialized = True
-    
+
     @abstractmethod
     async def _create_llm_agent(self) -> AgentRunner:
         """Create the agent runner with appropriate tools"""
         pass
-    
+
     @abstractmethod
     def get_bidding_prompt(self, job: JobPostedEvent) -> str:
         """
         Generate prompt for LLM to evaluate whether to bid on a job.
-        
+
         Should return a prompt that asks the LLM to analyze the job
         and return a structured decision.
         """
         pass
-    
+
     @abstractmethod
     async def execute_job(self, job: ActiveJob) -> dict:
         """
         Execute an accepted job.
-        
+
         Returns:
             Result dict with at least 'success' and 'result' keys
         """
         pass
-    
+
     def can_handle_job_type(self, job_type: int) -> bool:
         """Check if this agent can handle a job type"""
         return JobType(job_type) in self.supported_job_types
-    
+
     async def _on_job_posted(self, event: JobPostedEvent):
         """Handle JobPosted event"""
-        logger.info(f"📋 New job posted: #{event.job_id} - {JOB_TYPE_LABELS.get(JobType(event.job_type), 'Unknown')}")
-        
-        # Check if we can handle this job type
-        if not self.can_handle_job_type(event.job_type):
-            logger.debug(f"  Skipping job #{event.job_id} - not our job type")
-            return
-        
+        logger.info(f"New job posted: #{event.job_id} - {JOB_TYPE_LABELS.get(JobType(event.job_type), 'Unknown')}")
+
+        # NOTE: job_type filter removed -- event.job_type is always 0 on-chain,
+        # so non-hotel agents would incorrectly reject every event.
+        # Let the evaluator/bidder decide whether to handle the job.
+        # if not self.can_handle_job_type(event.job_type):
+        #     logger.debug(f"  Skipping job #{event.job_id} - not our job type")
+        #     return
+
         # Check concurrent job limit
         if len(self.active_jobs) >= self.max_concurrent_jobs:
             logger.warning(f"  Skipping job #{event.job_id} - at capacity")
             return
-        
+
         # Evaluate and potentially bid
         if self.auto_bid_enabled:
             await self._evaluate_and_bid(event)
-    
+
     async def _evaluate_and_bid(self, job: JobPostedEvent):
         """Evaluate a job and decide whether to bid"""
-        logger.info(f"🤔 Evaluating job #{job.job_id}...")
-        
+        logger.info(f"Evaluating job #{job.job_id}...")
+
         # Generate bidding prompt
         prompt = self.get_bidding_prompt(job)
-        
+
         # Ask LLM to evaluate
         try:
             if self.llm_agent:
@@ -202,32 +207,32 @@ class BaseArchiveAgent(ABC):
         except Exception as e:
             logger.error(f"Error evaluating job #{job.job_id}: {e}")
             return
-        
+
         logger.info(f"  Decision: {'BID' if decision.should_bid else 'SKIP'}")
         logger.info(f"  Reasoning: {decision.reasoning}")
-        
+
         if decision.should_bid and self._contracts:
             await self._place_bid(job, decision)
-    
+
     def _parse_bid_decision(self, llm_response: str, job: JobPostedEvent) -> BidDecision:
         """Parse LLM response into a bid decision"""
         # Try to extract structured data from response
         response_lower = llm_response.lower()
-        
+
         should_bid = any(phrase in response_lower for phrase in [
             "should bid", "recommend bidding", "will bid", "place a bid",
             "yes, bid", "accept this job", "take this job"
         ])
-        
+
         # Extract amount if mentioned (look for numbers near 'usdc' or '$')
         import re
         amount_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:usdc|\$|dollars?)', response_lower)
         proposed_amount = int(float(amount_match.group(1)) * 1_000_000) if amount_match else job.budget
-        
+
         # Extract time estimate
         time_match = re.search(r'(\d+)\s*(?:hour|hr)', response_lower)
         estimated_time = int(time_match.group(1)) * 3600 if time_match else 3600  # default 1 hour
-        
+
         return BidDecision(
             should_bid=should_bid,
             proposed_amount=proposed_amount,
@@ -235,21 +240,21 @@ class BaseArchiveAgent(ABC):
             reasoning=llm_response[:200],
             confidence=0.7 if should_bid else 0.3
         )
-    
+
     def _heuristic_bid_decision(self, job: JobPostedEvent) -> BidDecision:
         """Simple heuristic bid decision when LLM is unavailable"""
         # Check if budget is reasonable
         min_acceptable = 1_000_000  # 1 USDC minimum
-        
+
         if job.budget < min_acceptable:
             return BidDecision(
                 should_bid=False,
                 reasoning=f"Budget too low: {job.budget / 1_000_000} USDC"
             )
-        
+
         # Calculate our bid (take 80% of budget to be competitive)
         proposed_amount = int(job.budget * 0.8)
-        
+
         return BidDecision(
             should_bid=True,
             proposed_amount=proposed_amount,
@@ -257,17 +262,17 @@ class BaseArchiveAgent(ABC):
             reasoning="Heuristic bid: job type matches capabilities",
             confidence=0.5
         )
-    
+
     async def _place_bid(self, job: JobPostedEvent, decision: BidDecision):
-        """Place a bid on the blockchain"""
+        """Place a bid on-chain (Solana)"""
         if not self._contracts or not self.wallet:
             logger.error("Cannot place bid: contracts or wallet not initialized")
             return
-        
-        logger.info(f"💰 Placing bid on job #{job.job_id}")
+
+        logger.info(f"Placing bid on job #{job.job_id}")
         logger.info(f"   Amount: {decision.proposed_amount / 1_000_000} USDC")
         logger.info(f"   Est. Time: {decision.estimated_time / 3600:.1f} hours")
-        
+
         metadata_uri = f"ipfs://{self.agent_type}-bid-{job.job_id}"
         try:
             bid_id = place_bid(
@@ -278,7 +283,7 @@ class BaseArchiveAgent(ABC):
                 metadata_uri
             )
             logger.info(
-                "📨 Bid created | job_id=%s bid_id=%s amount=%.2f USDC eta=%.1f h metadata=%s",
+                "Bid created | job_id=%s bid_id=%s amount=%.2f USDC eta=%.1f h metadata=%s",
                 job.job_id,
                 bid_id,
                 decision.proposed_amount / 1_000_000,
@@ -286,16 +291,16 @@ class BaseArchiveAgent(ABC):
                 metadata_uri,
             )
         except Exception as e:
-            logger.error(f"❌ Failed to place bid: {e}")
-    
+            logger.error(f"Failed to place bid: {e}")
+
     async def _on_bid_accepted(self, event: BidAcceptedEvent):
         """Handle BidAccepted event"""
-        # Check if this is our bid (by comparing worker address)
-        if not self.wallet or event.worker.lower() != self.wallet.address.lower():
+        # Check if this is our bid (by comparing worker address -- base58 comparison)
+        if not self.wallet or event.worker != self.wallet.address:
             return
-        
-        logger.info(f"🎉 Our bid was accepted! Job #{event.job_id}")
-        
+
+        logger.info(f"Our bid was accepted! Job #{event.job_id}")
+
         # Get full job details
         job_details = None
         if self._contracts:
@@ -303,17 +308,14 @@ class BaseArchiveAgent(ABC):
                 job_details = get_job(self._contracts, event.job_id)
             except Exception as e:
                 logger.error(f"Could not fetch job details: {e}")
-        
-        # Safely unpack job state
-        job_state = job_details[0] if job_details and len(job_details) > 0 else None
-        bids = job_details[1] if job_details and len(job_details) > 1 else []
 
-        job_type_val = job_state[2] if job_state and len(job_state) > 2 else 0
-        job_description = job_state[1] if job_state and len(job_state) > 1 else ""
-        job_deadline = job_state[4] if job_state and len(job_state) > 4 else 0
+        # Safely unpack job details (get_job returns a dict)
+        job_type_val = 0
+        job_description = job_details.get("metadata_uri", "") if job_details else ""
+        job_deadline = job_details.get("deadline", 0) if job_details else 0
 
-        # Resolve job metadata URI with fallback to JobRegistry when OrderBook value is missing
-        job_metadata_uri = self._resolve_job_metadata_uri(job_state, event.job_id)
+        # Resolve job metadata URI with fallback
+        job_metadata_uri = self._resolve_job_metadata_uri(job_details, event.job_id)
 
         # Track the active job
         active_job = ActiveJob(
@@ -327,16 +329,16 @@ class BaseArchiveAgent(ABC):
             metadata_uri=job_metadata_uri,
         )
         self.active_jobs[event.job_id] = active_job
-        
+
         # Fire-and-forget: send metadata to ElevenLabs
         asyncio.create_task(self._send_to_elevenlabs(event, job_details, job_metadata_uri))
 
         # Start executing the job
         asyncio.create_task(self._execute_job_task(active_job))
-    
+
     async def _execute_job_task(self, job: ActiveJob):
         """Execute job in background task with outcome persistence."""
-        logger.info(f"🔄 Starting execution of job #{job.job_id}")
+        logger.info(f"Starting execution of job #{job.job_id}")
         job.status = "in_progress"
 
         # Pre-execution: analyze similar past tasks
@@ -349,7 +351,7 @@ class BaseArchiveAgent(ABC):
                 )
                 if pattern.similar_outcomes:
                     logger.info(
-                        "🧠 Pattern detected for job #%s: confidence=%.2f strategy=%s",
+                        "Pattern detected for job #%s: confidence=%.2f strategy=%s",
                         job.job_id, pattern.confidence, pattern.recommended_strategy,
                     )
                 job.params["_pattern_analysis"] = pattern
@@ -362,14 +364,14 @@ class BaseArchiveAgent(ABC):
             result = await self.execute_job(job)
             if result.get('success'):
                 job.status = "completed"
-                logger.info(f"✅ Job #{job.job_id} completed successfully")
+                logger.info(f"Job #{job.job_id} completed successfully")
             else:
                 job.status = "failed"
-                logger.error(f"❌ Job #{job.job_id} failed: {result.get('error')}")
+                logger.error(f"Job #{job.job_id} failed: {result.get('error')}")
         except Exception as e:
             job.status = "failed"
             result = {"success": False, "error": str(e)}
-            logger.error(f"❌ Job #{job.job_id} exception: {e}")
+            logger.error(f"Job #{job.job_id} exception: {e}")
         finally:
             elapsed_ms = int(_time.time() * 1000 - start_ms)
             strategy = "standard"
@@ -390,7 +392,7 @@ class BaseArchiveAgent(ABC):
 
             await asyncio.sleep(60)
             self.active_jobs.pop(job.job_id, None)
-    
+
     async def start(self):
         """Start the agent"""
         if not self._initialized:
@@ -399,19 +401,19 @@ class BaseArchiveAgent(ABC):
 
         if self.event_listener:
             await self.event_listener.catch_up()
-        
+
         # Start event listener in background
         asyncio.create_task(self.event_listener.start())
-        
-        logger.info(f"🚀 {self.agent_name} is running")
-    
+
+        logger.info(f"{self.agent_name} is running")
+
     def stop(self):
         """Stop the agent"""
         self._running = False
         if self.event_listener:
             self.event_listener.stop()
-        logger.info(f"👋 {self.agent_name} stopped")
-    
+        logger.info(f"{self.agent_name} stopped")
+
     def get_status(self) -> dict:
         """Get agent status"""
         return {
@@ -446,31 +448,16 @@ class BaseArchiveAgent(ABC):
     def _resolve_job_metadata_uri(self, job_state: Any, job_id: int) -> str:
         """
         Resolve job metadata URI.
-        Priority:
-          1) JobRegistry.getJob(job_id) -> metadata.metadataURI
-          2) Fallback to locally tracked metadata if available
-        Note: OrderBook.JobState does NOT contain metadataURI; avoid using it.
-        """
-        def _decode_uri(val: Any) -> str:
-            if isinstance(val, bytes):
-                try:
-                    return val.decode("utf-8").strip("\x00")
-                except Exception:
-                    return ""
-            return str(val) if val else ""
 
-        # Primary: JobRegistry.getJob(job_id)
-        if self._contracts and getattr(self._contracts, "job_registry", None):
-            try:
-                jr_job = self._contracts.job_registry.functions.getJob(job_id).call()
-                stored_job = jr_job[0] if jr_job else None  # (StoredJob)
-                metadata = stored_job[0] if stored_job and len(stored_job) > 0 else None  # (JobMetadata)
-                uri_from_registry = _decode_uri(metadata[3] if metadata and len(metadata) > 3 else "")
-                if uri_from_registry:
-                    logger.info("Resolved job metadata URI from JobRegistry.getJob: %s", uri_from_registry)
-                    return uri_from_registry
-            except Exception as e:
-                logger.warning("Failed to resolve metadata URI from JobRegistry for job %s: %s", job_id, e)
+        On Solana, the Job account stores metadata_uri directly.
+        Falls back to locally tracked metadata if on-chain fetch fails.
+        """
+        # Primary: from on-chain job data
+        if job_state and isinstance(job_state, dict):
+            uri = job_state.get("metadata_uri", "")
+            if uri:
+                logger.info("Resolved job metadata URI from on-chain job: %s", uri)
+                return uri
 
         # Fallback: locally tracked active job metadata
         active = self.active_jobs.get(job_id)
@@ -491,51 +478,20 @@ class BaseArchiveAgent(ABC):
             logger.warning("ELEVENLABS not configured; skipping call")
             return
         try:
-            job_state = None
-            bids = []
-            if job_details:
-                try:
-                    # OrderBook getJob returns (JobState, Bid[])
-                    job_state = job_details[0]
-                    bids = job_details[1] if len(job_details) > 1 else []
-                except Exception:
-                    pass
-
-            accepted_bid = None
-            for b in bids:
-                # Bid tuple: id, jobId, bidder, price, deliveryTime, reputation, metadataURI, responseURI, accepted, createdAt
-                try:
-                    if int(b[0]) == int(event.bid_id):
-                        accepted_bid = b
-                        break
-                except Exception:
-                    continue
-
+            poster = ""
+            job_description = ""
             price_usdc = 0.0
             eta_seconds = 0
             bidder = event.worker
-            bid_metadata = ""
-            if accepted_bid and len(accepted_bid) >= 7:
-                try:
-                    price_usdc = int(accepted_bid[3]) / 1_000_000  # USDC 6 decimals
-                    eta_seconds = int(accepted_bid[4])
-                    bidder = accepted_bid[2]
-                    bid_metadata = accepted_bid[6] or ""
-                except Exception:
-                    pass
 
-            poster = ""
-            job_description = ""
-            if job_state:
-                if len(job_state) >= 1:
-                    poster = job_state[0]
-                if len(job_state) >= 2:
-                    job_description = job_state[1]
+            if job_details and isinstance(job_details, dict):
+                poster = job_details.get("poster", "")
+                job_description = job_details.get("metadata_uri", "")
 
             # Fetch metadata from URI and log for visibility
             metadata_doc = await self._fetch_job_metadata(job_metadata_uri)
             logger.info(
-                "📄 Parsed job metadata | job_id=%s uri=%s data=%s",
+                "Parsed job metadata | job_id=%s uri=%s data=%s",
                 event.job_id,
                 job_metadata_uri,
                 metadata_doc,
@@ -561,7 +517,7 @@ class BaseArchiveAgent(ABC):
                 "jobDescription": job_description,
                 "jobTags": tags_value,
                 "jobMetadataUri": job_metadata_uri,
-                "bidMetadataUri": bid_metadata,
+                "bidMetadataUri": "",
                 "txHash": event.tx_hash,
                 "job": raw_job_payload,
                 "time": metadata_doc.get("time", "8pm"),
@@ -589,8 +545,8 @@ class BaseArchiveAgent(ABC):
                 env_to = os.getenv("ELEVENLABS_TO_NUMBER") or client.phone_number
                 payload["to_number"] = env_to
 
-            logger.info(f"📞 Sending job #{event.job_id} bid #{event.bid_id} to ElevenLabs outbound call...")
+            logger.info(f"Sending job #{event.job_id} bid #{event.bid_id} to ElevenLabs outbound call...")
             resp = await client.send_call(payload)
-            logger.info(f"✅ ElevenLabs outbound response: {resp}")
+            logger.info(f"ElevenLabs outbound response: {resp}")
         except Exception as e:
-            logger.error(f"❌ Failed to send to ElevenLabs: {e}")
+            logger.error(f"Failed to send to ElevenLabs: {e}")

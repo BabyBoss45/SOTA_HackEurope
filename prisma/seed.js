@@ -20,7 +20,7 @@ async function main() {
         email: "demo@sota.ai",
         name: "Demo User",
         passwordHash,
-        walletAddress: "0x000000000000000000000000000000000000dEaD",
+        walletAddress: "11111111111111111111111111111111",
       },
     }));
 
@@ -34,7 +34,7 @@ async function main() {
       category: "Sales",
       priceUsd: 49,
       tags: "leadgen,outreach,crm",
-      network: "base-sepolia",
+      network: "solana-devnet",
       ownerId: user.id,
     },
   });
@@ -49,7 +49,7 @@ async function main() {
       category: "Support",
       priceUsd: 29,
       tags: "support,helpdesk",
-      network: "base-sepolia",
+      network: "solana-devnet",
       ownerId: user.id,
     },
   });

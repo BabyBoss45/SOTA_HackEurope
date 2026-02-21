@@ -95,10 +95,10 @@ function generateAgentPy() {
 function generateEnv() {
     const key = keyEl.value || "           # 64 hex chars";
     const url = urlEl.value || "ws://localhost:3002/ws/agent";
-    const chainMap = { "base-sepolia": "84532", "base-mainnet": "8453", "hardhat": "31337" };
-    const chainId = chainMap[chainEl.value] || "84532";
+    const clusterMap = { "solana-devnet": "devnet", "solana-mainnet": "mainnet-beta" };
+    const cluster = clusterMap[chainEl.value] || "devnet";
 
-    return `# === SOTA Agent Environment ===\nSOTA_AGENT_PRIVATE_KEY=${key}\nSOTA_MARKETPLACE_URL=${url}\nCHAIN_ID=${chainId}\n`;
+    return `# === SOTA Agent Environment ===\nSOTA_AGENT_PRIVATE_KEY=${key}\nSOTA_MARKETPLACE_URL=${url}\nSOLANA_CLUSTER=${cluster}\n`;
 }
 
 function generateDockerfile() {
@@ -140,7 +140,7 @@ function getConfig() {
         version: versionEl.value || "1.0.0",
         private_key: keyEl.value || "",
         marketplace_url: urlEl.value || "ws://localhost:3002/ws/agent",
-        chain: chainEl.value || "base-sepolia",
+        chain: chainEl.value || "solana-devnet",
         price_ratio: parseFloat(ratioEl.value) || 0.80,
         min_budget: parseFloat(minBudgetEl.value) || 0.50,
     };

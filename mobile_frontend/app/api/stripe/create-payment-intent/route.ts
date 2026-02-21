@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { PublicKey } from "@solana/web3.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2026-01-28.clover",
 });
+
+/** Validate that a string is a valid Solana base58 public key. */
+function isValidSolanaAddress(address: string): boolean {
+  try {
+    new PublicKey(address);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,9 +27,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (typeof agentAddress !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(agentAddress)) {
+    if (typeof agentAddress !== "string" || !isValidSolanaAddress(agentAddress)) {
       return NextResponse.json(
-        { error: "agentAddress must be a valid Ethereum address" },
+        { error: "agentAddress must be a valid Solana address" },
         { status: 400 }
       );
     }
@@ -41,7 +52,7 @@ export async function POST(request: NextRequest) {
         jobId: String(jobId),
         agentAddress,
         usdcAmountRaw: String(Math.round(amount * 1e6)), // 6 decimals for USDC
-        boardJobId: boardJobId || "",
+        boardJobId: boardJobId ? String(boardJobId) : "",
       },
     });
 

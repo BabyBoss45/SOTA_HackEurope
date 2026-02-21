@@ -91,7 +91,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="SOTA Hackathon Agent",
-    description="Hackathon search & registration agent for SOTA on Base",
+    description="Hackathon search & registration agent for SOTA on Solana",
     version="0.2.0",
     lifespan=lifespan,
 )

@@ -11,9 +11,9 @@ from typing import Optional, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
 
-from eth_account import Account
-from eth_account.messages import encode_defunct
-from eth_account.signers.local import LocalAccount
+from solders.keypair import Keypair
+from solders.pubkey import Pubkey
+from nacl.signing import VerifyKey
 from pydantic import BaseModel, Field
 
 
@@ -77,31 +77,30 @@ class A2AResponse(BaseModel):
     error: Optional[A2AError] = None
 
 
-def sign_message(message: A2AMessage, account: LocalAccount) -> A2AMessage:
+def sign_message(message: A2AMessage, keypair: Keypair) -> A2AMessage:
     """
-    Sign an A2A message with the agent's private key.
-    
+    Sign an A2A message with the agent's Solana keypair.
+
     Args:
         message: The A2A message to sign
-        account: The account to sign with
-        
+        keypair: The Solana Keypair to sign with
+
     Returns:
         Signed A2A message
     """
-    # Add sender and timestamp
-    message.sender = account.address
+    # Add sender (base58 public key) and timestamp
+    message.sender = str(keypair.pubkey())
     message.timestamp = int(time.time() * 1000)
-    
+
     # Create message hash (exclude signature field)
     message_data = message.model_dump(exclude={'signature'})
     message_json = json.dumps(message_data, sort_keys=True)
-    message_hash = hashlib.keccak_256(message_json.encode()).hexdigest()
-    
-    # Sign the hash
-    signable = encode_defunct(text=message_hash)
-    signed = account.sign_message(signable)
-    message.signature = signed.signature.hex()
-    
+    message_hash = hashlib.sha256(message_json.encode()).hexdigest()
+
+    # Sign the hash with ed25519
+    sig = keypair.sign_message(message_hash.encode())
+    message.signature = bytes(sig).hex()
+
     return message
 
 
@@ -136,22 +135,24 @@ def verify_message(
         # Recreate message hash (exclude signature field)
         message_data = message.model_dump(exclude={'signature'})
         message_json = json.dumps(message_data, sort_keys=True)
-        message_hash = hashlib.keccak_256(message_json.encode()).hexdigest()
+        message_hash = hashlib.sha256(message_json.encode()).hexdigest()
 
-        # Recover signer
-        signable = encode_defunct(text=message_hash)
-        recovered = Account.recover_message(
-            signable,
-            signature=bytes.fromhex(message.signature.replace('0x', ''))
-        )
+        # Decode sender public key and signature
+        sender_pubkey = Pubkey.from_string(message.sender)
+        sig_bytes = bytes.fromhex(message.signature)
 
-        # Validate
+        # Verify ed25519 signature using PyNaCl
+        verify_key = VerifyKey(bytes(sender_pubkey))
+        verify_key.verify(message_hash.encode(), sig_bytes)
+
+        # If verification didn't raise, signature is valid
+        recovered_address = message.sender
         if expected_signer:
-            is_valid = recovered.lower() == expected_signer.lower()
+            is_valid = recovered_address == expected_signer
         else:
-            is_valid = recovered.lower() == message.sender.lower()
+            is_valid = True
 
-        return is_valid, recovered
+        return is_valid, recovered_address
 
     except Exception as e:
         print(f"Signature verification failed: {e}")

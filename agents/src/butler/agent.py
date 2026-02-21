@@ -1,5 +1,5 @@
 """
-Butler Agent — SOTA on Base
+Butler Agent — SOTA on Solana
 
 The Butler Agent is the user-facing interface that:
 1. Answers questions via RAG (Qdrant + Mem0)
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────
 
 BUTLER_SYSTEM_PROMPT = """
-You are the Butler — a personal AI concierge for SOTA, a decentralized service platform on Base.
+You are the Butler — a personal AI concierge for SOTA, a decentralized service platform on Solana.
 
 You speak like a warm, professional personal assistant. NEVER use technical
 marketplace jargon with the user. No mention of "posting jobs", "bids",
@@ -87,7 +87,7 @@ For EVERY user request, follow this sequence:
 
 class ButlerAgent:
     """
-    Butler Agent for SOTA on Base.
+    Butler Agent for SOTA on Solana.
 
     This is the main user interface agent — it posts jobs but doesn't execute them.
     Uses Anthropic Claude API for LLM-driven tool-calling.

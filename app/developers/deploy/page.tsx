@@ -29,6 +29,7 @@ import {
   type AgentTemplateConfig,
 } from "@/lib/agent-templates";
 import Link from "next/link";
+import { PublicKey } from "@solana/web3.js";
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -59,9 +60,19 @@ const CAPABILITIES = [
 ];
 
 const CHAINS = [
-  { value: "base-sepolia", label: "Base Sepolia (84532)" },
-  { value: "base-mainnet", label: "Base Mainnet (8453)" },
+  { value: "solana-devnet", label: "Solana Devnet" },
+  { value: "solana-mainnet", label: "Solana Mainnet" },
 ];
+
+/** Validate a base58 Solana address. */
+function isValidSolanaAddress(addr: string): boolean {
+  try {
+    new PublicKey(addr);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 type PreviewTab = "agent.py" | ".env" | "Dockerfile" | "requirements.txt";
 
@@ -96,8 +107,8 @@ export default function DeployPage() {
     priceRatio: 0.8,
     minFeeUsdc: 0.5,
     walletAddress: "",
-    hubUrl: "ws://localhost:3002/ws/agent",
-    chain: "base-sepolia",
+    hubUrl: process.env.NEXT_PUBLIC_HUB_WS_URL || "ws://localhost:3002/ws/agent",
+    chain: "solana-devnet",
   });
 
   const [tagInput, setTagInput] = useState("");
@@ -178,6 +189,12 @@ export default function DeployPage() {
     }
     if (!formData.description.trim() || formData.description.trim().length < 10) {
       setError("Description must be at least 10 characters");
+      return;
+    }
+
+    // Validate wallet address if provided
+    if (formData.walletAddress.trim() && !isValidSolanaAddress(formData.walletAddress.trim())) {
+      setError("Invalid Solana wallet address. Please enter a valid base58 public key.");
       return;
     }
 
@@ -527,9 +544,16 @@ export default function DeployPage() {
                     type="text"
                     value={formData.walletAddress}
                     onChange={(e) => setFormData({ ...formData, walletAddress: e.target.value })}
-                    placeholder="0x..."
-                    className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 font-mono"
+                    placeholder="Enter Solana public key (base58)"
+                    className={`w-full px-4 py-2 bg-[color:var(--surface-1)] border rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 font-mono ${
+                      formData.walletAddress.trim() && !isValidSolanaAddress(formData.walletAddress.trim())
+                        ? "border-red-500/50"
+                        : "border-[color:var(--border-subtle)]"
+                    }`}
                   />
+                  {formData.walletAddress.trim() && !isValidSolanaAddress(formData.walletAddress.trim()) && (
+                    <p className="text-xs text-red-400 mt-1">Invalid Solana address</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Hub URL</label>
@@ -537,7 +561,7 @@ export default function DeployPage() {
                     type="text"
                     value={formData.hubUrl}
                     onChange={(e) => setFormData({ ...formData, hubUrl: e.target.value })}
-                    placeholder="ws://localhost:3002/ws/agent"
+                    placeholder={process.env.NEXT_PUBLIC_HUB_WS_URL || "ws://localhost:3002/ws/agent"}
                     className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 font-mono text-sm"
                   />
                 </div>

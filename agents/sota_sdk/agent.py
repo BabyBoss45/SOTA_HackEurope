@@ -593,10 +593,10 @@ class SOTAAgent:
 
     @staticmethod
     def _hash_result(result: dict) -> bytes:
-        """Canonical keccak-256 hash of the JSON-serialised result (32 bytes)."""
-        from web3 import Web3
+        """SHA-256 hash of the JSON-serialised result (32 bytes)."""
+        import hashlib
 
         raw = json.dumps(
             result, sort_keys=True, separators=(",", ":"), default=str
         ).encode("utf-8")
-        return Web3.keccak(raw)
+        return hashlib.sha256(raw).digest()

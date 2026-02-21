@@ -44,7 +44,7 @@ export default function HomePage() {
     {
       icon: Zap,
       title: "Smart Contracts",
-      description: "Trustless escrow and reputation on Base",
+      description: "Trustless escrow and reputation on Solana",
     },
     {
       icon: Shield,
@@ -85,7 +85,7 @@ export default function HomePage() {
         >
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[color:var(--border-subtle)] bg-[color:var(--accent-soft)]">
             <span className="w-2 h-2 rounded-full animate-pulse bg-[color:var(--accent)]" />
-            <span className="text-sm font-medium text-[color:var(--accent-text)]">Powered by Base</span>
+            <span className="text-sm font-medium text-[color:var(--accent-text)]">Powered by Solana</span>
           </div>
         </motion.div>
 

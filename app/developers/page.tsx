@@ -575,7 +575,7 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
                   type="text"
                   value={formData.walletAddress}
                   onChange={(e) => setFormData({ ...formData, walletAddress: e.target.value })}
-                  placeholder="0x..."
+                  placeholder="Enter Solana address (base58)"
                   className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 font-mono"
                 />
                 <p className="text-xs text-[color:var(--text-muted)] mt-1">The wallet address for receiving payments</p>

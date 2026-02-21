@@ -1,5 +1,5 @@
 """
-Auto-Bidder — Mixin that lets worker agents participate in the JobBoard.
+Auto-Bidder -- Mixin that lets worker agents participate in the JobBoard.
 
 Drop this into any BaseArchiveAgent subclass to have it:
 1. Register itself with the JobBoard on startup
@@ -47,8 +47,8 @@ def job_types_to_tags(job_types: list[JobType]) -> List[str]:
 # ── Mixin ────────────────────────────────────────────────────
 
 # Default wallet address for agents without private keys
-# This address receives escrow payments when jobs are completed
-DEFAULT_AGENT_WALLET = "0xc670ca2A23798BA5ee52dFfcEC86b3E220618225"
+# Solana base58 address (devnet faucet or placeholder)
+DEFAULT_AGENT_WALLET = "11111111111111111111111111111111"
 
 
 class AutoBidderMixin:
@@ -87,9 +87,12 @@ class AutoBidderMixin:
             active_jobs=len(getattr(self, "active_jobs", {})),
         )
         board.register_worker(worker)
+
+        # Truncate address for display (base58 is safe to slice)
+        addr_display = address[:12] + "..." if len(address) > 12 else address
         logger.info(
-            "🏪 %s registered on JobBoard  tags=%s  addr=%s",
-            getattr(self, "agent_name", "Worker"), tags, address[:10] + "…",
+            "%s registered on JobBoard  tags=%s  addr=%s",
+            getattr(self, "agent_name", "Worker"), tags, addr_display,
         )
 
     async def _execute_job_for_board(self, job: JobListing, winning_bid: Bid) -> dict:
@@ -98,11 +101,11 @@ class AutoBidderMixin:
         Executes the job, persists the outcome, and returns results.
         """
         from .base_agent import ActiveJob
-        
+
         agent_name = getattr(self, "agent_name", "Worker")
         agent_type = getattr(self, "agent_type", "worker")
-        logger.info("🔄 %s executing job %s", agent_name, job.job_id)
-        
+        logger.info("%s executing job %s", agent_name, job.job_id)
+
         active_job = ActiveJob(
             job_id=int(job.job_id) if job.job_id.isdigit() else 0,
             bid_id=0,
@@ -126,7 +129,7 @@ class AutoBidderMixin:
                 )
                 if pattern.similar_outcomes:
                     logger.info(
-                        "🧠 Pattern detected for job %s: confidence=%.2f strategy=%s",
+                        "Pattern detected for job %s: confidence=%.2f strategy=%s",
                         job.job_id, pattern.confidence, pattern.recommended_strategy,
                     )
                 active_job.params["_pattern_analysis"] = pattern
@@ -139,9 +142,9 @@ class AutoBidderMixin:
         if execute_fn:
             try:
                 result = await execute_fn(active_job)
-                logger.info("✅ %s completed job %s", agent_name, job.job_id)
+                logger.info("%s completed job %s", agent_name, job.job_id)
             except Exception as e:
-                logger.error("❌ %s failed job %s: %s", agent_name, job.job_id, e)
+                logger.error("%s failed job %s: %s", agent_name, job.job_id, e)
                 result = {"error": str(e), "success": False}
         else:
             result = {"error": "No execute_job method found", "success": False}
@@ -205,7 +208,7 @@ class AutoBidderMixin:
                 )
                 if pattern.recommended_strategy == "decline":
                     logger.info(
-                        "🚫 %s declining job %s — confidence too low (%.2f)",
+                        "%s declining job %s -- confidence too low (%.2f)",
                         getattr(self, "agent_name", "Worker"), job.job_id, pattern.confidence,
                     )
                     return None
@@ -236,7 +239,7 @@ class AutoBidderMixin:
         )
 
         logger.info(
-            "🤖 %s bidding %.2f USDC on job %s  (tags matched: %s)",
+            "%s bidding %.2f USDC on job %s  (tags matched: %s)",
             getattr(self, "agent_name", "Worker"),
             bid.amount_usdc, job.job_id, list(overlap),
         )

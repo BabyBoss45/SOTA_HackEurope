@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 
-const BUTLER_API =
-  process.env.BUTLER_API_URL || "http://localhost:3001";
+const BUTLER_API = process.env.BUTLER_API_URL;
+if (!BUTLER_API) {
+  console.error("BUTLER_API_URL not set");
+}
 const WEBHOOK_SECRET = process.env.INCIDENT_IO_WEBHOOK_SECRET || "";
 
 // Svix signature verification (incident.io uses Svix for webhooks)
@@ -77,8 +79,9 @@ export async function POST(req: NextRequest) {
 
     // Forward relevant events to Butler API for agent awareness
     if (
-      eventType === "incident.updated" ||
-      eventType === "incident.created"
+      BUTLER_API &&
+      (eventType === "incident.updated" ||
+      eventType === "incident.created")
     ) {
       const incident = event.data?.incident || event.incident || {};
 

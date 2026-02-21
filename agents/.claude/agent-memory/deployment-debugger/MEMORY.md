@@ -17,7 +17,7 @@
 - websockets: 15.0.1 installed (pyproject.toml says >=12.0)
 - paid-python: 1.0.6 installed
 - Python: 3.13
-- Chain: Base Sepolia 84532, USDC 6 decimals
+- Chain: Solana Devnet, USDC 6 decimals
 
 ## Key Security Notes
 - Wallet private key handling in chain/wallet.py is solid (validates format, catches errors, clears reference)

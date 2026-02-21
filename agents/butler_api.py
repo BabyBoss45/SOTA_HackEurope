@@ -33,7 +33,11 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from agents.src.shared.chain_config import get_private_key, get_network
+from agents.marketplace.hub import app as marketplace_hub_app
+
+import hashlib
+
+from agents.src.shared.chain_config import get_private_key, get_cluster, PROGRAM_ID, USDC_MINT
 from agents.src.shared.chain_contracts import (
     get_contracts,
     Contracts,
@@ -70,6 +74,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="SOTA Butler API")
+app.mount("/hub", marketplace_hub_app)
+logger.info("Marketplace Hub mounted at /hub")
 
 app.add_middleware(
     CORSMiddleware,
@@ -170,10 +176,10 @@ class ReleaseRequest(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    global contracts, butler_agent, job_board, hackathon_agent, caller_agent, db
-    network = get_network()
+    global contracts, butler_agent, job_board, hackathon_agent, caller_agent, db, task_memory
+    cluster = get_cluster()
     print(f"Starting SOTA Butler API...")
-    print(f"Network: {network.rpc_url} (chain {network.chain_id})")
+    print(f"Cluster: {cluster.rpc_url} ({cluster.cluster_name})")
 
     # ── Connect to Firestore ────────────────────────────────
     if Database is not None:
@@ -218,11 +224,10 @@ async def startup_event():
     # ── Contracts ─────────────────────────────────────────────
     try:
         contracts = get_contracts(pk)
-        print(f"Connected to chain ({network.native_currency})")
-        print(f"  OrderBook:     {contracts.addresses.order_book}")
-        print(f"  Escrow:        {contracts.addresses.escrow}")
-        print(f"  USDC:          {contracts.addresses.usdc}")
-        print(f"  AgentRegistry: {contracts.addresses.agent_registry}")
+        print(f"Connected to Solana ({cluster.cluster_name})")
+        print(f"  Program ID: {contracts.program_id}")
+        print(f"  USDC Mint:  {USDC_MINT}")
+        print(f"  Signer:     {contracts.keypair.pubkey() if contracts.keypair else 'read-only'}")
     except Exception as e:
         print(f"Failed to connect: {e}")
 
@@ -604,9 +609,8 @@ async def execute_job_after_escrow(job_id: str):
         release_tx = None
         if on_chain_job_id and contracts:
             try:
-                import hashlib
                 proof_data = json.dumps(exec_result, default=str).encode() if isinstance(exec_result, dict) else str(exec_result).encode()
-                proof_hash = hashlib.sha256(proof_data).digest()
+                proof_hash = hashlib.sha256(proof_data).digest()[:32]
 
                 # 1. Mark completed on-chain
                 try:
@@ -770,12 +774,13 @@ async def get_escrow_info():
     """Return contract addresses so the frontend can prompt wallet funding."""
     if not contracts:
         raise HTTPException(503, "Not connected to chain")
+    cluster = get_cluster()
     return {
-        "escrow_address": contracts.addresses.escrow,
-        "order_book_address": contracts.addresses.order_book,
-        "usdc_address": contracts.addresses.usdc,
-        "chain_id": get_network().chain_id,
-        "native_currency": "ETH",
+        "program_id": str(contracts.program_id),
+        "usdc_mint": str(USDC_MINT),
+        "cluster": cluster.cluster_name,
+        "rpc_url": cluster.rpc_url,
+        "native_currency": "SOL",
     }
 
 
@@ -819,17 +824,19 @@ async def create_and_fund_job(req: CreateJobRequest):
         )
 
         # 2. Assign provider
-        provider = req.provider_address or (
-            contracts.account.address if contracts.account else ""
+        from solders.pubkey import Pubkey as _Pubkey
+        provider_str = req.provider_address or (
+            str(contracts.keypair.pubkey()) if contracts.keypair else ""
         )
-        if provider:
-            assign_provider(contracts, job_id, provider)
+        if provider_str:
+            provider_pk = _Pubkey.from_string(provider_str)
+            assign_provider(contracts, job_id, provider_pk)
 
         # 3. Fund escrow with USDC
         tx = fund_job(
             contracts,
             job_id=job_id,
-            provider_address=provider,
+            provider_pubkey=provider_pk if provider_str else contracts.keypair.pubkey(),
             usdc_amount=req.budget_usdc,
         )
 
@@ -838,7 +845,7 @@ async def create_and_fund_job(req: CreateJobRequest):
             tx_hash=tx,
             budget_usdc=req.budget_usdc,
             usdc_locked=req.budget_usdc,
-            provider=provider,
+            provider=provider_str,
             message=f"Job #{job_id} created and funded with {req.budget_usdc:.2f} USDC",
         )
     except Exception as e:
@@ -1136,4 +1143,4 @@ if __name__ == "__main__":
     import uvicorn
 
     print("Starting SOTA Butler API...")
-    uvicorn.run(app, host="0.0.0.0", port=3001)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "3001")))

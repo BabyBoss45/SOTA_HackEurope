@@ -58,7 +58,7 @@ def make_job():
             "tags": ["test"],
             "budget_usdc": 10.0,
             "deadline_ts": int(time.time()) + 3600,
-            "poster": "0xPoster",
+            "poster": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
             "metadata": {},
             "params": {},
         }
@@ -120,9 +120,9 @@ def make_agent_class():
 def mock_wallet():
     """MagicMock mimicking AgentWallet."""
     wallet = MagicMock()
-    wallet.address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-    wallet.sign_message.return_value = "0x" + "ab" * 65
-    wallet.build_and_send.return_value = "0x" + "cc" * 32
+    wallet.address = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+    wallet.sign_message.return_value = "3fGh" + "ab" * 32
+    wallet.build_and_send.return_value = "5wHG" + "cc" * 32
     wallet.wait_for_receipt.return_value = {"status": 1}
     wallet.network = MagicMock()
     wallet.addresses = MagicMock()

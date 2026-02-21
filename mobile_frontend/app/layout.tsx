@@ -4,7 +4,7 @@ import { ToastProvider } from '@/src/components/ToastProvider';
 
 export const metadata: Metadata = {
   title: 'SOTA Butler',
-  description: 'Your AI-powered personal concierge on Base',
+  description: 'Your AI-powered personal concierge on Solana',
 };
 
 export const viewport: Viewport = {

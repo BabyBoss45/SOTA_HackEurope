@@ -20,7 +20,7 @@ from ..shared.tool_base import BaseTool
 from ..shared.config import JobType, JOB_TYPE_LABELS, get_agent_endpoints
 from ..shared.wallet import AgentWallet
 from ..shared.a2a import A2AMessage, A2AMethod, sign_message
-from ..shared.contracts import get_contracts, post_job
+from ..shared.contracts import get_program, post_job
 from ..shared.booking import analyze_slots
 from ..shared.bevec import BeVecClient, VectorRecord
 from ..shared.embedding import embed_text
@@ -84,7 +84,7 @@ class DecomposeJobTool(BaseTool):
         if any(kw in job_lower for kw in web_keywords):
             sub_tasks.append({
                 "task_type": "WEB_SCRAPE",
-                "job_type_id": JobType.WEB_SCRAPE.value,
+                "job_type_id": JobType.GENERIC.value,
                 "description": f"Search web for: {job_description}",
                 "parameters": {
                     "search_query": self._extract_search_query(job_description)
@@ -102,11 +102,11 @@ class DecomposeJobTool(BaseTool):
                 }
             })
         
-        # Default to data analysis if no specific tasks detected
+        # Default to generic task if no specific tasks detected
         if not sub_tasks:
             sub_tasks.append({
-                "task_type": "DATA_ANALYSIS",
-                "job_type_id": JobType.DATA_ANALYSIS.value,
+                "task_type": "GENERIC",
+                "job_type_id": JobType.GENERIC.value,
                 "description": job_description,
                 "parameters": {}
             })
@@ -366,7 +366,7 @@ class PostJobTool(BaseTool):
             return json.dumps({"success": False, "error": "Wallet not configured"})
 
         try:
-            contracts = get_contracts(self._wallet.private_key)
+            contracts = get_program(self._wallet.keypair)
         except Exception as e:
             return json.dumps({"success": False, "error": f"Contract setup failed: {e}"})
 
@@ -436,14 +436,18 @@ class GetBidsForJobTool(BaseTool):
     async def execute(self, job_id: int) -> str:
         """Get bids for a job from the OrderBook contract"""
         try:
-            from ..shared.contracts import get_contracts, get_bids_for_job
-            
-            contracts = get_contracts(self._wallet.private_key)
+            from ..shared.contracts import get_program, get_bids_for_job
+
+            contracts = get_program(self._wallet.keypair)
             bids = get_bids_for_job(contracts, job_id)
-            
+
             formatted_bids = []
             for bid in bids:
-                bid_id, bidder, amount, estimated_time, metadata_uri = bid[:5]
+                bid_id = bid["id"]
+                bidder = str(bid["agent"])
+                amount = bid["price_usdc_raw"]
+                estimated_time = bid["estimated_time"]
+                metadata_uri = bid.get("proposal", "")
                 formatted_bids.append({
                     "bid_id": bid_id,
                     "bidder": bidder,
@@ -582,17 +586,12 @@ class AcceptBidTool(BaseTool):
     async def execute(self, job_id: int, bid_id: int) -> str:
         """Accept a bid on-chain"""
         try:
-            from ..shared.contracts import get_contracts, accept_bid
-            
-            contracts = get_contracts(self._wallet.private_key)
-            
+            from ..shared.contracts import get_program, accept_bid
+
+            contracts = get_program(self._wallet.keypair)
+
             # Accept the bid
-            tx_hash = accept_bid(
-                contracts,
-                job_id,
-                bid_id,
-                f"ipfs://manager-acceptance-{job_id}-{bid_id}"
-            )
+            tx_hash = accept_bid(contracts, job_id, bid_id)
             
             return json.dumps({
                 "success": True,
@@ -659,27 +658,23 @@ class SendA2AMessageTool(BaseTool):
     ) -> str:
         """Send A2A message to worker agent"""
         try:
-            from eth_account import Account
-            
             # Get worker endpoint
             endpoints = get_agent_endpoints()
             endpoint = getattr(endpoints, agent_type, None)
-            
+
             if not endpoint:
                 return json.dumps({
                     "success": False,
                     "error": f"Unknown agent type: {agent_type}"
                 })
-            
-            account = Account.from_key(self._wallet.private_key)
-            
+
             # Build and sign message
             message = A2AMessage(
                 id=1,
                 method=method,
                 params=params or {}
             )
-            signed_message = sign_message(message, account)
+            signed_message = sign_message(message, self._wallet.keypair)
             
             # Send to worker
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -762,19 +757,15 @@ class RequestTaskExecutionTool(BaseTool):
     ) -> str:
         """Request task execution from worker"""
         try:
-            from eth_account import Account
-            
             endpoints = get_agent_endpoints()
             endpoint = getattr(endpoints, agent_type, None)
-            
+
             if not endpoint:
                 return json.dumps({
                     "success": False,
                     "error": f"Unknown agent type: {agent_type}"
                 })
-            
-            account = Account.from_key(self._wallet.private_key)
-            
+
             # Build execution request
             message = A2AMessage(
                 id=job_id,
@@ -787,7 +778,7 @@ class RequestTaskExecutionTool(BaseTool):
                     "deadline": 3600  # 1 hour deadline
                 }
             )
-            signed_message = sign_message(message, account)
+            signed_message = sign_message(message, self._wallet.keypair)
             
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
@@ -853,9 +844,9 @@ class ApproveDeliveryTool(BaseTool):
     async def execute(self, job_id: int, approval_notes: str = "") -> str:
         """Approve delivery and release payment"""
         try:
-            from ..shared.contracts import get_contracts, approve_delivery
-            
-            contracts = get_contracts(self._wallet.private_key)
+            from ..shared.contracts import get_program, approve_delivery
+
+            contracts = get_program(self._wallet.keypair)
             tx_hash = approve_delivery(contracts, job_id)
             
             return json.dumps({
@@ -900,9 +891,9 @@ class GetJobDetailsTool(BaseTool):
     async def execute(self, job_id: int) -> str:
         """Get job details from blockchain"""
         try:
-            from ..shared.contracts import get_contracts, get_job
-            
-            contracts = get_contracts(self._wallet.private_key)
+            from ..shared.contracts import get_program, get_job
+
+            contracts = get_program(self._wallet.keypair)
             job = get_job(contracts, job_id)
             
             return json.dumps({

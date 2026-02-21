@@ -1,49 +1,24 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useAccount, useSendTransaction } from "wagmi";
-import { encodeFunctionData } from "viem";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
+import {
+  PublicKey,
+  Transaction,
+  SystemProgram,
+  LAMPORTS_PER_SOL,
+} from "@solana/web3.js";
 import { useConversation } from "@elevenlabs/react";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Plus, MessageSquare, Send } from "lucide-react";
 import AgentOrb from "./AgentOrb";
 import { useToast } from "./ToastProvider";
 import StripePayment from "./StripePayment";
+import { explorerLink } from "@/src/solanaConfig";
 
 /* ── Config ── */
 const BUTLER_URL =
   process.env.NEXT_PUBLIC_BUTLER_API_URL || "http://localhost:3001/api/v1";
-const USDC_ADDRESS = (process.env.NEXT_PUBLIC_USDC_ADDRESS || "") as `0x${string}`;
-const ESCROW_ADDRESS = (process.env.NEXT_PUBLIC_ESCROW_ADDRESS || "") as `0x${string}`;
-
-/* ── ERC20 approve ABI fragment ── */
-const ERC20_APPROVE_ABI = [
-  {
-    name: "approve",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "spender", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [{ name: "", type: "bool" }],
-  },
-] as const;
-
-/* ── Escrow.fundJob ABI fragment (not payable — USDC is pulled) ── */
-const ESCROW_FUND_JOB_ABI = [
-  {
-    name: "fundJob",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "jobId", type: "uint256" },
-      { name: "provider", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [],
-  },
-] as const;
 
 /* ── Types ── */
 interface TranscriptLine {
@@ -169,8 +144,9 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
   const [taskExecution, setTaskExecution] = useState<{ active: boolean; message: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { address } = useAccount();
-  const { sendTransactionAsync } = useSendTransaction();
+  const { publicKey, sendTransaction, connected } = useWallet();
+  const { connection } = useConnection();
+  const address = publicKey?.toBase58() ?? null;
   const { showToast } = useToast();
   const [textInput, setTextInput] = useState("");
   const [stripePayment, setStripePayment] = useState<{
@@ -234,10 +210,19 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
     const jobId = jobResult.on_chain_job_id;
     const boardJobId = jobResult.job_id;
     const rawWinnerAddr = jobResult.winning_bid?.address;
-    const winnerAddr = (rawWinnerAddr && rawWinnerAddr !== "0x0" && rawWinnerAddr.length === 42)
-      ? rawWinnerAddr
-      : address || "0x0000000000000000000000000000000000000000";
-    const bidderName = jobResult.winning_bid?.bidder || "specialist";
+
+    // Validate as base58 Solana address; fall back to connected wallet or system program
+    let winnerAddr: string;
+    try {
+      if (rawWinnerAddr) {
+        new PublicKey(rawWinnerAddr); // throws if invalid
+        winnerAddr = rawWinnerAddr;
+      } else {
+        winnerAddr = address || SystemProgram.programId.toBase58();
+      }
+    } catch {
+      winnerAddr = address || SystemProgram.programId.toBase58();
+    }
 
     addLine("assistant", `Payment of ${budgetUsdc.toFixed(2)} USDC needed. Please complete payment below.`);
     setStripePayment({ jobId, amount: budgetUsdc, agentAddress: winnerAddr, boardJobId });
@@ -358,7 +343,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
       }
       setOrbStatus("idle");
     } else {
-      if (!address) {
+      if (!connected || !publicKey) {
         showToast("Connect your wallet first", "warning");
         return;
       }
@@ -452,16 +437,29 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
               }
             },
 
-            /* ── Wallet tools ── */
+            /* ── Wallet tools: transfer SOL ── */
             transferFunds: async ({ amount, to }: { amount: string; to: string }) => {
               try {
-                const { parseEther } = await import("viem");
-                const hash = await sendTransactionAsync({
-                  to: to as `0x${string}`,
-                  value: parseEther(amount),
-                });
+                if (!publicKey || !sendTransaction) {
+                  return "Wallet not connected";
+                }
+                const amt = parseFloat(amount);
+                if (isNaN(amt) || amt <= 0) {
+                  return "Invalid amount";
+                }
+                const recipient = new PublicKey(to);
+                const lamports = Math.round(amt * LAMPORTS_PER_SOL);
+                const transaction = new Transaction().add(
+                  SystemProgram.transfer({
+                    fromPubkey: publicKey,
+                    toPubkey: recipient,
+                    lamports,
+                  })
+                );
+                const signature = await sendTransaction(transaction, connection);
                 showToast("Transaction sent!", "success");
-                return `Transaction sent: ${hash}`;
+                const explorerUrl = explorerLink(signature, "tx");
+                return `Transaction sent: ${signature}\nExplorer: ${explorerUrl}`;
               } catch (e: any) {
                 showToast("Transfer failed", "error");
                 return `Transfer failed: ${e.message}`;
@@ -482,10 +480,6 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
   const handleSendText = async () => {
     const msg = textInput.trim();
     if (!msg || isSending) return;
-    if (!address) {
-      showToast("Connect your wallet first", "warning");
-      return;
-    }
     setTextInput("");
 
     // If a voice session is active, route text through ElevenLabs so the
@@ -562,12 +556,12 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
                 transition={{ duration: 0.5 }}
               >
                 <p className="transcript-empty-title">
-                  Hello{address ? `, ${address.slice(0, 6)}...` : ""}
+                  Hello{address ? `, ${address.slice(0, 4)}...${address.slice(-4)}` : ""}
                 </p>
                 <p className="transcript-empty-sub">
-                  {address
+                  {connected
                     ? "Your AI concierge is ready. Tap the orb or type below."
-                    : "Connect your wallet to get started."}
+                    : "Type below to chat, or connect your wallet for voice and transfers."}
                 </p>
               </motion.div>
             </AnimatePresence>

@@ -1,3 +1,7 @@
+// WARNING: This is a READ-ONLY subset of the main app schema (../prisma/schema.prisma).
+// This schema is used ONLY for `prisma generate` — never run `prisma db push` or
+// `prisma migrate` from this directory. The main app owns all migrations.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,24 +11,39 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model ChatMessage {
-  id        String   @id @default(cuid())
-  sessionId String
-  role      String   // "user" | "assistant" | "system"
-  text      String
-  createdAt DateTime @default(now())
-
-  @@index([sessionId])
-  @@map("chat_messages")
+model ChatSession {
+  id        String        @id @default(uuid())
+  wallet    String?
+  title     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
 }
 
-model ChatSession {
-  id        String   @id @default(cuid())
-  wallet    String?  // wallet address if connected
-  title     String?  // auto-generated title from first message
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model ChatMessage {
+  id        Int          @id @default(autoincrement())
+  sessionId String
+  session   ChatSession  @relation(fields: [sessionId], references: [id])
+  role      String
+  text      String       @db.Text
+  createdAt DateTime     @default(now())
 
-  @@index([wallet])
-  @@map("chat_sessions")
+  @@index([sessionId])
+}
+
+model Payment {
+  id                 Int       @id @default(autoincrement())
+  jobId              String    @unique
+  onChainJobId       Int?
+  paymentIntentId    String    @unique
+  amountCents        Int
+  usdcAmountRaw      String
+  agentAddress       String
+  status             String    @default("pending")
+  stripeRefundId     String?
+  escrowRefundTxHash String?
+  refundReason       String?
+  refundedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }

@@ -50,14 +50,14 @@ class TestStatus:
 
     def test_wallet_masked(self):
         wallet = MagicMock()
-        wallet.address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+        wallet.address = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
         agent = _mock_agent(wallet=wallet)
         app = create_app(agent)
         client = TestClient(app)
         resp = client.get("/status")
         addr = resp.json()["wallet_address"]
-        assert addr.startswith("0xf39F")
-        assert addr.endswith("2266")
+        assert addr.startswith("7xKX")
+        assert addr.endswith("sAsU")
         assert "..." in addr
 
     def test_wallet_none(self):
@@ -99,9 +99,9 @@ class TestMaskAddress:
         assert _mask_address("0x1234") == "0x1234"
 
     def test_full_address_masked(self):
-        addr = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+        addr = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
         masked = _mask_address(addr)
-        assert masked == "0xf39F...2266"
+        assert masked == "7xKX...sAsU"
 
     def test_empty_returns_empty(self):
         assert _mask_address("") == ""

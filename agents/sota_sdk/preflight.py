@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_HEX64_RE = re.compile(r"^(0x)?[0-9a-fA-F]{64}$")
+_SOLANA_KEY_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{44,88}$")
+_JSON_ARRAY_RE = re.compile(r"^\[[\d,\s]+\]$")
 
 
 @dataclass
@@ -89,10 +90,11 @@ def _check_environment() -> PreflightResult:
     from .config import SOTA_AGENT_PRIVATE_KEY
     key = SOTA_AGENT_PRIVATE_KEY
     if key:
-        if not _HEX64_RE.match(key):
+        key = key.strip()
+        if not (_SOLANA_KEY_RE.match(key) or _JSON_ARRAY_RE.match(key)):
             r.errors.append(
                 "SOTA_AGENT_PRIVATE_KEY is malformed. "
-                "Must be 64 hex characters (optionally prefixed with 0x)."
+                "Must be a base58-encoded keypair (44-88 chars) or a JSON byte array."
             )
     else:
         r.warnings.append(
@@ -100,14 +102,12 @@ def _check_environment() -> PreflightResult:
             "(no delivery proofs, no payment claims)."
         )
 
-    # Contract addresses
-    from .config import get_contract_addresses
-    contracts = get_contract_addresses()
-    if not contracts.order_book:
+    # Program ID
+    program_id = os.getenv("PROGRAM_ID", "")
+    if not program_id:
         r.warnings.append(
-            "Contract addresses not found. On-chain features (delivery proof, "
-            "payment) will be unavailable. Set ORDERBOOK_ADDRESS env var or "
-            "ensure contracts/deployments/ directory exists."
+            "PROGRAM_ID not set. On-chain features (delivery proof, "
+            "payment) will be unavailable. Set PROGRAM_ID env var."
         )
 
     return r
@@ -124,7 +124,7 @@ def _check_rpc_connectivity() -> PreflightResult:
         network = get_network()
         req = urllib.request.Request(
             network.rpc_url,
-            data=b'{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}',
+            data=b'{"jsonrpc":"2.0","method":"getHealth","id":1}',
             headers={"Content-Type": "application/json"},
             method="POST",
         )

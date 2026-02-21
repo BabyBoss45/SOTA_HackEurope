@@ -40,7 +40,7 @@ class AgentConfig(BaseModel):
     version: str = "1.0.0"
     private_key: str = ""
     marketplace_url: str = "ws://localhost:3002/ws/agent"
-    chain: str = "base-sepolia"
+    chain: str = "solana-devnet"
     price_ratio: float = 0.80
     min_budget: float = 0.50
 
@@ -65,8 +65,8 @@ def _generate_files(config: AgentConfig) -> dict[str, str]:
         env_lines.append("SOTA_AGENT_PRIVATE_KEY=           # 64 hex chars")
     env_lines.append(f"SOTA_MARKETPLACE_URL={config.marketplace_url}")
 
-    chain_map = {"base-sepolia": "84532", "base-mainnet": "8453", "hardhat": "31337"}
-    env_lines.append(f"CHAIN_ID={chain_map.get(config.chain, '84532')}")
+    cluster_map = {"solana-devnet": "devnet", "solana-mainnet": "mainnet-beta"}
+    env_lines.append(f"SOLANA_CLUSTER={cluster_map.get(config.chain, 'devnet')}")
 
     # Build agent.py with bid strategy if non-default
     agent_code = AGENT_TEMPLATE.format(
@@ -163,9 +163,10 @@ def create_ui_app() -> FastAPI:
         if req.marketplace_url and not req.marketplace_url.startswith(("ws://", "wss://")):
             errors.append("Marketplace URL must start with ws:// or wss://")
         if req.private_key:
-            hex_re = re.compile(r"^(0x)?[0-9a-fA-F]{64}$")
-            if not hex_re.match(req.private_key):
-                errors.append("Private key must be 64 hex characters (optional 0x prefix).")
+            solana_key_re = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{44,88}$")
+            json_array_re = re.compile(r"^\[[\d,\s]+\]$")
+            if not (solana_key_re.match(req.private_key) or json_array_re.match(req.private_key)):
+                errors.append("Private key must be a base58-encoded keypair (44-88 chars) or a JSON byte array.")
         else:
             warnings.append("No private key — agent will run off-chain only.")
 
@@ -192,12 +193,12 @@ def create_ui_app() -> FastAPI:
 
     @app.get("/api/networks")
     async def networks():
-        """Return supported chains and their config."""
+        """Return supported Solana clusters and their config."""
         return {
             "networks": [
-                {"id": "base-sepolia", "name": "Base Sepolia (Testnet)", "chain_id": 84532, "rpc": "https://sepolia.base.org"},
-                {"id": "base-mainnet", "name": "Base Mainnet", "chain_id": 8453, "rpc": "https://mainnet.base.org"},
-                {"id": "hardhat", "name": "Hardhat Local", "chain_id": 31337, "rpc": "http://127.0.0.1:8545"},
+                {"id": "solana-devnet", "name": "Solana Devnet", "cluster": "devnet", "rpc": "https://api.devnet.solana.com"},
+                {"id": "solana-mainnet", "name": "Solana Mainnet-Beta", "cluster": "mainnet-beta", "rpc": "https://api.mainnet-beta.solana.com"},
+                {"id": "solana-localnet", "name": "Solana Localnet", "cluster": "localnet", "rpc": "http://127.0.0.1:8899"},
             ]
         }
 

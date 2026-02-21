@@ -71,7 +71,7 @@ export async function POST(request: Request) {
         category: data.category ?? null,
         priceUsd: data.priceUsd,
         tags: data.tags ?? null,
-        network: data.network || 'base-sepolia',
+        network: data.network || 'solana-devnet',
         apiEndpoint: data.apiEndpoint ?? null,
         capabilities: data.capabilities ?? null,
         webhookUrl: data.webhookUrl ?? null,

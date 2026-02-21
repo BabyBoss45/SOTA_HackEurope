@@ -6,11 +6,11 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: sota-butler-api
-    command: python butler_api.py
+    command: python agents/butler_api.py
     ports:
       - "3001:3001"
     environment:
-      - BUTLER_API_PORT=3001
+      - PORT=3001
       - RPC_URL=${RPC_URL}
       - PRIVATE_KEY=${PRIVATE_KEY}
       - CHAIN_ID=${CHAIN_ID}

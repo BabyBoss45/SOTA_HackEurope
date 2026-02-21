@@ -53,7 +53,7 @@
 
                     <div class="form-group">
                         <label for="private-key">Private Key</label>
-                        <input type="password" id="private-key" placeholder="64 hex chars (optional)">
+                        <input type="password" id="private-key" placeholder="base58 keypair or JSON byte array (optional)">
                         <p class="hint">For on-chain features. Leave empty for off-chain only.</p>
                     </div>
 
@@ -65,9 +65,8 @@
                     <div class="form-group">
                         <label for="chain">Chain</label>
                         <select id="chain">
-                            <option value="base-sepolia" selected>Base Sepolia (Testnet)</option>
-                            <option value="base-mainnet">Base Mainnet</option>
-                            <option value="hardhat">Hardhat Local</option>
+                            <option value="solana-devnet" selected>Solana Devnet</option>
+                            <option value="solana-mainnet">Solana Mainnet-Beta</option>
                         </select>
                     </div>
                 </div>

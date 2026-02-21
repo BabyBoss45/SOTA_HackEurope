@@ -87,7 +87,7 @@ class TestNetworks:
         assert resp.status_code == 200
         networks = resp.json()["networks"]
         assert len(networks) == 3
-        chain_ids = {n["chain_id"] for n in networks}
-        assert 84532 in chain_ids
-        assert 8453 in chain_ids
-        assert 31337 in chain_ids
+        clusters = {n["cluster"] for n in networks}
+        assert "devnet" in clusters
+        assert "mainnet-beta" in clusters
+        assert "localnet" in clusters

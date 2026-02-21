@@ -36,7 +36,7 @@ interface Worker {
 
 // ─── Constants ───────────────────────────────────────────────
 
-const API = process.env.NEXT_PUBLIC_BUTLER_API_URL || "http://localhost:3001";
+const API = process.env.NEXT_PUBLIC_BUTLER_API_URL || "http://localhost:3001/api/v1";
 
 const STATUS_COLORS: Record<string, string> = {
   open: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
@@ -168,8 +168,8 @@ export default function MarketplacePage() {
   const fetchAll = useCallback(async () => {
     try {
       const [jobsRes, workersRes] = await Promise.all([
-        fetch(`${API}/api/v1/marketplace/jobs`),
-        fetch(`${API}/api/v1/marketplace/workers`),
+        fetch(`${API}/marketplace/jobs`),
+        fetch(`${API}/marketplace/workers`),
       ]);
       const jobsData = await jobsRes.json();
       const workersData = await workersRes.json();
@@ -189,7 +189,7 @@ export default function MarketplacePage() {
       setBids([]);
       return;
     }
-    fetch(`${API}/api/v1/marketplace/bids/${selectedJob}`)
+    fetch(`${API}/marketplace/bids/${selectedJob}`)
       .then((r) => r.json())
       .then((d) => setBids(d.bids || []))
       .catch(() => setBids([]));
@@ -217,7 +217,7 @@ export default function MarketplacePage() {
               SOTA <span className="text-cyan-400">Marketplace</span>
             </h1>
             <span className="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-full font-medium">
-              Base Sepolia
+              Solana Devnet
             </span>
           </div>
           <div className="flex items-center gap-2">

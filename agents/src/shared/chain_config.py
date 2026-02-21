@@ -1,42 +1,37 @@
 """
 Chain Configuration for SOTA Agents
 
-Base Sepolia (testnet) and Base mainnet.
-Loads contract addresses from deployment JSON or env vars.
+Solana Devnet and Mainnet-Beta.
+Loads program ID and keypair from env vars.
 """
 
 import os
 import json
+import base64
 from enum import IntEnum
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 from pathlib import Path
+
 from dotenv import load_dotenv
+from solders.pubkey import Pubkey
+from solders.keypair import Keypair
 
 # Load from project root .env (single source of truth)
 _root_env = Path(__file__).resolve().parent.parent.parent.parent / ".env"
 load_dotenv(_root_env)
 
 
-# ─── Network Definitions ─────────────────────────────────────
+# ---- Network Definitions ------------------------------------------------
 
 @dataclass
-class NetworkConfig:
-    """Blockchain network configuration"""
+class ClusterConfig:
+    """Solana cluster configuration"""
     rpc_url: str
-    chain_id: int
+    ws_url: str
+    cluster_name: str  # "devnet", "mainnet-beta", "localnet"
     explorer_url: str
-    native_currency: str = "ETH"
-
-
-@dataclass
-class ContractAddresses:
-    """Deployed contract addresses"""
-    order_book: str = ""
-    escrow: str = ""
-    agent_registry: str = ""
-    usdc: str = ""
-    reputation_token: str = ""
+    native_currency: str = "SOL"
 
 
 @dataclass
@@ -47,80 +42,150 @@ class AgentEndpoints:
     hackathon: str = "http://localhost:3005"
 
 
-# ─── Networks ────────────────────────────────────────────────
+# ---- Clusters ------------------------------------------------------------
 
-BASE_SEPOLIA = NetworkConfig(
-    rpc_url=os.getenv("RPC_URL", "https://sepolia.base.org"),
-    chain_id=84532,
-    explorer_url="https://sepolia.basescan.org",
-    native_currency="ETH",
+SOLANA_DEVNET = ClusterConfig(
+    rpc_url=os.getenv("RPC_URL", "https://api.devnet.solana.com"),
+    ws_url=os.getenv("WS_URL", "wss://api.devnet.solana.com"),
+    cluster_name="devnet",
+    explorer_url="https://explorer.solana.com/?cluster=devnet",
 )
 
-BASE_MAINNET = NetworkConfig(
-    rpc_url="https://mainnet.base.org",
-    chain_id=8453,
-    explorer_url="https://basescan.org",
-    native_currency="ETH",
+SOLANA_MAINNET = ClusterConfig(
+    rpc_url="https://api.mainnet-beta.solana.com",
+    ws_url="wss://api.mainnet-beta.solana.com",
+    cluster_name="mainnet-beta",
+    explorer_url="https://explorer.solana.com",
 )
 
-HARDHAT_LOCAL = NetworkConfig(
-    rpc_url="http://127.0.0.1:8545",
-    chain_id=31337,
+SOLANA_LOCALNET = ClusterConfig(
+    rpc_url="http://127.0.0.1:8899",
+    ws_url="ws://127.0.0.1:8900",
+    cluster_name="localnet",
     explorer_url="",
-    native_currency="ETH",
 )
 
 
-def get_network() -> NetworkConfig:
-    """Get the current network configuration based on CHAIN_ID env."""
-    chain_id = int(os.getenv("CHAIN_ID", "84532"))
-    if chain_id == 8453:
-        return BASE_MAINNET
-    elif chain_id == 31337:
-        return HARDHAT_LOCAL
-    return BASE_SEPOLIA
+def get_cluster() -> ClusterConfig:
+    """Get the current cluster configuration based on SOLANA_CLUSTER env."""
+    cluster = os.getenv("SOLANA_CLUSTER", "devnet").lower()
+    if cluster == "mainnet-beta" or cluster == "mainnet":
+        return SOLANA_MAINNET
+    elif cluster == "localnet" or cluster == "localhost":
+        return SOLANA_LOCALNET
+    return SOLANA_DEVNET
 
 
-def get_contract_addresses() -> ContractAddresses:
+# Backward-compatible alias
+get_network = get_cluster
+
+
+def get_rpc_url() -> str:
+    """Get the RPC URL for the current cluster."""
+    return get_cluster().rpc_url
+
+
+# ---- Program ID ----------------------------------------------------------
+
+PROGRAM_ID = Pubkey.from_string(
+    os.getenv("PROGRAM_ID", "EuGy9m9G5H5QNm3YaHQ26Peo5ZTABqWHk83R3AT2nYSD")
+)
+
+
+def get_program_id() -> Pubkey:
+    """Get the marketplace program ID."""
+    return PROGRAM_ID
+
+
+# ---- USDC Mint -----------------------------------------------------------
+
+# Devnet USDC mint (Circle devnet faucet) -- override via env
+USDC_MINT = Pubkey.from_string(
+    os.getenv("USDC_MINT", "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
+)
+
+# SPL Token Program ID (constant)
+TOKEN_PROGRAM_ID = Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+
+# Associated Token Account Program ID (constant)
+ASSOCIATED_TOKEN_PROGRAM_ID = Pubkey.from_string(
+    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+)
+
+# System Program ID (constant)
+SYSTEM_PROGRAM_ID = Pubkey.from_string("11111111111111111111111111111111")
+
+# Sysvar Rent
+SYSVAR_RENT_PUBKEY = Pubkey.from_string("SysvarRent111111111111111111111111111111111")
+
+
+# ---- Keypair Loading -----------------------------------------------------
+
+def get_keypair(agent_type: str = "butler") -> Optional[Keypair]:
     """
-    Load contract addresses from env vars or the deployment JSON.
-    Tries the latest deployment file matching the current chain ID.
+    Load a Solana Keypair from env var.
+
+    Supports two formats:
+      - base58-encoded secret key string
+      - JSON array of bytes (e.g. from solana-keygen)
+
+    Args:
+        agent_type: One of 'butler', 'worker', 'caller', 'hackathon'.
+
+    Returns:
+        Keypair or None if the env var is not set.
     """
-    # Try env vars first
-    order_book = os.getenv("ORDERBOOK_ADDRESS")
-    if order_book:
-        return ContractAddresses(
-            order_book=order_book,
-            escrow=os.getenv("ESCROW_ADDRESS", ""),
-            agent_registry=os.getenv("AGENT_REGISTRY_ADDRESS", ""),
-            usdc=os.getenv("USDC_ADDRESS", ""),
-            reputation_token=os.getenv("REPUTATION_TOKEN_ADDRESS", ""),
-        )
+    key_map = {
+        "butler": "PRIVATE_KEY",
+        "worker": "WORKER_PRIVATE_KEY",
+        "caller": "CALLER_PRIVATE_KEY",
+        "hackathon": "HACKATHON_PRIVATE_KEY",
+    }
+    env_var = key_map.get(agent_type.lower(), "PRIVATE_KEY")
+    raw = os.getenv(env_var)
+    if not raw:
+        return None
 
-    # Try deployment file
-    network = get_network()
-    deployment_names = [
-        f"base-sepolia-{network.chain_id}.json",
-        f"hardhat-local-{network.chain_id}.json",
-        f"base-mainnet-{network.chain_id}.json",
-    ]
+    raw = raw.strip()
 
-    contracts_dir = Path(__file__).parent.parent.parent.parent / "contracts" / "deployments"
-    for name in deployment_names:
-        path = contracts_dir / name
-        if path.exists():
-            with open(path) as f:
-                c = json.load(f).get("contracts", {})
-                return ContractAddresses(
-                    order_book=c.get("OrderBook", ""),
-                    escrow=c.get("Escrow", ""),
-                    agent_registry=c.get("AgentRegistry", ""),
-                    usdc=c.get("USDC", ""),
-                    reputation_token=c.get("ReputationToken", ""),
-                )
+    # Try JSON array first: [12, 34, 56, ...]
+    if raw.startswith("["):
+        try:
+            byte_list = json.loads(raw)
+            return Keypair.from_bytes(bytes(byte_list))
+        except (json.JSONDecodeError, ValueError, OverflowError):
+            pass
 
-    # Empty fallback
-    return ContractAddresses()
+    # Try base58
+    try:
+        return Keypair.from_base58_string(raw)
+    except Exception:
+        pass
+
+    # Try base64
+    try:
+        decoded = base64.b64decode(raw)
+        return Keypair.from_bytes(decoded)
+    except Exception:
+        pass
+
+    raise ValueError(
+        f"Cannot parse keypair from env var {env_var}. "
+        "Provide a base58 string, base64 string, or JSON byte array."
+    )
+
+
+# Backward-compatible alias
+def get_private_key(agent_type: str = "butler") -> Optional[str]:
+    """Get the raw private key string from env (for backward compat)."""
+    key_map = {
+        "butler": "PRIVATE_KEY",
+        "worker": "WORKER_PRIVATE_KEY",
+        "caller": "CALLER_PRIVATE_KEY",
+        "hackathon": "HACKATHON_PRIVATE_KEY",
+    }
+    env_var = key_map.get(agent_type.lower(), "PRIVATE_KEY")
+    return os.getenv(env_var)
 
 
 def get_agent_endpoints() -> AgentEndpoints:
@@ -132,7 +197,7 @@ def get_agent_endpoints() -> AgentEndpoints:
     )
 
 
-# ─── Job / Agent Types ───────────────────────────────────────
+# ---- Job / Agent Types ---------------------------------------------------
 
 class JobType(IntEnum):
     """Job types supported by SOTA agents"""
@@ -161,15 +226,3 @@ AGENT_CAPABILITIES = {
     "CALLER": ["phone_call", "voice_verification", "reservation_booking"],
     "HACKATHON": ["hackathon_search", "web_scraping", "event_filtering"],
 }
-
-
-def get_private_key(agent_type: str = "butler") -> Optional[str]:
-    """Get the private key for a specific agent type."""
-    key_map = {
-        "butler": "PRIVATE_KEY",
-        "worker": "WORKER_PRIVATE_KEY",
-        "caller": "CALLER_PRIVATE_KEY",
-        "hackathon": "HACKATHON_PRIVATE_KEY",
-    }
-    env_var = key_map.get(agent_type.lower(), "PRIVATE_KEY")
-    return os.getenv(env_var)

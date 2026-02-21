@@ -43,7 +43,9 @@ logger = logging.getLogger(__name__)
 
 HUB_HOST = os.getenv("HUB_HOST", "0.0.0.0")
 HUB_PORT = int(os.getenv("HUB_PORT", "3002"))
-CORS_ORIGINS = os.getenv("HUB_CORS_ORIGINS", "*").split(",")
+_cors_env = os.getenv("CORS_ALLOWED_ORIGINS", "")
+_hub_cors = os.getenv("HUB_CORS_ORIGINS", "*")
+CORS_ORIGINS = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else _hub_cors.split(",")
 MAX_WS_MESSAGE_BYTES = int(os.getenv("HUB_MAX_WS_MSG_BYTES", str(64 * 1024)))  # 64 KB
 
 # ─── Shared State ─────────────────────────────────────────────
@@ -55,6 +57,8 @@ router = JobRouter(registry=registry, engine=engine)
 
 # ─── App Factory ──────────────────────────────────────────────
 
+# NOTE: When mounted as sub-app via butler_api.py, this lifespan is NOT invoked.
+# It only runs in standalone mode (python -m agents.marketplace.hub).
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Marketplace Hub starting on %s:%d", HUB_HOST, HUB_PORT)

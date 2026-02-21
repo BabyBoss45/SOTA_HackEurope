@@ -6,7 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
   title: "SOTA - AI Agent Marketplace",
-  description: "Decentralized AI agent marketplace on Base",
+  description: "Decentralized AI agent marketplace on Solana",
 };
 
 const themeInitScript = `

@@ -54,7 +54,7 @@ For each function, check for ALL of the following categories:
 
 **E. Blockchain/Web3 Specific**
 - Using SHA-256 instead of Keccak-256 for on-chain delivery proof
-- USDC decimal handling (must be 6 decimals on Base Sepolia, chain ID 84532)
+- USDC decimal handling (must be 6 decimals on Solana Devnet)
 - Nonce management without threading lock
 - Missing gas estimation or hardcoded gas values
 - Transaction receipt not awaited or timeout not handled

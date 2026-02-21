@@ -1,31 +1,45 @@
 """
-Wallet Management for Archive Agents
+Wallet Management for SOTA Agents -- Solana Edition
 
-Each agent has its own wallet for:
+Each agent has its own Solana keypair for:
 - Signing transactions
-- Managing funds
-- Interacting with contracts
+- Managing SOL and USDC balances
+- Interacting with the Anchor program
 """
 
 import os
 import json
-from typing import Optional
-from dataclasses import dataclass, field
+import base64
+import logging
+from typing import Optional, Union
+from dataclasses import dataclass
 from decimal import Decimal
 
-from web3 import Web3
-from eth_account import Account
-from eth_account.signers.local import LocalAccount
+from solders.pubkey import Pubkey
+from solders.keypair import Keypair
+from solders.system_program import TransferParams, transfer
+from solders.transaction import Transaction
+from solders.message import Message
+from solana.rpc.api import Client
+from solana.rpc.commitment import Confirmed
 
-from .config import get_network, get_contract_addresses
+from .chain_config import (
+    get_cluster,
+    get_keypair,
+    USDC_MINT,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class WalletBalance:
     """Wallet balance information"""
-    native: Decimal  # GAS balance
+    native: Decimal  # SOL balance
     usdc: Decimal    # USDC balance
-    
+
     def to_dict(self) -> dict:
         return {
             "native": str(self.native),
@@ -39,288 +53,237 @@ class TransactionResult:
     success: bool
     tx_hash: Optional[str] = None
     error: Optional[str] = None
-    gas_used: Optional[int] = None
-    
+
     def to_dict(self) -> dict:
         return {
             "success": self.success,
             "tx_hash": self.tx_hash,
             "error": self.error,
-            "gas_used": self.gas_used,
         }
+
+
+def _get_associated_token_address(wallet: Pubkey, mint: Pubkey) -> Pubkey:
+    """Derive the associated token account address for a wallet + mint."""
+    seeds = [
+        bytes(wallet),
+        bytes(TOKEN_PROGRAM_ID),
+        bytes(mint),
+    ]
+    ata, _ = Pubkey.find_program_address(seeds, ASSOCIATED_TOKEN_PROGRAM_ID)
+    return ata
+
+
+def _parse_keypair(raw: Union[str, Keypair]) -> Keypair:
+    """
+    Parse a Keypair from various formats.
+
+    Accepts:
+      - A Keypair object (returned as-is)
+      - A base58-encoded secret key string
+      - A JSON byte array string: [12, 34, ...]
+      - A base64-encoded secret key string
+    """
+    if isinstance(raw, Keypair):
+        return raw
+
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("Cannot parse Solana keypair: input is empty or not a string.")
+
+    raw = raw.strip()
+
+    # JSON byte array: [12, 34, ...]
+    if raw.startswith("["):
+        try:
+            byte_list = json.loads(raw)
+            return Keypair.from_bytes(bytes(byte_list))
+        except (json.JSONDecodeError, ValueError, OverflowError):
+            pass
+
+    # base58
+    try:
+        return Keypair.from_base58_string(raw)
+    except Exception:
+        pass
+
+    # base64
+    try:
+        decoded = base64.b64decode(raw)
+        return Keypair.from_bytes(decoded)
+    except Exception:
+        pass
+
+    raise ValueError("Cannot parse Solana keypair from provided private key.")
 
 
 class AgentWallet:
     """
-    Wallet wrapper for an agent.
-    
+    Wallet wrapper for a Solana-based agent.
+
     Provides high-level methods for:
-    - Balance checking
-    - Token transfers
-    - Contract interactions
-    - Transaction signing
+    - Balance checking (SOL + USDC)
+    - SOL transfers
+    - USDC transfers (SPL token)
+    - Message signing (ed25519)
     """
-    
-    def __init__(self, private_key: str, agent_name: str = "agent"):
+
+    def __init__(self, private_key: Union[str, Keypair], agent_name: str = "agent"):
         """
-        Initialize wallet with private key.
-        
+        Initialize wallet with a Solana keypair or private key string.
+
         Args:
-            private_key: Hex-encoded private key (with or without 0x prefix)
-            agent_name: Name of the agent for logging
+            private_key: Solana Keypair, base58 secret key, JSON byte array,
+                         or base64-encoded secret key.
+            agent_name: Name of the agent for logging.
         """
         self.agent_name = agent_name
-        self.network = get_network()
-        self.addresses = get_contract_addresses()
-        
-        # Create Web3 instance
-        self.w3 = Web3(Web3.HTTPProvider(self.network.rpc_url))
-        
-        # Create account from private key
-        if not private_key.startswith("0x"):
-            private_key = f"0x{private_key}"
-        self.account: LocalAccount = Account.from_key(private_key)
-        self.w3.eth.default_account = self.account.address
-        
-        # Load USDC ABI for token operations
-        self._usdc_abi = self._load_erc20_abi()
-    
+        self.cluster = get_cluster()
+        self.keypair: Keypair = _parse_keypair(private_key)
+        self._client = Client(self.cluster.rpc_url)
+
     @property
     def address(self) -> str:
-        """Get wallet address"""
-        return self.account.address
-    
+        """Get wallet address (base58)"""
+        return str(self.keypair.pubkey())
+
     @property
-    def private_key(self) -> str:
-        """Get private key (be careful with this!)"""
-        return self.account.key.hex()
-    
-    def _load_erc20_abi(self) -> list:
-        """Load minimal ERC20 ABI for token operations"""
-        return [
-            {
-                "constant": True,
-                "inputs": [{"name": "_owner", "type": "address"}],
-                "name": "balanceOf",
-                "outputs": [{"name": "balance", "type": "uint256"}],
-                "type": "function"
-            },
-            {
-                "constant": False,
-                "inputs": [
-                    {"name": "_to", "type": "address"},
-                    {"name": "_value", "type": "uint256"}
-                ],
-                "name": "transfer",
-                "outputs": [{"name": "", "type": "bool"}],
-                "type": "function"
-            },
-            {
-                "constant": False,
-                "inputs": [
-                    {"name": "_spender", "type": "address"},
-                    {"name": "_value", "type": "uint256"}
-                ],
-                "name": "approve",
-                "outputs": [{"name": "", "type": "bool"}],
-                "type": "function"
-            },
-            {
-                "constant": True,
-                "inputs": [
-                    {"name": "_owner", "type": "address"},
-                    {"name": "_spender", "type": "address"}
-                ],
-                "name": "allowance",
-                "outputs": [{"name": "", "type": "uint256"}],
-                "type": "function"
-            },
-            {
-                "constant": True,
-                "inputs": [],
-                "name": "decimals",
-                "outputs": [{"name": "", "type": "uint8"}],
-                "type": "function"
-            }
-        ]
-    
+    def pubkey(self) -> Pubkey:
+        """Get wallet public key"""
+        return self.keypair.pubkey()
+
     def get_balance(self) -> WalletBalance:
         """Get current wallet balances"""
-        # Native balance (GAS)
-        native_wei = self.w3.eth.get_balance(self.address)
-        native = Decimal(self.w3.from_wei(native_wei, 'ether'))
-        
-        # USDC balance
-        usdc = Decimal(0)
-        if self.addresses.usdc:
-            usdc_contract = self.w3.eth.contract(
-                address=Web3.to_checksum_address(self.addresses.usdc),
-                abi=self._usdc_abi
-            )
-            usdc_raw = usdc_contract.functions.balanceOf(self.address).call()
-            # USDC has 6 decimals
-            usdc = Decimal(usdc_raw) / Decimal(10 ** 6)
-        
-        return WalletBalance(native=native, usdc=usdc)
-    
+        # SOL balance
+        try:
+            resp = self._client.get_balance(self.pubkey, commitment=Confirmed)
+            lamports = resp.value
+            sol = Decimal(lamports) / Decimal(10**9)
+        except Exception as e:
+            logger.warning("Failed to get SOL balance: %s", e)
+            sol = Decimal(0)
+
+        # USDC balance (SPL token)
+        usdc = self.get_usdc_balance()
+
+        return WalletBalance(native=sol, usdc=usdc)
+
     def get_native_balance(self) -> Decimal:
-        """Get native token balance in ether"""
-        wei = self.w3.eth.get_balance(self.address)
-        return Decimal(self.w3.from_wei(wei, 'ether'))
-    
+        """Get SOL balance"""
+        try:
+            resp = self._client.get_balance(self.pubkey, commitment=Confirmed)
+            return Decimal(resp.value) / Decimal(10**9)
+        except Exception:
+            return Decimal(0)
+
     def get_usdc_balance(self) -> Decimal:
         """Get USDC balance"""
-        if not self.addresses.usdc:
-            return Decimal(0)
-        
-        usdc_contract = self.w3.eth.contract(
-            address=Web3.to_checksum_address(self.addresses.usdc),
-            abi=self._usdc_abi
-        )
-        raw = usdc_contract.functions.balanceOf(self.address).call()
-        return Decimal(raw) / Decimal(10 ** 6)
-    
-    def transfer_native(self, to: str, amount_ether: Decimal) -> TransactionResult:
+        try:
+            ata = _get_associated_token_address(self.pubkey, USDC_MINT)
+            resp = self._client.get_token_account_balance(ata, commitment=Confirmed)
+            if resp.value:
+                return Decimal(resp.value.ui_amount_string)
+        except Exception:
+            pass
+        return Decimal(0)
+
+    def transfer_native(self, to: str, amount_sol: Decimal) -> TransactionResult:
         """
-        Transfer native tokens (GAS).
-        
+        Transfer SOL to another address.
+
         Args:
-            to: Recipient address
-            amount_ether: Amount in ether
+            to: Recipient address (base58)
+            amount_sol: Amount in SOL
         """
         try:
-            tx = {
-                'from': self.address,
-                'to': Web3.to_checksum_address(to),
-                'value': self.w3.to_wei(float(amount_ether), 'ether'),
-                'nonce': self.w3.eth.get_transaction_count(self.address),
-                'gas': 21000,
-                'gasPrice': self.w3.eth.gas_price,
-                'chainId': self.network.chain_id,
-            }
-            
-            signed = self.w3.eth.account.sign_transaction(tx, self.account.key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
-            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-            
-            return TransactionResult(
-                success=receipt['status'] == 1,
-                tx_hash=tx_hash.hex(),
-                gas_used=receipt['gasUsed']
+            to_pubkey = Pubkey.from_string(to)
+            lamports = int(amount_sol * Decimal(10**9))
+
+            transfer_ix = transfer(
+                TransferParams(
+                    from_pubkey=self.pubkey,
+                    to_pubkey=to_pubkey,
+                    lamports=lamports,
+                )
             )
+
+            blockhash_resp = self._client.get_latest_blockhash(commitment=Confirmed)
+            recent_blockhash = blockhash_resp.value.blockhash
+
+            msg = Message.new_with_blockhash(
+                [transfer_ix],
+                self.pubkey,
+                recent_blockhash,
+            )
+            tx = Transaction.new_unsigned(msg)
+            tx.sign([self.keypair], recent_blockhash)
+
+            resp = self._client.send_transaction(tx)
+            sig = str(resp.value)
+
+            # Confirm
+            self._client.confirm_transaction(resp.value, commitment=Confirmed)
+
+            return TransactionResult(success=True, tx_hash=sig)
         except Exception as e:
             return TransactionResult(success=False, error=str(e))
-    
+
     def transfer_usdc(self, to: str, amount: Decimal) -> TransactionResult:
         """
-        Transfer USDC tokens.
-        
+        Transfer USDC tokens (SPL transfer).
+
         Args:
-            to: Recipient address
-            amount: Amount in USDC (not raw units)
+            to: Recipient address (base58)
+            amount: Amount in USDC (human units, not raw)
         """
-        if not self.addresses.usdc:
-            return TransactionResult(success=False, error="USDC address not configured")
-        
         try:
-            usdc_contract = self.w3.eth.contract(
-                address=Web3.to_checksum_address(self.addresses.usdc),
-                abi=self._usdc_abi
+            from spl.token.instructions import transfer_checked, TransferCheckedParams
+
+            to_pubkey = Pubkey.from_string(to)
+            raw_amount = int(amount * Decimal(10**6))  # USDC has 6 decimals
+
+            source_ata = _get_associated_token_address(self.pubkey, USDC_MINT)
+            dest_ata = _get_associated_token_address(to_pubkey, USDC_MINT)
+
+            ix = transfer_checked(
+                TransferCheckedParams(
+                    program_id=TOKEN_PROGRAM_ID,
+                    source=source_ata,
+                    mint=USDC_MINT,
+                    dest=dest_ata,
+                    owner=self.pubkey,
+                    amount=raw_amount,
+                    decimals=6,
+                )
             )
-            
-            # Convert to raw units (6 decimals)
-            raw_amount = int(amount * 10 ** 6)
-            
-            tx = usdc_contract.functions.transfer(
-                Web3.to_checksum_address(to),
-                raw_amount
-            ).build_transaction({
-                'from': self.address,
-                'nonce': self.w3.eth.get_transaction_count(self.address),
-                'gas': 100000,
-                'gasPrice': self.w3.eth.gas_price,
-                'chainId': self.network.chain_id,
-            })
-            
-            signed = self.w3.eth.account.sign_transaction(tx, self.account.key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
-            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-            
-            return TransactionResult(
-                success=receipt['status'] == 1,
-                tx_hash=tx_hash.hex(),
-                gas_used=receipt['gasUsed']
+
+            blockhash_resp = self._client.get_latest_blockhash(commitment=Confirmed)
+            recent_blockhash = blockhash_resp.value.blockhash
+
+            msg = Message.new_with_blockhash(
+                [ix],
+                self.pubkey,
+                recent_blockhash,
             )
+            tx = Transaction.new_unsigned(msg)
+            tx.sign([self.keypair], recent_blockhash)
+
+            resp = self._client.send_transaction(tx)
+            sig = str(resp.value)
+            self._client.confirm_transaction(resp.value, commitment=Confirmed)
+
+            return TransactionResult(success=True, tx_hash=sig)
         except Exception as e:
             return TransactionResult(success=False, error=str(e))
-    
-    def approve_usdc(self, spender: str, amount: Decimal) -> TransactionResult:
-        """
-        Approve USDC spending for a contract.
-        
-        Args:
-            spender: Contract address to approve
-            amount: Amount to approve (use Decimal('inf') for unlimited)
-        """
-        if not self.addresses.usdc:
-            return TransactionResult(success=False, error="USDC address not configured")
-        
-        try:
-            usdc_contract = self.w3.eth.contract(
-                address=Web3.to_checksum_address(self.addresses.usdc),
-                abi=self._usdc_abi
-            )
-            
-            # Max uint256 for unlimited approval, otherwise convert
-            if amount == Decimal('inf'):
-                raw_amount = 2**256 - 1
-            else:
-                raw_amount = int(amount * 10 ** 6)
-            
-            tx = usdc_contract.functions.approve(
-                Web3.to_checksum_address(spender),
-                raw_amount
-            ).build_transaction({
-                'from': self.address,
-                'nonce': self.w3.eth.get_transaction_count(self.address),
-                'gas': 100000,
-                'gasPrice': self.w3.eth.gas_price,
-                'chainId': self.network.chain_id,
-            })
-            
-            signed = self.w3.eth.account.sign_transaction(tx, self.account.key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
-            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-            
-            return TransactionResult(
-                success=receipt['status'] == 1,
-                tx_hash=tx_hash.hex(),
-                gas_used=receipt['gasUsed']
-            )
-        except Exception as e:
-            return TransactionResult(success=False, error=str(e))
-    
+
     def sign_message(self, message: str) -> str:
-        """Sign a message with the wallet's private key"""
-        from eth_account.messages import encode_defunct
-        
-        msg = encode_defunct(text=message)
-        signed = self.w3.eth.account.sign_message(msg, self.account.key)
-        return signed.signature.hex()
-    
-    def get_nonce(self) -> int:
-        """Get current nonce for the wallet"""
-        return self.w3.eth.get_transaction_count(self.address)
-    
-    def estimate_gas(self, to: str, data: bytes = b'', value: int = 0) -> int:
-        """Estimate gas for a transaction"""
-        return self.w3.eth.estimate_gas({
-            'from': self.address,
-            'to': Web3.to_checksum_address(to),
-            'data': data,
-            'value': value
-        })
-    
+        """Sign a message with the wallet's keypair. Returns hex signature."""
+        msg_bytes = message.encode("utf-8")
+        sig = self.keypair.sign_message(msg_bytes)
+        return bytes(sig).hex()
+
+    def get_address(self) -> str:
+        """Get wallet address (alias for address property)."""
+        return self.address
+
     def __repr__(self) -> str:
         return f"AgentWallet({self.agent_name}, {self.address[:10]}...)"
 
@@ -328,28 +291,25 @@ class AgentWallet:
 def create_wallet_from_env(agent_type: str) -> Optional[AgentWallet]:
     """
     Create a wallet from environment variable.
-    
+
     Args:
-        agent_type: One of 'manager', 'caller'
-    
+        agent_type: One of 'butler', 'worker', 'caller', 'hackathon'
+
     Returns:
         AgentWallet or None if key not found
     """
-    key_name = f"{agent_type.upper()}_PRIVATE_KEY"
-    private_key = os.getenv(key_name)
-    
-    if not private_key:
+    keypair = get_keypair(agent_type)
+    if not keypair:
         return None
-    
-    return AgentWallet(private_key, agent_type)
+    return AgentWallet(keypair, agent_type)
 
 
 def generate_new_wallet() -> tuple[str, str]:
     """
-    Generate a new random wallet.
-    
+    Generate a new random Solana wallet.
+
     Returns:
-        Tuple of (address, private_key)
+        Tuple of (address_base58, secret_key_base58)
     """
-    account = Account.create()
-    return account.address, account.key.hex()
+    kp = Keypair()
+    return str(kp.pubkey()), str(kp)

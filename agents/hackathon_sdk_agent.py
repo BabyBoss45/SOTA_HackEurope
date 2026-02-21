@@ -97,7 +97,7 @@ class SDKHackathonAgent(SOTAAgent):
 
         self._runner = AgentRunner(
             name="hackathon",
-            description="Hackathon search & registration agent for SOTA on Base",
+            description="Hackathon search & registration agent for SOTA on Solana",
             system_prompt=HACKATHON_SYSTEM_PROMPT,
             max_steps=15,
             tools=ToolManager(all_tools),

@@ -1,48 +1,58 @@
 "use client";
 
-import { formatUnits } from 'viem';
-import { useReadContract } from 'wagmi';
-
-const STABLECOIN_ADDRESS = (process.env.NEXT_PUBLIC_USDC_ADDRESS ||
-  process.env.NEXT_PUBLIC_STABLECOIN_ADDRESS ||
-  '0x0000000000000000000000000000000000000000') as `0x${string}`;
-const BASE_SEPOLIA_ID = 84532;
-const BUTLER_ADDRESS = process.env.NEXT_PUBLIC_BUTLER_ADDRESS ||
-  '0x741ae17d47d479e878adfb3c78b02db583c63d58';
-
-const erc20Abi = [
-  {
-    constant: true,
-    inputs: [{ name: 'owner', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-] as const;
+import { useState, useEffect, useCallback } from "react";
+import { useConnection } from "@solana/wallet-adapter-react";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
+import { USDC_MINT, BUTLER_ADDRESS } from "@/src/solanaConfig";
 
 export default function UsdcBalance() {
-  const { data, isLoading, error, isFetching } = useReadContract({
-    address: STABLECOIN_ADDRESS,
-    abi: erc20Abi,
-    functionName: 'balanceOf',
-    args: [BUTLER_ADDRESS as `0x${string}`],
-    chainId: BASE_SEPOLIA_ID,
-    query: {
-      enabled: true,
-      refetchInterval: 15000,
-    },
-  });
+  const { connection } = useConnection();
+  const [balance, setBalance] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const fetchBalance = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(false);
+
+      const ata = await getAssociatedTokenAddress(
+        USDC_MINT,
+        BUTLER_ADDRESS
+      );
+
+      const tokenAccountInfo = await connection.getTokenAccountBalance(ata);
+      const uiAmount = tokenAccountInfo.value.uiAmountString ?? "0";
+      setBalance(uiAmount);
+    } catch (err) {
+      // Token account may not exist yet (no USDC received)
+      console.warn("Failed to fetch USDC balance:", err);
+      setBalance("0");
+      // Only flag as error if it's not a "account not found" situation
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/could not find/i.test(msg) || /account.*not.*found/i.test(msg)) {
+        setBalance("0");
+      } else {
+        setError(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [connection]);
+
+  useEffect(() => {
+    fetchBalance();
+    const interval = setInterval(fetchBalance, 15_000);
+    return () => clearInterval(interval);
+  }, [fetchBalance]);
 
   let content: string;
   if (error) {
-    content = 'Unable to load balance';
-  } else if (isLoading || isFetching) {
-    content = 'Loading balance…';
+    content = "Unable to load balance";
+  } else if (loading) {
+    content = "Loading balance...";
   } else {
-    const raw = data ?? BigInt(0);
-    const formatted = formatUnits(raw, 6);
-    content = `${formatted} USDC`;
+    content = `${balance} USDC`;
   }
 
   return (

@@ -1,6 +1,7 @@
-# Web3 / Blockchain (Base Sepolia)
-web3>=7.0.0
-eth-account>=0.13.0
+# Solana / Blockchain (Solana Devnet)
+solana>=0.34.0
+solders>=0.21.0
+anchorpy>=0.20.0
 
 # Core (All scripts)
 python-dotenv>=1.0.0

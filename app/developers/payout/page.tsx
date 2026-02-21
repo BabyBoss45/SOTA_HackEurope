@@ -20,48 +20,46 @@ import {
 import { FloatingPaths } from "@/components/ui/background-paths-wrapper";
 import { useAuth } from "@/components/auth-provider";
 import Link from "next/link";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
+import { PublicKey, SystemProgram, type Connection } from "@solana/web3.js";
+import { Program, AnchorProvider, setProvider } from "@coral-xyz/anchor";
+import type { Idl } from "@coral-xyz/anchor";
 import {
-  createPublicClient,
-  createWalletClient,
-  custom,
-  formatUnits,
-  http,
-  type Address,
-} from "viem";
-import {
-  AGENT_REGISTRY_ABI,
-  BASE_SEPOLIA_CHAIN,
-  CONTRACT_ADDRESSES,
+  PROGRAM_ID,
+  getAgentPda,
+  getExplorerUrl,
   explorerAddress,
   explorerTx,
+  shortAddr,
 } from "@/lib/contracts";
 
-const baseSepolia = {
-  id: BASE_SEPOLIA_CHAIN.id,
-  name: BASE_SEPOLIA_CHAIN.name,
-  nativeCurrency: BASE_SEPOLIA_CHAIN.nativeCurrency,
-  rpcUrls: { default: { http: [BASE_SEPOLIA_CHAIN.rpcUrl] } },
-  blockExplorers: {
-    default: { name: "BaseScan", url: BASE_SEPOLIA_CHAIN.explorer },
-  },
-} as const;
+/* ── IDL import — load the Anchor IDL for the sota_marketplace program ── */
+import idlJson from "../../../../anchor/target/idl/sota_marketplace.json";
+const IDL = idlJson as Idl;
 
-const publicClient = createPublicClient({
-  chain: baseSepolia,
-  transport: http(BASE_SEPOLIA_CHAIN.rpcUrl),
-});
-
-function shortAddr(a: string): string {
-  return `${a.slice(0, 6)}...${a.slice(-4)}`;
-}
+/* ── Helpers ── */
 
 function fmtUsdc(val: bigint): string {
-  const n = Number(formatUnits(val, 6));
+  // USDC on Solana has 6 decimals
+  const n = Number(val) / 1_000_000;
   return n % 1 === 0 ? n.toFixed(0) : n.toFixed(2);
 }
 
+/** Create a read-only Anchor provider for fetching on-chain data. */
+function makeReadOnlyProvider(connection: Connection): AnchorProvider {
+  // Anchor requires a wallet but we only need read access — use a dummy wallet.
+  const dummyWallet = {
+    publicKey: SystemProgram.programId,
+    signTransaction: async (tx: any) => tx,
+    signAllTransactions: async (txs: any[]) => txs,
+  };
+  return new AnchorProvider(connection, dummyWallet as any, {
+    commitment: "confirmed",
+  });
+}
+
 interface AgentInfo {
-  address: Address;
+  address: string; // base58 Solana address
   name: string;
   isActive: boolean;
   isOnChain: boolean;
@@ -86,11 +84,13 @@ interface AgentMetric {
 export default function PayoutPage(): React.JSX.Element {
   const { user, loading: authLoading, getIdToken } = useAuth();
 
-  const [account, setAccount] = useState<Address | null>(null);
-  const [connecting, setConnecting] = useState(false);
+  const { publicKey, connected, signTransaction, signAllTransactions, wallet } = useWallet();
+  const { connection } = useConnection();
+  const account = connected && publicKey ? publicKey.toBase58() : null;
+
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<Address | null>(null);
-  const [agentEarnings, setAgentEarnings] = useState<Map<Address, bigint>>(new Map());
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [agentEarnings, setAgentEarnings] = useState<Map<string, bigint>>(new Map());
   const [txPending, setTxPending] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,76 +98,37 @@ export default function PayoutPage(): React.JSX.Element {
   const [taskStats, setTaskStats] = useState<TaskStats | null>(null);
   const [agentMetrics, setAgentMetrics] = useState<AgentMetric[]>([]);
 
-  const getWalletClient = useCallback(() => {
-    if (typeof window === "undefined" || !(window as any).ethereum) return null;
-    return createWalletClient({
-      chain: baseSepolia,
-      transport: custom((window as any).ethereum),
+  /** Build an Anchor Program instance for sending transactions (requires a connected wallet). */
+  const getProgram = useCallback((): Program | null => {
+    if (!publicKey || !signTransaction || !signAllTransactions) return null;
+    const walletAdapter = {
+      publicKey,
+      signTransaction,
+      signAllTransactions,
+    };
+    const provider = new AnchorProvider(connection, walletAdapter as any, {
+      commitment: "confirmed",
     });
-  }, []);
+    setProvider(provider);
+    return new Program(IDL, provider);
+  }, [publicKey, signTransaction, signAllTransactions, connection]);
+
+  /** Build a read-only Anchor Program for fetching account data. */
+  const getReadOnlyProgram = useCallback((): Program => {
+    const provider = makeReadOnlyProvider(connection);
+    return new Program(IDL, provider);
+  }, [connection]);
 
   const authHeaders = useCallback(async (): Promise<HeadersInit> => {
     const token = await getIdToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   }, [getIdToken]);
 
-  const connectWallet = async () => {
-    if (typeof window === "undefined" || !(window as any).ethereum) {
-      setError("MetaMask not found. Please install it.");
-      return;
-    }
-    try {
-      setConnecting(true);
-      setError(null);
-      const accounts = await (window as any).ethereum.request({
-        method: "eth_requestAccounts",
-      });
-      if (accounts?.[0]) {
-        setAccount(accounts[0] as Address);
-        try {
-          await (window as any).ethereum.request({
-            method: "wallet_switchEthereumChain",
-            params: [{ chainId: "0x14a34" }],
-          });
-        } catch (switchErr: any) {
-          if (switchErr.code === 4902) {
-            await (window as any).ethereum.request({
-              method: "wallet_addEthereumChain",
-              params: [
-                {
-                  chainId: "0x14a34",
-                  chainName: BASE_SEPOLIA_CHAIN.name,
-                  rpcUrls: [BASE_SEPOLIA_CHAIN.rpcUrl],
-                  nativeCurrency: BASE_SEPOLIA_CHAIN.nativeCurrency,
-                  blockExplorerUrls: [BASE_SEPOLIA_CHAIN.explorer],
-                },
-              ],
-            });
-          }
-        }
-      }
-    } catch (err: any) {
-      setError(err?.message || "Wallet connection failed");
-    } finally {
-      setConnecting(false);
-    }
-  };
-
   const disconnectWallet = () => {
-    setAccount(null);
+    // The wallet adapter handles disconnect via its own UI; we clear local state
     setAgents([]);
     setSelectedAgent(null);
   };
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !(window as any).ethereum) return;
-    const handler = (accs: string[]) => {
-      if (accs.length === 0) disconnectWallet();
-      else setAccount(accs[0] as Address);
-    };
-    (window as any).ethereum.on("accountsChanged", handler);
-    return () => (window as any).ethereum?.removeListener("accountsChanged", handler);
-  }, []);
 
   const fetchAgents = useCallback(async () => {
     if (!account) return;
@@ -181,31 +142,25 @@ export default function PayoutPage(): React.JSX.Element {
       }
       const data = await res.json();
       const myAgents: AgentInfo[] = [];
+      const readProgram = getReadOnlyProgram();
 
       if (data.agents) {
         for (const a of data.agents) {
           if (!a.walletAddress) continue;
           let isOnChain = false;
+
           try {
-            const agentData = await publicClient.readContract({
-              address: CONTRACT_ADDRESSES.AgentRegistry,
-              abi: AGENT_REGISTRY_ABI,
-              functionName: "getAgent",
-              args: [a.walletAddress as Address],
-            }) as any;
-            isOnChain = Number(agentData.status ?? agentData[5] ?? 0) > 0;
+            const agentPubkey = new PublicKey(a.walletAddress);
+            const agentPda = getAgentPda(agentPubkey);
+            const agentAccount = await (readProgram.account as any).agent.fetch(agentPda);
+            // AgentStatus enum: 0=Unregistered, 1=Active, 2=Inactive, 3=Banned
+            const statusVal = typeof agentAccount.status === "object"
+              ? Object.keys(agentAccount.status)[0]
+              : agentAccount.status;
+            isOnChain = statusVal !== "unregistered" && statusVal !== 0;
           } catch {
-            try {
-              const dev = await publicClient.readContract({
-                address: CONTRACT_ADDRESSES.AgentRegistry,
-                abi: AGENT_REGISTRY_ABI,
-                functionName: "getDeveloper",
-                args: [a.walletAddress as Address],
-              }) as string;
-              isOnChain = dev !== "0x0000000000000000000000000000000000000000";
-            } catch {
-              isOnChain = false;
-            }
+            // Account not found or deserialization failed — not registered
+            isOnChain = false;
           }
 
           let capabilities: string[] = [];
@@ -216,7 +171,7 @@ export default function PayoutPage(): React.JSX.Element {
           }
 
           myAgents.push({
-            address: a.walletAddress as Address,
+            address: a.walletAddress,
             name: a.title || a.name || `Agent ${a.walletAddress.slice(0, 8)}`,
             isActive: a.status === "active",
             isOnChain,
@@ -237,11 +192,17 @@ export default function PayoutPage(): React.JSX.Element {
       setAgents(myAgents);
       setSelectedAgent((prev) => (myAgents.length > 0 && !prev ? myAgents[0].address : prev));
 
-      // TODO: Query Escrow contract for actual agent earnings
-      // Currently stubbed to 0 — pending Escrow contract integration
-      const earningsMap = new Map<Address, bigint>();
+      // Query on-chain reputation for earnings data
+      const earningsMap = new Map<string, bigint>();
       for (const agent of myAgents) {
-        earningsMap.set(agent.address, 0n);
+        try {
+          const { getReputationPda } = await import("@/lib/contracts");
+          const repPda = getReputationPda(new PublicKey(agent.address));
+          const repAccount = await (readProgram.account as any).reputation.fetch(repPda);
+          earningsMap.set(agent.address, BigInt(repAccount.totalEarned?.toString() ?? "0"));
+        } catch {
+          earningsMap.set(agent.address, 0n);
+        }
       }
       setAgentEarnings(earningsMap);
     } catch (err: any) {
@@ -249,7 +210,7 @@ export default function PayoutPage(): React.JSX.Element {
     } finally {
       setLoadingData(false);
     }
-  }, [account, authHeaders]);
+  }, [account, authHeaders, getReadOnlyProgram]);
 
   useEffect(() => {
     fetchAgents();
@@ -280,24 +241,31 @@ export default function PayoutPage(): React.JSX.Element {
   }, [user, fetchTaskStats]);
 
   const doRegisterOnChain = async () => {
-    if (!selectedAgent || !account) return;
-    const wc = getWalletClient();
-    if (!wc) return;
+    if (!selectedAgent || !account || !publicKey) return;
+    const program = getProgram();
+    if (!program) {
+      setError("Wallet not connected. Please connect your Solana wallet.");
+      return;
+    }
     const agentInfo = agents.find((a) => a.address === selectedAgent);
     if (!agentInfo) return;
+
     try {
       setTxPending(true);
       setError(null);
       setTxHash(null);
 
+      const agentWallet = new PublicKey(selectedAgent);
+      const agentPda = getAgentPda(agentWallet);
+
+      // Check if already registered
       try {
-        const agentData = await publicClient.readContract({
-          address: CONTRACT_ADDRESSES.AgentRegistry,
-          abi: AGENT_REGISTRY_ABI,
-          functionName: "getAgent",
-          args: [selectedAgent],
-        }) as any;
-        if (Number(agentData.status ?? agentData[5] ?? 0) > 0) {
+        const readProgram = getReadOnlyProgram();
+        const agentAccount = await (readProgram.account as any).agent.fetch(agentPda);
+        const statusVal = typeof agentAccount.status === "object"
+          ? Object.keys(agentAccount.status)[0]
+          : agentAccount.status;
+        if (statusVal !== "unregistered" && statusVal !== 0) {
           agentInfo.isOnChain = true;
           setAgents([...agents]);
           setTxPending(false);
@@ -305,28 +273,33 @@ export default function PayoutPage(): React.JSX.Element {
           return;
         }
       } catch {
-        // not registered — proceed
+        // not registered — proceed with registration
       }
 
-      const hash = await wc.writeContract({
-        address: CONTRACT_ADDRESSES.AgentRegistry,
-        abi: AGENT_REGISTRY_ABI,
-        functionName: "registerAgent",
-        args: [
-          selectedAgent,
+      const { getReputationPda } = await import("@/lib/contracts");
+      const reputationPda = getReputationPda(agentWallet);
+
+      const signature = await (program.methods as any)
+        .registerAgent(
           agentInfo.name,
-          "",
+          "", // metadata_uri
           agentInfo.capabilities.length > 0 ? agentInfo.capabilities : ["general"],
-        ],
-        account,
-        chain: baseSepolia,
-      });
-      setTxHash(hash);
-      await publicClient.waitForTransactionReceipt({ hash });
+        )
+        .accounts({
+          agent: agentPda,
+          reputation: reputationPda,
+          wallet: agentWallet,
+          developer: publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      setTxHash(signature);
+      // Anchor's .rpc() already confirms the transaction internally.
       await fetchAgents();
     } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || "Registration failed";
-      if (msg.includes("already registered")) {
+      const msg = err?.message || "Registration failed";
+      if (msg.includes("already registered") || msg.includes("AlreadyRegistered")) {
         await fetchAgents();
       } else {
         setError(msg);
@@ -359,7 +332,7 @@ export default function PayoutPage(): React.JSX.Element {
             <div className="text-center">
               <h2 className="text-2xl font-bold text-[color:var(--foreground)] mb-2">Payout Portal Locked</h2>
               <p className="text-[color:var(--text-muted)] text-sm leading-relaxed">
-                Sign in to access earnings and agent management on Base Sepolia.
+                Sign in to access earnings and agent management on Solana Devnet.
               </p>
             </div>
             <Link
@@ -388,7 +361,7 @@ export default function PayoutPage(): React.JSX.Element {
       <div className={`relative z-10 max-w-5xl mx-auto px-6 py-12 ${!authLoading && !user ? "pointer-events-none select-none" : ""}`}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <h1 className="text-3xl font-bold text-[color:var(--foreground)] mb-2">Developer Payout</h1>
-          <p className="text-[color:var(--text-muted)]">Manage your agents and track earnings on Base Sepolia</p>
+          <p className="text-[color:var(--text-muted)]">Manage your agents and track earnings on Solana Devnet</p>
         </motion.div>
 
         <motion.div
@@ -406,30 +379,19 @@ export default function PayoutPage(): React.JSX.Element {
                 <p className="text-sm text-[color:var(--text-muted)]">Connected</p>
                 <p className="text-[color:var(--foreground)] font-mono text-sm">{shortAddr(account)}</p>
               </div>
-              <button
-                onClick={disconnectWallet}
-                className="ml-4 px-3 py-1.5 text-xs text-[color:var(--text-muted)] hover:text-[color:var(--foreground)] border border-[color:var(--border-subtle)] rounded-lg hover:border-[color:var(--accent)] transition-all"
-              >
-                Disconnect
-              </button>
             </div>
           ) : (
-            <button
-              onClick={connectWallet}
-              disabled={connecting}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold rounded-xl transition-all disabled:opacity-50"
-            >
-              {connecting ? <Loader2 size={16} className="animate-spin" /> : <Wallet size={16} />}
-              Connect MetaMask
-            </button>
+            <p className="text-sm text-[color:var(--text-muted)]">
+              Connect your Solana wallet using the button in the header to get started.
+            </p>
           )}
           <a
-            href={explorerAddress(CONTRACT_ADDRESSES.AgentRegistry)}
+            href={getExplorerUrl("address", PROGRAM_ID.toBase58())}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-[color:var(--text-muted)] hover:text-violet-400 transition-colors flex items-center gap-1"
           >
-            Registry <ExternalLink size={12} />
+            Program <ExternalLink size={12} />
           </a>
         </motion.div>
 
@@ -487,7 +449,7 @@ export default function PayoutPage(): React.JSX.Element {
               ) : (
                 <select
                   value={selectedAgent || ""}
-                  onChange={(e) => setSelectedAgent(e.target.value as Address)}
+                  onChange={(e) => setSelectedAgent(e.target.value)}
                   className="w-full max-w-md px-4 py-2.5 rounded-xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] text-[color:var(--foreground)] focus:outline-none focus:border-violet-500 transition-colors"
                 >
                   {agents.map((a) => (
@@ -540,7 +502,7 @@ export default function PayoutPage(): React.JSX.Element {
                   On-Chain Registration Required
                 </h2>
                 <p className="text-sm text-[color:var(--text-muted)] mb-4">
-                  This agent needs to be registered on the Base Sepolia blockchain before it can receive jobs. This is a one-time transaction.
+                  This agent needs to be registered on the Solana blockchain before it can receive jobs. This is a one-time transaction.
                 </p>
                 <button
                   onClick={doRegisterOnChain}
@@ -687,25 +649,17 @@ export default function PayoutPage(): React.JSX.Element {
                   transition={{ delay: 0.3 }}
                   className="p-4 rounded-2xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)]"
                 >
-                  <h3 className="text-sm font-medium text-[color:var(--text-muted)] mb-3">Contracts on Base Sepolia</h3>
+                  <h3 className="text-sm font-medium text-[color:var(--text-muted)] mb-3">Program on Solana Devnet</h3>
                   <div className="flex flex-wrap gap-3">
-                    {[
-                      { name: "AgentRegistry", addr: CONTRACT_ADDRESSES.AgentRegistry },
-                      { name: "OrderBook", addr: CONTRACT_ADDRESSES.OrderBook },
-                      { name: "Escrow", addr: CONTRACT_ADDRESSES.Escrow },
-                      { name: "USDC", addr: CONTRACT_ADDRESSES.USDC },
-                    ].map((c) => (
-                      <a
-                        key={c.name}
-                        href={explorerAddress(c.addr)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] text-xs text-[color:var(--foreground)] hover:text-violet-400 hover:border-violet-500/30 transition-all"
-                      >
-                        {c.name}
-                        <ExternalLink size={10} />
-                      </a>
-                    ))}
+                    <a
+                      href={getExplorerUrl("address", PROGRAM_ID.toBase58())}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] text-xs text-[color:var(--foreground)] hover:text-violet-400 hover:border-violet-500/30 transition-all"
+                    >
+                      sota_marketplace
+                      <ExternalLink size={10} />
+                    </a>
                   </div>
                 </motion.div>
 

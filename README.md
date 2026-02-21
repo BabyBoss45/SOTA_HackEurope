@@ -36,22 +36,19 @@ One interface for infinite AI specialists. Transparent competition ensures best 
 
 ## Smart Contracts
 
-Contracts are deployed on **Base Sepolia** testnet (Chain ID 84532).
+The program is deployed on **Solana Devnet**.
 
-| Contract | Purpose |
+| Program | Purpose |
 |---|---|
-| **OrderBook** | Job lifecycle and competitive bidding. Users post jobs with USDC budgets, agents submit bids, posters accept winners, and agents mark completion. |
-| **Escrow** | Holds USDC in escrow. Release is gated on delivery confirmation. |
-| **AgentRegistry** | On-chain agent profiles with capabilities, metadata, and reputation tracking. |
+| **sota_marketplace** | Job lifecycle, competitive bidding, escrow, and agent registration — all in a single Anchor program. Users post jobs with USDC budgets, agents submit bids, posters accept winners, and agents mark completion. |
 
-### Contracts Quick Start
+### Program Quick Start
 
 ```bash
-cd contracts
-npm install
-npx hardhat compile
-npx hardhat test
-npx hardhat run scripts/deploy.ts --network base-sepolia
+cd anchor
+anchor build
+anchor test
+anchor deploy --provider.cluster devnet
 ```
 
 ---
@@ -73,10 +70,10 @@ flowchart TB
 
   WIN --> CHAIN
 
-  subgraph CHAIN["Base Sepolia (On-Chain)"]
+  subgraph CHAIN["Solana Devnet (On-Chain)"]
     direction TB
-    OB["OrderBook"] --> ES["Escrow"]
-    ES --> REG["Agent Registry"]
+    OB["sota_marketplace Program"] --> ES["Escrow (PDA)"]
+    ES --> REG["Agent Registry (PDA)"]
   end
 ```
 
@@ -91,8 +88,8 @@ SOTA/
 ├── app/ + src/           # Next.js web app, dashboard + APIs
 ├── mobile_frontend/      # Mobile voice UI (ElevenLabs + wallet)
 ├── agents/               # Python FastAPI + multi-agent runtime
-├── contracts/            # Solidity + Hardhat
-└── prisma/               # Data model reference (runtime uses Firestore)
+├── anchor/               # Anchor (Rust) Solana program
+└── prisma/               # PostgreSQL schema + migrations
 ```
 
 ### Component Diagram
@@ -116,7 +113,7 @@ graph TD
     BAPI --> FS
 
     BAPI --> SC[Smart Contracts]
-    SC --> ONCHAIN[OrderBook + Escrow]
+    SC --> ONCHAIN[sota_marketplace Program]
 ```
 
 ---
@@ -144,7 +141,7 @@ The Butler hides all marketplace mechanics from the user. They see a simple conv
 SOTA's mobile app is a **voice-first interface** built with **ElevenLabs Conversational AI**. Users open the app, connect their wallet, and talk naturally — no forms, no menus. The Butler responds in real time with voice and text.
 
 - **ElevenLabs voice** — Natural speech input and output powered by ElevenLabs.
-- **Wallet integration** — One-tap wallet connect with automatic chain-switch to Base Sepolia.
+- **Wallet integration** — One-tap Solana wallet connect to Devnet.
 - **Live updates** — Real-time job status, agent progress, and delivery notifications.
 - **Upload & execute** — Upload documents (CVs, files) that Butler routes to the right specialist agent.
 
@@ -258,12 +255,12 @@ All components degrade gracefully — if `INCIDENT_IO_API_KEY` is not set, the e
 
 | Layer | Technologies |
 |---|---|
-| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS, Wagmi + Viem, Firebase |
-| **Agents** | Python 3.12+, FastAPI, OpenAI SDK, LangGraph, Web3.py, Playwright |
-| **Contracts** | Solidity 0.8.24, Hardhat, OpenZeppelin |
-| **Database** | Firebase Firestore |
+| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS, Solana Wallet Adapter |
+| **Agents** | Python 3.12+, FastAPI, OpenAI SDK, LangGraph, solana-py, Playwright |
+| **Contracts** | Anchor (Rust), Solana BPF |
+| **Database** | PostgreSQL (Railway) |
 | **Voice** | ElevenLabs Conversational AI |
-| **Blockchain** | Base Sepolia (USDC payments) |
+| **Blockchain** | Solana Devnet (USDC payments) |
 
 ---
 
@@ -276,11 +273,9 @@ All components degrade gracefully — if `INCIDENT_IO_API_KEY` is not set, the e
 | [`agents/src/butler/agent.py`](agents/src/butler/agent.py) | Butler agent logic + tools |
 | [`agents/src/caller/server.py`](agents/src/caller/server.py) | Caller agent server |
 | [`agents/src/hackathon/agent.py`](agents/src/hackathon/agent.py) | Hackathon agent |
-| [`agents/src/shared/chain_contracts.py`](agents/src/shared/chain_contracts.py) | Web3.py bridge to contracts |
-| [`contracts/contracts/OrderBook.sol`](contracts/contracts/OrderBook.sol) | Job lifecycle with bidding |
-| [`contracts/contracts/Escrow.sol`](contracts/contracts/Escrow.sol) | USDC escrow |
-| [`contracts/contracts/AgentRegistry.sol`](contracts/contracts/AgentRegistry.sol) | On-chain agent profiles |
-| [`src/lib/firestore.ts`](src/lib/firestore.ts) | Firestore data layer |
+| [`agents/src/shared/chain_contracts.py`](agents/src/shared/chain_contracts.py) | Solana/Anchor program interaction |
+| [`anchor/programs/sota_marketplace`](anchor/programs/sota_marketplace) | Anchor program (jobs, escrow, registry) |
+| [`src/lib/prisma.ts`](src/lib/prisma.ts) | Prisma database client |
 | [`mobile_frontend/src/components/VoiceAgent.tsx`](mobile_frontend/src/components/VoiceAgent.tsx) | Mobile voice UI |
 
 ---

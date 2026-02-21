@@ -65,14 +65,14 @@ def test_config():
     except AssertionError as e:
         record("T02", module, "Default WS URL matches hub", False, str(e))
 
-    # T03: get_network returns NetworkConfig
+    # T03: get_network returns ClusterConfig
     try:
         net = get_network()
         assert isinstance(net, NetworkConfig)
-        assert net.chain_id > 0
-        record("T03", module, "get_network() returns valid NetworkConfig", True, f"chain_id={net.chain_id}")
+        assert net.cluster_name in ("devnet", "mainnet-beta", "localnet")
+        record("T03", module, "get_network() returns valid ClusterConfig", True, f"cluster={net.cluster_name}")
     except Exception as e:
-        record("T03", module, "get_network() returns valid NetworkConfig", False, str(e))
+        record("T03", module, "get_network() returns valid ClusterConfig", False, str(e))
 
     # T04: get_contract_addresses returns ContractAddresses
     try:
@@ -121,7 +121,7 @@ def test_models():
     # T08: Job dataclass
     try:
         job = Job(id="j1", description="test", tags=["a"], budget_usdc=10.0,
-                  deadline_ts=9999999999, poster="0xABC")
+                  deadline_ts=9999999999, poster="7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU")
         assert job.id == "j1"
         assert job.tags == ["a"]
         assert job.metadata == {}  # default
@@ -289,12 +289,12 @@ def test_registration():
 
     # T20: message structure
     try:
-        msg = build_register_message("agent-x", ["web_scraping"], "2.0.0", "0xDEAD")
+        msg = build_register_message("agent-x", ["web_scraping"], "2.0.0", "DeaD1111111111111111111111111111111111111111")
         assert msg["type"] == "register"
         assert msg["agent"]["name"] == "agent-x"
         assert msg["agent"]["tags"] == ["web_scraping"]
         assert msg["agent"]["version"] == "2.0.0"
-        assert msg["agent"]["wallet_address"] == "0xDEAD"
+        assert msg["agent"]["wallet_address"] == "DeaD1111111111111111111111111111111111111111"
         record("T20", module, "Register message structure matches hub protocol", True)
     except Exception as e:
         record("T20", module, "Register message structure matches hub protocol", False, str(e))
@@ -330,7 +330,7 @@ def test_bidding():
     try:
         strat = DefaultBidStrategy(price_ratio=0.75, agent_tags=["data_analysis"])
         job = Job(id="j1", description="analyze data", tags=["data_analysis"],
-                  budget_usdc=100.0, deadline_ts=9999999999, poster="0x1")
+                  budget_usdc=100.0, deadline_ts=9999999999, poster="7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU")
         bid = run_sync(strat.evaluate(job))
         assert bid is not None
         assert bid.amount_usdc == 75.0  # 100 * 0.75
@@ -344,7 +344,7 @@ def test_bidding():
     try:
         strat = DefaultBidStrategy(agent_tags=["phone_call"])
         job = Job(id="j2", description="scrape web", tags=["web_scraping"],
-                  budget_usdc=50.0, deadline_ts=9999999999, poster="0x2")
+                  budget_usdc=50.0, deadline_ts=9999999999, poster="8yLYug3DX98e08UYKTEqcE6kCbieTrB94UaSubKbtCsV")
         bid = run_sync(strat.evaluate(job))
         assert bid is None
         record("T24", module, "DefaultBidStrategy skips non-matching tags", True)
@@ -355,7 +355,7 @@ def test_bidding():
     try:
         strat = DefaultBidStrategy(min_budget_usdc=5.0, agent_tags=["x"])
         job = Job(id="j3", description="cheap job", tags=["x"],
-                  budget_usdc=0.10, deadline_ts=9999999999, poster="0x3")
+                  budget_usdc=0.10, deadline_ts=9999999999, poster="9zMZvh4EY09f19VZLUFrdF7lDcjfUsC05VbTvcLcuDtW")
         bid = run_sync(strat.evaluate(job))
         assert bid is None
         record("T25", module, "DefaultBidStrategy skips budget below minimum", True)
@@ -375,7 +375,7 @@ def test_bidding():
     try:
         strat = CostAwareBidStrategy(price_ratio=0.90, agent_tags=["test"])
         job = Job(id="j4", description="t", tags=["test"],
-                  budget_usdc=20.0, deadline_ts=9999999999, poster="0x4")
+                  budget_usdc=20.0, deadline_ts=9999999999, poster="AaNawi5FZ0a0g20WZMVGpeG8lEdjgVtD16VcTweLdFuX")
         bid = run_sync(strat.evaluate(job))
         assert bid is not None
         assert bid.amount_usdc == 18.0  # 20 * 0.90
@@ -388,7 +388,7 @@ def test_bidding():
     try:
         strat = DefaultBidStrategy(agent_tags=[])
         job = Job(id="j5", description="any", tags=["whatever"],
-                  budget_usdc=10.0, deadline_ts=9999999999, poster="0x5")
+                  budget_usdc=10.0, deadline_ts=9999999999, poster="BbObxj6GA1b1h31XaMWhqfI9mFekiWuE27WdUxfMgGuY")
         bid = run_sync(strat.evaluate(job))
         assert bid is not None
         record("T28", module, "DefaultBidStrategy with empty tags bids on all", True)
@@ -502,7 +502,7 @@ def test_wallet():
             AgentWallet("abc123")
             record("T39", module, "Rejects short private key", False, "no error raised")
         except ValueError as e:
-            assert "64 hex" in str(e)
+            assert "base58" in str(e).lower() or "byte array" in str(e).lower()
             record("T39", module, "Rejects short private key", True)
     except Exception as e:
         record("T39", module, "Rejects short private key", False, str(e))
@@ -513,7 +513,7 @@ def test_wallet():
             AgentWallet("zz" * 32)
             record("T40", module, "Rejects non-hex key", False, "no error raised")
         except ValueError as e:
-            assert "64 hex" in str(e)
+            assert "base58" in str(e).lower() or "byte array" in str(e).lower()
             record("T40", module, "Rejects non-hex key", True)
     except Exception as e:
         record("T40", module, "Rejects non-hex key", False, str(e))
@@ -532,27 +532,27 @@ def test_wallet():
     # T42: valid key (without 0x prefix)
     try:
         # well-known test key (hardhat account #0)
-        test_key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+        test_key = "4wBqpZM9xaSheZzSEEDtestKEYnotREAL1234567890abcdef"
         w = AgentWallet(test_key)
-        assert w.address.startswith("0x")
-        assert len(w.address) == 42
-        record("T42", module, "Valid key without 0x prefix accepted", True, f"addr={w.address[:10]}...")
+        assert len(w.address) >= 32
+        assert len(w.address) <= 44
+        record("T42", module, "Valid base58 key accepted", True, f"addr={w.address[:10]}...")
     except Exception as e:
-        record("T42", module, "Valid key without 0x prefix accepted", False, str(e))
+        record("T42", module, "Valid base58 key accepted", False, str(e))
 
-    # T43: valid key (with 0x prefix)
+    # T43: valid key (JSON byte array format)
     try:
-        test_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+        test_key = "[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]"
         w = AgentWallet(test_key)
-        assert w.address.startswith("0x")
-        record("T43", module, "Valid key with 0x prefix accepted", True)
+        assert len(w.address) >= 32
+        record("T43", module, "Valid JSON array key accepted", True)
     except Exception as e:
-        record("T43", module, "Valid key with 0x prefix accepted", False, str(e))
+        record("T43", module, "Valid JSON array key accepted", False, str(e))
 
     # T44: has nonce lock
     try:
         import threading
-        test_key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+        test_key = "4wBqpZM9xaSheZzSEEDtestKEYnotREAL1234567890abcdef"
         w = AgentWallet(test_key)
         assert hasattr(w, '_nonce_lock')
         assert isinstance(w._nonce_lock, type(threading.Lock()))
@@ -562,7 +562,7 @@ def test_wallet():
 
     # T45: repr does not expose full address
     try:
-        test_key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+        test_key = "4wBqpZM9xaSheZzSEEDtestKEYnotREAL1234567890abcdef"
         w = AgentWallet(test_key)
         r = repr(w)
         assert "..." in r  # truncated
@@ -617,7 +617,7 @@ def test_server():
 
     # T49: mask_address
     try:
-        assert _mask_address("0x1234567890abcdef1234567890abcdef12345678") == "0x1234...5678"
+        assert _mask_address("7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU") == "7xKX...sAsU"
         assert _mask_address(None) is None
         assert _mask_address("") == ""
         assert _mask_address("short") == "short"  # too short to mask
@@ -754,7 +754,7 @@ def test_agent():
         agent = Tagged()
         agent.bid_strategy.set_agent_tags(agent.tags)
         job = Job(id="j1", description="web thing", tags=["web"],
-                  budget_usdc=10.0, deadline_ts=9999999999, poster="0x1")
+                  budget_usdc=10.0, deadline_ts=9999999999, poster="7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU")
         bid = run_sync(agent.evaluate(job))
         assert bid is not None
         assert bid.job_id == "j1"
@@ -762,21 +762,21 @@ def test_agent():
     except Exception as e:
         record("T58", module, "evaluate() delegates to bid_strategy", False, str(e))
 
-    # T59: _hash_result uses keccak256 and is deterministic
+    # T59: _hash_result uses sha256 and is deterministic
     try:
-        from web3 import Web3
+        import hashlib
         data = {"key": "value", "num": 42}
         h1 = SOTAAgent._hash_result(data)
         h2 = SOTAAgent._hash_result(data)
         assert h1 == h2  # deterministic
         assert len(h1) == 32  # 32 bytes
-        # Verify it's keccak and not sha256
+        # Verify it's sha256
         canonical = json.dumps(data, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-        expected = Web3.keccak(canonical)
+        expected = hashlib.sha256(canonical).digest()
         assert h1 == expected
-        record("T59", module, "_hash_result is keccak-256, deterministic", True, f"hash={h1.hex()[:16]}...")
+        record("T59", module, "_hash_result is sha-256, deterministic", True, f"hash={h1.hex()[:16]}...")
     except Exception as e:
-        record("T59", module, "_hash_result is keccak-256, deterministic", False, str(e))
+        record("T59", module, "_hash_result is sha-256, deterministic", False, str(e))
 
     # T60: _hash_result canonical (whitespace-insensitive)
     try:
@@ -863,7 +863,7 @@ def test_agent():
             "tags": agent.tags,
             "budget_usdc": 10.0,
             "deadline_ts": 9999999999,
-            "poster": "0xABC",
+            "poster": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
             "metadata": {},
         }}
         run_sync(agent._on_job_available(msg))
@@ -924,7 +924,7 @@ def test_protocol_compliance():
 
     # T69: register message has all required fields
     try:
-        msg = build_register_message("agent", ["t1"], "1.0.0", "0xABC", ["cap1"])
+        msg = build_register_message("agent", ["t1"], "1.0.0", "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU", ["cap1"])
         agent_block = msg["agent"]
         required = {"name", "tags", "version", "wallet_address", "capabilities"}
         assert required.issubset(set(agent_block.keys()))

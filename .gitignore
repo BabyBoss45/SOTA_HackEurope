@@ -13,9 +13,18 @@ __pycache__/
 
 # Environment & secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.secrets.json
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+credentials.json
+service-account*.json
+**/secret*
+!**/secret*.example
 
 # OS
 .DS_Store

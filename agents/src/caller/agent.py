@@ -1,5 +1,5 @@
 """
-Caller Agent — SOTA on Base
+Caller Agent — SOTA on Solana
 
 The Caller Agent:
 1. Listens for phone verification job events
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 CALLER_SYSTEM_PROMPT = """
-You are the Caller Agent for SOTA, specializing in phone verification on Base.
+You are the Caller Agent for SOTA, specializing in phone verification on Solana.
 
 Your capabilities:
 1. **Phone Calls**: Use make_phone_call to:

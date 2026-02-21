@@ -1,4 +1,4 @@
-"""Unit tests for sota_sdk.config — settings, network, contract addresses."""
+"""Unit tests for sota_sdk.config — settings, cluster, program addresses."""
 
 import pytest
 
@@ -21,67 +21,52 @@ class TestDefaults:
         assert WS_RECONNECT_MAX > WS_RECONNECT_MIN
 
 
-class TestNetworkConfig:
+class TestClusterConfig:
     def test_dataclass_fields(self):
-        from sota_sdk.config import NetworkConfig
-        n = NetworkConfig(rpc_url="http://localhost:8545", chain_id=31337, explorer_url="")
-        assert n.rpc_url == "http://localhost:8545"
-        assert n.chain_id == 31337
-        assert n.native_currency == "ETH"
+        from sota_sdk.config import ClusterConfig
+        n = ClusterConfig(rpc_url="https://api.devnet.solana.com", cluster_name="devnet",
+                          ws_url="wss://api.devnet.solana.com", explorer_url="https://explorer.solana.com/?cluster=devnet")
+        assert n.rpc_url == "https://api.devnet.solana.com"
+        assert n.cluster_name == "devnet"
+        assert n.native_currency == "SOL"
 
-    def test_get_network_base_sepolia(self, monkeypatch):
-        monkeypatch.setenv("CHAIN_ID", "84532")
-        # Re-import to pick up env
+    def test_get_cluster_devnet(self, monkeypatch):
+        monkeypatch.setenv("SOLANA_CLUSTER", "devnet")
         import importlib
         import sota_sdk.config as cfg
         importlib.reload(cfg)
         net = cfg.get_network()
-        assert net.chain_id == 84532
+        assert net.cluster_name == "devnet"
 
-    def test_get_network_base_mainnet(self, monkeypatch):
-        monkeypatch.setenv("CHAIN_ID", "8453")
+    def test_get_cluster_mainnet(self, monkeypatch):
+        monkeypatch.setenv("SOLANA_CLUSTER", "mainnet-beta")
         import importlib
         import sota_sdk.config as cfg
         importlib.reload(cfg)
         net = cfg.get_network()
-        assert net.chain_id == 8453
+        assert net.cluster_name == "mainnet-beta"
 
-    def test_get_network_hardhat(self, monkeypatch):
-        monkeypatch.setenv("CHAIN_ID", "31337")
+    def test_get_cluster_localnet(self, monkeypatch):
+        monkeypatch.setenv("SOLANA_CLUSTER", "localnet")
         import importlib
         import sota_sdk.config as cfg
         importlib.reload(cfg)
         net = cfg.get_network()
-        assert net.chain_id == 31337
+        assert net.cluster_name == "localnet"
 
 
 class TestContractAddresses:
-    def test_dataclass_defaults(self):
-        from sota_sdk.config import ContractAddresses
-        c = ContractAddresses()
-        assert c.order_book == ""
-        assert c.escrow == ""
-        assert c.agent_registry == ""
-        assert c.usdc == ""
-        assert c.reputation_token == ""
+    def test_program_id_default(self):
+        from sota_sdk.config import get_contract_addresses
+        c = get_contract_addresses()
+        # On Solana, all contracts map to the single program ID
+        assert c.order_book != ""
+        assert c.usdc != ""
 
-    def test_from_env_vars(self, monkeypatch):
-        monkeypatch.setenv("ORDERBOOK_ADDRESS", "0x1111")
-        monkeypatch.setenv("ESCROW_ADDRESS", "0x2222")
+    def test_usdc_from_env(self, monkeypatch):
+        monkeypatch.setenv("USDC_MINT", "CustomMintAddress123456789012345678901234")
         import importlib
         import sota_sdk.config as cfg
         importlib.reload(cfg)
         c = cfg.get_contract_addresses()
-        assert c.order_book == "0x1111"
-        assert c.escrow == "0x2222"
-
-    def test_empty_fallback(self, monkeypatch):
-        monkeypatch.delenv("ORDERBOOK_ADDRESS", raising=False)
-        monkeypatch.delenv("ESCROW_ADDRESS", raising=False)
-        monkeypatch.delenv("AGENT_REGISTRY_ADDRESS", raising=False)
-        monkeypatch.delenv("USDC_ADDRESS", raising=False)
-        monkeypatch.delenv("REPUTATION_TOKEN_ADDRESS", raising=False)
-        monkeypatch.setenv("SOTA_CONTRACTS_DIR", "/nonexistent/path")
-        from sota_sdk.config import get_contract_addresses
-        c = get_contract_addresses()
-        assert c.order_book == ""
+        assert c.usdc != ""

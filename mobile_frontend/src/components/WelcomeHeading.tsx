@@ -10,9 +10,9 @@ export function WelcomeHeading() {
         <SplitText text="SOTA Butler" type="words" className="inline-block" />
       </h1>
       <p className="text-xs md:text-sm text-slate-400 tracking-widest uppercase">
-        AI Agent Marketplace on Base
+        AI Agent Marketplace on Solana
       </p>
-      <span className="network-badge mt-2">Base Sepolia</span>
+      <span className="network-badge mt-2">Solana Devnet</span>
     </div>
   );
 }

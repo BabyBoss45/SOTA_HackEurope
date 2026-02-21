@@ -1,3 +1,6 @@
+// DEPRECATED — The project has migrated to Solana (see /anchor/).
+// These EVM contracts on Base Sepolia are no longer in use.
+
 import { config as dotenvConfig } from "dotenv";
 import { ethers } from "hardhat";
 import path from "path";

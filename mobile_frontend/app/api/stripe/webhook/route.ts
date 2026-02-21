@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { ethers } from "ethers";
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  SYSVAR_RENT_PUBKEY,
+} from "@solana/web3.js";
+import { mintTo, getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { AnchorProvider, Program, BN, Wallet } from "@coral-xyz/anchor";
+import bs58 from "bs58";
 import { prisma } from "@/src/lib/prisma";
+
+// IDL type import from Anchor build output
+import idl from "../../../../../anchor/target/idl/sota_marketplace.json";
 
 export const runtime = "nodejs";
 
@@ -9,17 +21,61 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2026-01-28.clover",
 });
 
-// In-memory idempotency guard (hackathon scope — use Redis/DB in production)
-const processedEventIds = new Set<string>();
+// In-memory idempotency guard (hackathon scope -- use Redis/DB in production)
+// Map<eventId, timestamp> with TTL to prevent unbounded growth in long-running servers
+const IDEMPOTENCY_TTL_MS = 300_000; // 5 minutes
+const IDEMPOTENCY_MAX_SIZE = 10_000;
+const processedEventIds = new Map<string, number>();
 
-const MOCK_USDC_ABI = [
-  "function mint(address to, uint256 amount) external",
-  "function approve(address spender, uint256 amount) external returns (bool)",
-];
+/** Remove entries older than IDEMPOTENCY_TTL_MS to bound memory usage. */
+function pruneProcessedEvents(): void {
+  if (processedEventIds.size <= IDEMPOTENCY_MAX_SIZE) return;
+  const now = Date.now();
+  for (const [id, timestamp] of processedEventIds) {
+    if (now - timestamp > IDEMPOTENCY_TTL_MS) {
+      processedEventIds.delete(id);
+    }
+  }
+}
 
-const ESCROW_ABI = [
-  "function fundJob(uint256 jobId, address provider, uint256 amount) external",
-];
+const PROGRAM_ID = new PublicKey(
+  process.env.NEXT_PUBLIC_PROGRAM_ID || "EuGy9m9G5H5QNm3YaHQ26Peo5ZTABqWHk83R3AT2nYSD"
+);
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Load a Solana Keypair from either a base58 string or a JSON byte array. */
+function loadKeypair(raw: string): Keypair {
+  try {
+    // Try JSON array first (e.g. "[1,2,3,...]")
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return Keypair.fromSecretKey(Uint8Array.from(parsed));
+    }
+  } catch {
+    // Not JSON -- fall through to base58
+  }
+  return Keypair.fromSecretKey(bs58.decode(raw));
+}
+
+/** Derive a PDA given seeds and the program ID. */
+function findPDA(seeds: (Buffer | Uint8Array)[]): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(seeds, PROGRAM_ID);
+  return pda;
+}
+
+/** Convert a u64 number to a little-endian 8-byte Buffer for PDA derivation. */
+function u64ToLeBytes(value: number | bigint): Buffer {
+  const buf = Buffer.alloc(8);
+  buf.writeBigUInt64LE(BigInt(value));
+  return buf;
+}
+
+// ---------------------------------------------------------------------------
+// Webhook handler
+// ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -42,11 +98,13 @@ export async function POST(request: NextRequest) {
   }
 
   // Idempotency: skip already-processed events (Stripe retries on timeout)
-  if (processedEventIds.has(event.id)) {
+  const existingTimestamp = processedEventIds.get(event.id);
+  if (existingTimestamp !== undefined && Date.now() - existingTimestamp < IDEMPOTENCY_TTL_MS) {
     console.log(`Skipping duplicate event ${event.id}`);
     return NextResponse.json({ received: true });
   }
-  processedEventIds.add(event.id);
+  processedEventIds.set(event.id, Date.now());
+  pruneProcessedEvents();
 
   if (event.type === "payment_intent.succeeded") {
     const paymentIntent = event.data.object as Stripe.PaymentIntent;
@@ -56,45 +114,78 @@ export async function POST(request: NextRequest) {
 
     try {
       // Validate required env vars before on-chain operations
-      const platformKey = process.env.PLATFORM_PRIVATE_KEY;
-      const usdcAddress = process.env.NEXT_PUBLIC_USDC_ADDRESS;
-      const escrowAddress = process.env.NEXT_PUBLIC_ESCROW_ADDRESS;
-      if (!platformKey || !usdcAddress || !escrowAddress) {
-        throw new Error("Missing PLATFORM_PRIVATE_KEY, NEXT_PUBLIC_USDC_ADDRESS, or NEXT_PUBLIC_ESCROW_ADDRESS");
+      const platformKeyRaw = process.env.PLATFORM_PRIVATE_KEY;
+      const usdcMintStr = process.env.NEXT_PUBLIC_USDC_MINT;
+      if (!platformKeyRaw || !usdcMintStr) {
+        throw new Error("Missing PLATFORM_PRIVATE_KEY or NEXT_PUBLIC_USDC_MINT");
       }
 
-      // Connect to Base Sepolia
-      const provider = new ethers.JsonRpcProvider(
-        process.env.RPC_URL || "https://sepolia.base.org"
+      // --- Solana setup ---
+      const platformKeypair = loadKeypair(platformKeyRaw);
+      const connection = new Connection(
+        process.env.RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || "https://api.devnet.solana.com",
+        "confirmed"
       );
-      const signer = new ethers.Wallet(platformKey, provider);
+      const wallet = new Wallet(platformKeypair);
+      const provider = new AnchorProvider(connection, wallet, {
+        commitment: "confirmed",
+      });
+      const program = new Program(idl as any, provider);
 
-      const mockUsdc = new ethers.Contract(usdcAddress, MOCK_USDC_ABI, signer);
-      const escrow = new ethers.Contract(escrowAddress, ESCROW_ABI, signer);
-
+      const usdcMint = new PublicKey(usdcMintStr);
+      const providerPubkey = new PublicKey(agentAddress);
       const amount = BigInt(usdcAmountRaw);
+      const onChainJobId = boardJobId ? parseInt(boardJobId, 10) : null;
 
-      // Step 1: Mint MockUSDC to platform wallet
-      console.log(`Minting ${usdcAmountRaw} MockUSDC to ${signer.address}...`);
-      const mintTx = await mockUsdc.mint(signer.address, amount);
-      await mintTx.wait();
-      console.log(`Mint confirmed: ${mintTx.hash}`);
+      if (onChainJobId == null) {
+        throw new Error("boardJobId (on-chain job ID) is required for escrow funding");
+      }
 
-      // Step 2: Approve escrow to spend MockUSDC
-      console.log(`Approving escrow ${escrowAddress} to spend ${usdcAmountRaw}...`);
-      const approveTx = await mockUsdc.approve(escrowAddress, amount);
-      await approveTx.wait();
-      console.log(`Approve confirmed: ${approveTx.hash}`);
+      // Derive the platform's associated token account for USDC
+      const platformATA = await getAssociatedTokenAddress(
+        usdcMint,
+        platformKeypair.publicKey
+      );
 
-      // Step 3: Fund escrow
-      console.log(`Funding escrow for job ${jobId}, agent ${agentAddress}...`);
-      const fundTx = await escrow.fundJob(
-        BigInt(jobId),
-        agentAddress,
+      // Step 1: Mint mock USDC to platform wallet (devnet faucet mint)
+      // The platform keypair must be the mint authority on devnet.
+      console.log(`Minting ${usdcAmountRaw} USDC to ${platformKeypair.publicKey.toBase58()}...`);
+      const mintTxSig = await mintTo(
+        connection,
+        platformKeypair, // payer
+        usdcMint,        // mint
+        platformATA,     // destination ATA
+        platformKeypair, // mint authority
         amount
       );
-      await fundTx.wait();
-      console.log(`Escrow funded: ${fundTx.hash}`);
+      console.log(`Mint confirmed: ${mintTxSig}`);
+
+      // Step 2: Fund the escrow via Anchor program
+      // Derive PDAs
+      const jobIdBytes = u64ToLeBytes(onChainJobId);
+      const configPDA = findPDA([Buffer.from("config")]);
+      const jobPDA = findPDA([Buffer.from("job"), jobIdBytes]);
+      const depositPDA = findPDA([Buffer.from("deposit"), jobIdBytes]);
+      const escrowVaultPDA = findPDA([Buffer.from("escrow_vault"), jobIdBytes]);
+
+      console.log(`Funding escrow for on-chain job ${onChainJobId}, provider ${agentAddress}...`);
+      const fundTxSig = await program.methods
+        .fundJob(new BN(amount.toString()))
+        .accounts({
+          config: configPDA,
+          job: jobPDA,
+          deposit: depositPDA,
+          escrowVault: escrowVaultPDA,
+          posterAta: platformATA,
+          usdcMint: usdcMint,
+          poster: platformKeypair.publicKey,
+          provider: providerPubkey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
+      console.log(`Escrow funded: ${fundTxSig}`);
 
       console.log(`All on-chain operations complete for job ${jobId}`);
 
@@ -103,7 +194,7 @@ export async function POST(request: NextRequest) {
         await prisma.payment.create({
           data: {
             jobId: jobId,
-            onChainJobId: boardJobId ? parseInt(boardJobId) : null,
+            onChainJobId: onChainJobId,
             paymentIntentId: paymentIntent.id,
             amountCents: paymentIntent.amount,
             usdcAmountRaw: usdcAmountRaw,
@@ -117,7 +208,7 @@ export async function POST(request: NextRequest) {
       }
     } catch (chainErr: any) {
       console.error("On-chain operations failed:", chainErr);
-      // Payment succeeded but chain ops failed — log for manual resolution
+      // Payment succeeded but chain ops failed -- log for manual resolution
       // Still create a Payment record so we can track the Stripe charge
       try {
         await prisma.payment.create({
@@ -130,7 +221,7 @@ export async function POST(request: NextRequest) {
             status: "pending",
           },
         });
-        console.log(`Payment record created (pending — chain ops failed) for job ${jobId}`);
+        console.log(`Payment record created (pending -- chain ops failed) for job ${jobId}`);
       } catch (dbErr: any) {
         console.error("Failed to create Payment record:", dbErr);
       }
