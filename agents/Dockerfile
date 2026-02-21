@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r agents/requirements.txt
 COPY . ./agents/
 RUN pip install -e ./agents/
 
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 RUN playwright install chromium --with-deps
 
 RUN useradd -m -u 1000 appuser
