@@ -81,9 +81,16 @@ async def lifespan(app: FastAPI):
 
     agent = await create_hackathon_agent()
 
+    # Connect to marketplace Hub
+    from ..shared.hub_connector import HubConnector
+    connector = HubConnector(agent)
+    hub_task = asyncio.create_task(connector.run())
+
     yield
 
     # Cleanup
+    connector.stop()
+    hub_task.cancel()
     if agent:
         agent.stop()
     logger.info("Hackathon Agent stopped")

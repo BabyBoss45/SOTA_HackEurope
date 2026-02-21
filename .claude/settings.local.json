@@ -29,7 +29,8 @@
       "Bash(tail:*)",
       "Bash(curl:*)",
       "Bash(cmd.exe:*)",
-      "Bash(cd /d/SOTA_HackEurope/sota-sdk-repo && git remote add origin https://github.com/BabyBoss45/SOTA_SDK.git && git push -u origin main 2>&1)"
+      "Bash(cd /d/SOTA_HackEurope/sota-sdk-repo && git remote add origin https://github.com/BabyBoss45/SOTA_SDK.git && git push -u origin main 2>&1)",
+      "Bash(echo === $agent ===:*)"
     ]
   }
 }
