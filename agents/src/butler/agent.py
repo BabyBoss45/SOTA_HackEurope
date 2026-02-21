@@ -97,7 +97,7 @@ class ButlerAgent:
         self,
         private_key: Optional[str] = None,
         anthropic_api_key: Optional[str] = None,
-        model: str = "claude-sonnet-4-5-20241022",
+        model: str = "claude-haiku-4-5-20251001",
     ):
         """Initialize Butler Agent."""
         self.private_key = private_key or os.getenv("PRIVATE_KEY")
@@ -332,7 +332,7 @@ class ButlerAgent:
 def create_butler_agent(
     private_key: Optional[str] = None,
     anthropic_api_key: Optional[str] = None,
-    model: str = "claude-sonnet-4-5-20241022",
+    model: str = "claude-haiku-4-5-20251001",
 ) -> ButlerAgent:
     """Factory function to create Butler Agent."""
     return ButlerAgent(

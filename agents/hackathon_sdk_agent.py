@@ -93,7 +93,7 @@ class SDKHackathonAgent(SOTAAgent):
         all_tools.extend(create_registration_tools())
         all_tools.extend(create_butler_comm_tools(agent_name="hackathon"))
 
-        model_name = os.getenv("LLM_MODEL", "claude-sonnet-4-5-20241022")
+        model_name = os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001")
 
         self._runner = AgentRunner(
             name="hackathon",

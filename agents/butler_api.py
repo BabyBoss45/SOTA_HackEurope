@@ -106,7 +106,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     session_id: Optional[str] = None
-    model: str = "claude-sonnet-4-5-20241022"
+    model: str = "claude-haiku-4-5-20251001"
 
 
 class CreateJobRequest(BaseModel):
@@ -238,7 +238,7 @@ async def startup_event():
                 private_key=pk,
                 anthropic_api_key=anthropic_key,
             )
-            print(f"Butler Agent initialized (Claude claude-sonnet-4-5-20241022)")
+            print(f"Butler Agent initialized (Claude claude-haiku-4-5-20251001)")
         except Exception as e:
             print(f"Butler Agent init failed: {e}")
     else:
@@ -294,7 +294,7 @@ async def chat_with_butler(req: ChatRequest):
         return {
             "response": result["response"],
             "session_id": req.session_id,
-            "model": "claude-sonnet-4-5-20241022",
+            "model": "claude-haiku-4-5-20251001",
             "job_posted": result.get("job_posted"),
         }
     except Exception as e:

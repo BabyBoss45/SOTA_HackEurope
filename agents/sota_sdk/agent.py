@@ -431,7 +431,7 @@ class SOTAAgent:
         try:
             from paid.tracing import paid_tracing
             return paid_tracing(
-                customer=job.poster or job.id,
+                external_customer_id=job.poster or job.id,
                 external_product_id=self.name,
             )
         except ImportError:
@@ -469,7 +469,7 @@ class SOTAAgent:
                 job_id=job.id, agent_name=self.name,
                 revenue_usdc=job.budget_usdc, success=False,
             )
-            await self._send_job_failed(job.id, f"execution failed: {type(e).__name__}")
+            await self._send_job_failed(job.id, f"execution failed: {type(e).__name__}: {e}")
             return
 
         success = result.get("success", True) if isinstance(result, dict) else True
