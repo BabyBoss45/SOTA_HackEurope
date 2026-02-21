@@ -11,7 +11,7 @@ COPY requirements.txt ./agents/
 RUN pip install --no-cache-dir -r agents/requirements.txt
 
 COPY . ./agents/
-RUN pip install -e ./agents/
+RUN pip install --no-cache-dir ./agents/
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 RUN playwright install chromium --with-deps

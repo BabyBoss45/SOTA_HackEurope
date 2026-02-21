@@ -209,6 +209,11 @@ class JobType(IntEnum):
     GENERIC = 6
     JOB_SCOURING = 7
     FUN_ACTIVITY = 8
+    GIFT_SUGGESTION = 9
+    REFUND_CLAIM = 10
+    SMART_SHOPPING = 11
+    TRIP_PLANNING = 12
+    RESTAURANT_BOOKING_SMART = 13
 
 
 JOB_TYPE_LABELS = {
@@ -220,6 +225,11 @@ JOB_TYPE_LABELS = {
     JobType.GENERIC: "Generic Task",
     JobType.JOB_SCOURING: "Job Scouring",
     JobType.FUN_ACTIVITY: "Fun Activity",
+    JobType.GIFT_SUGGESTION: "Gift Suggestion",
+    JobType.REFUND_CLAIM: "Refund Claim",
+    JobType.SMART_SHOPPING: "Smart Shopping",
+    JobType.TRIP_PLANNING: "Trip Planning",
+    JobType.RESTAURANT_BOOKING_SMART: "Smart Restaurant Booking",
 }
 
 

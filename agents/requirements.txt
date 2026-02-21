@@ -1,5 +1,6 @@
-# SOTA SDK (standalone repo)
-sota-sdk @ git+https://github.com/BabyBoss45/SOTA_SDK.git@d1d9b9bd28b5e9a0c85aaccca3cd6119bec1e648
+# WebSocket client (hub_connector + elevenlabs streaming)
+# Pinned <12.0 for solana==0.34.3 compatibility
+websockets>=10.0,<12.0
 
 # Solana / Blockchain (Solana Devnet)
 solana==0.34.3
@@ -14,7 +15,6 @@ pydantic>=2.9.0
 uvicorn>=0.32.0
 fastapi>=0.115.0
 starlette>=0.27.0
-websockets>=12.0
 
 # Database (PostgreSQL via Railway)
 asyncpg>=0.30.0
