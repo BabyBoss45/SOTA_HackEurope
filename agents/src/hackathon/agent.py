@@ -386,11 +386,11 @@ class HackathonAgent(AutoBidderMixin, BaseArchiveAgent):
 
 # ─── Factory ──────────────────────────────────────────────────
 
-async def create_hackathon_agent() -> HackathonAgent:
+async def create_hackathon_agent(db=None) -> HackathonAgent:
     """Factory function to create and initialise a Hackathon Agent."""
     agent = HackathonAgent()
     await agent.initialize()
-    agent.register_on_board()       # register on JobBoard marketplace
+    await agent.register_on_board(db=db)       # register on JobBoard marketplace
     return agent
 
 

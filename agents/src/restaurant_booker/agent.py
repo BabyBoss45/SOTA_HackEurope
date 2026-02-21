@@ -194,11 +194,11 @@ class RestaurantBookerAgent(AutoBidderMixin, BaseArchiveAgent):
             return {"success": False, "error": str(e), "job_id": job.job_id}
 
 
-async def create_restaurant_booker_agent() -> RestaurantBookerAgent:
+async def create_restaurant_booker_agent(db=None) -> RestaurantBookerAgent:
     """Factory function to create and initialize a Restaurant Booker Agent."""
     agent = RestaurantBookerAgent()
     await agent.initialize()
-    agent.register_on_board()
+    await agent.register_on_board(db=db)
     return agent
 
 

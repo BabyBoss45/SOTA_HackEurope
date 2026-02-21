@@ -224,7 +224,7 @@ async def agent_websocket(ws: WebSocket):
             await ws.close(code=1008)
             return
 
-        agent = registry.register(info, ws)
+        agent = await registry.register(info, ws)
         agent_id = agent.agent_id
 
         # Acknowledge registration
@@ -259,7 +259,7 @@ async def agent_websocket(ws: WebSocket):
                 await _handle_job_failed(data, agent_id)
 
             elif msg_type == MessageType.HEARTBEAT:
-                registry.touch_heartbeat(agent_id)
+                await registry.touch_heartbeat(agent_id)
 
             else:
                 logger.warning(
@@ -274,7 +274,7 @@ async def agent_websocket(ws: WebSocket):
         logger.error("WebSocket error for %s: %s", agent_id or "unknown", exc)
     finally:
         if agent_id:
-            registry.unregister(agent_id)
+            await registry.unregister(agent_id)
 
 
 # ─── Message Handlers ────────────────────────────────────────
@@ -311,6 +311,13 @@ async def _handle_job_completed(data: Dict[str, Any], agent_id: str) -> None:
         success=data.get("success", True),
         result=data.get("result", {}),
     )
+    # Persist job stats
+    if registry._db:
+        try:
+            earnings = float(data.get("earnings_usdc", 0))
+            await registry._db.increment_worker_job_stats(agent_id, success=True, earnings_usdc=earnings)
+        except Exception as e:
+            logger.warning("Failed to increment job stats for %s: %s", agent_id, e)
 
 
 async def _handle_job_failed(data: Dict[str, Any], agent_id: str) -> None:
@@ -324,6 +331,12 @@ async def _handle_job_failed(data: Dict[str, Any], agent_id: str) -> None:
         agent_id=agent_id,
         error=data.get("error", "Unknown error"),
     )
+    # Persist job stats
+    if registry._db:
+        try:
+            await registry._db.increment_worker_job_stats(agent_id, success=False)
+        except Exception as e:
+            logger.warning("Failed to increment job stats for %s: %s", agent_id, e)
 
 
 # ─── Entry Point ─────────────────────────────────────────────

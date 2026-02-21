@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Phone, Calendar, Briefcase, X, Zap, Star, Activity, Loader2, Search, Map, Receipt, Gift, UtensilsCrossed, ShoppingCart, type LucideIcon } from 'lucide-react';
+import { Bot, Phone, Calendar, Briefcase, X, Zap, Star, Activity, Loader2, Search, Map, Receipt, Gift, UtensilsCrossed, ShoppingCart, PartyPopper, type LucideIcon } from 'lucide-react';
 import { FloatingPaths } from './background-paths-wrapper';
 
 // Icon mapping for dynamic icons from DB
@@ -14,6 +14,7 @@ const iconMap: Record<string, LucideIcon> = {
   Gift,
   UtensilsCrossed,
   ShoppingCart,
+  PartyPopper,
 };
 
 interface Agent {
@@ -106,11 +107,12 @@ const AgentOrbitalLanding = () => {
         const fallbackAgents: Agent[] = [
           { id: 1, title: "Caller", description: "Phone verification and booking calls via Twilio", icon: "Phone", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
           { id: 2, title: "Hackathon", description: "Event discovery and automatic registration", icon: "Calendar", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
-          { id: 3, title: "Trip Planner", description: "Group trip planning with smart inference", icon: "Map", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
-          { id: 4, title: "Refund Claim", description: "Automates refund claims for delayed transport", icon: "Receipt", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
-          { id: 5, title: "Gift Suggestion", description: "Personalized gift recommendations", icon: "Gift", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
-          { id: 6, title: "Restaurant Booker", description: "Find and book restaurant tables", icon: "UtensilsCrossed", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
-          { id: 7, title: "Smart Shopper", description: "Deal finding with economic reasoning", icon: "ShoppingCart", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+          { id: 3, title: "Fun Activity", description: "Find something fun with zero friction. Learns your preferences over time.", icon: "PartyPopper", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+          { id: 4, title: "Trip Planner", description: "Group trip planning with smart inference", icon: "Map", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+          { id: 5, title: "Refund Claim", description: "Automates refund claims for delayed transport", icon: "Receipt", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+          { id: 6, title: "Gift Suggestion", description: "Personalized gift recommendations", icon: "Gift", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+          { id: 7, title: "Restaurant Booker", description: "Find and book restaurant tables", icon: "UtensilsCrossed", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
+          { id: 8, title: "Smart Shopper", description: "Deal finding with economic reasoning", icon: "ShoppingCart", status: "online", totalRequests: 0, reputation: 5.0, successRate: 100 },
         ];
         setAgents(fallbackAgents);
         setAllAgents(fallbackAgents);

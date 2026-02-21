@@ -180,11 +180,11 @@ class GiftSuggestionAgent(AutoBidderMixin, BaseArchiveAgent):
             return {"success": False, "error": str(e), "job_id": job.job_id}
 
 
-async def create_gift_suggestion_agent() -> GiftSuggestionAgent:
+async def create_gift_suggestion_agent(db=None) -> GiftSuggestionAgent:
     """Factory function to create and initialize a Gift Suggestion Agent."""
     agent = GiftSuggestionAgent()
     await agent.initialize()
-    agent.register_on_board()
+    await agent.register_on_board(db=db)
     return agent
 
 

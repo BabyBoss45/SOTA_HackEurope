@@ -31,16 +31,12 @@ logger = logging.getLogger(__name__)
 # ── Tag Mapping ──────────────────────────────────────────────
 
 JOB_TYPE_TAGS: dict[JobType, str] = {
-    JobType.HOTEL_BOOKING:            "hotel_booking",
-    JobType.RESTAURANT_BOOKING:       "restaurant_booking",
-    JobType.HACKATHON_REGISTRATION:   "hackathon_registration",
-    JobType.CALL_VERIFICATION:        "call_verification",
-    JobType.GENERIC:                  "generic",
-    JobType.GIFT_SUGGESTION:          "gift_suggestion",
-    JobType.RESTAURANT_BOOKING_SMART: "restaurant_booking",
-    JobType.REFUND_CLAIM:             "refund_claim",
-    JobType.SMART_SHOPPING:           "smart_shopping",
-    JobType.TRIP_PLANNING:            "trip_planning",
+    JobType.HOTEL_BOOKING:          "hotel_booking",
+    JobType.RESTAURANT_BOOKING:     "restaurant_booking",
+    JobType.HACKATHON_REGISTRATION: "hackathon_registration",
+    JobType.CALL_VERIFICATION:      "call_verification",
+    JobType.GENERIC:                "generic",
+    JobType.FUN_ACTIVITY:           "fun_activity",
 }
 
 
@@ -74,8 +70,20 @@ class AutoBidderMixin:
     bid_price_ratio: float = 0.80     # bid 80% of the budget by default
     bid_eta_seconds: int = 1800       # default ETA: 30 min
 
-    def register_on_board(self):
-        """Register this agent on the global JobBoard."""
+    # Icon mapping for internal agents (Lucide React component names)
+    _AGENT_ICON_MAP: dict[str, str] = {
+        "hackathon": "Calendar",
+        "caller": "Phone",
+        "trip_planner": "Map",
+        "smart_shopper": "ShoppingCart",
+        "restaurant_booker": "UtensilsCrossed",
+        "refund_claim": "Receipt",
+        "gift_suggestion": "Gift",
+        "fun_activity": "PartyPopper",
+    }
+
+    async def register_on_board(self, db=None):
+        """Register this agent on the global JobBoard and optionally persist to DB."""
         board = JobBoard.instance()
 
         tags = job_types_to_tags(getattr(self, "supported_job_types", []))
@@ -99,6 +107,28 @@ class AutoBidderMixin:
             "%s registered on JobBoard  tags=%s  addr=%s",
             getattr(self, "agent_name", "Worker"), tags, addr_display,
         )
+
+        # Persist to WorkerAgent table
+        if db:
+            agent_type = getattr(self, "agent_type", "worker")
+            try:
+                await db.upsert_worker_agent(
+                    worker_id=agent_type,
+                    name=getattr(self, "agent_name", "Worker"),
+                    tags=tags,
+                    version="1.0.0",
+                    wallet_address=address,
+                    capabilities=[c.value if hasattr(c, "value") else str(c) for c in getattr(self, "capabilities", [])],
+                    status="online",
+                    max_concurrent=getattr(self, "max_concurrent_jobs", 5),
+                    bid_price_ratio=getattr(self, "bid_price_ratio", 0.80),
+                    bid_eta_seconds=getattr(self, "bid_eta_seconds", 1800),
+                    min_profit_margin=getattr(self, "min_profit_margin", 0.1),
+                    icon=self._AGENT_ICON_MAP.get(agent_type),
+                    source="internal",
+                )
+            except Exception as e:
+                logger.warning("Failed to persist agent %s to DB: %s", agent_type, e)
 
     async def _execute_job_for_board(self, job: JobListing, winning_bid: Bid) -> dict:
         """

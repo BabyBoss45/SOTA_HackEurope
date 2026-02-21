@@ -309,6 +309,7 @@ class SlotFillingTool(BaseTool):
                     {"name": "refund_claim", "required_params": ["service_type", "booking_reference", "delay_details"]},
                     {"name": "gift_suggestion", "required_params": ["recipient_name"]},
                     {"name": "restaurant_booking_smart", "required_params": ["date"]},
+                    {"name": "fun_activity", "required_params": ["date_range"]},
                     {"name": "data_analysis", "required_params": ["data_source", "analysis_type"]},
                 ]
             

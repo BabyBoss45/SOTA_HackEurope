@@ -3,6 +3,9 @@ Agent Registry — In-memory registry of connected WebSocket agents.
 
 Tracks each agent's name, tags, wallet_address, and live WebSocket connection.
 Thread-safe for asyncio (single event loop).
+
+Now also persists agent state to the WorkerAgent PostgreSQL table when a
+Database instance is wired via ``set_db()``.
 """
 
 from __future__ import annotations
@@ -10,13 +13,16 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Any
 
 from fastapi import WebSocket
 
 from .models import AgentInfo
 
 logger = logging.getLogger(__name__)
+
+# Throttle DB heartbeat writes to at most once per 30 seconds per agent
+_HEARTBEAT_DB_INTERVAL = 30.0
 
 
 @dataclass
@@ -31,6 +37,7 @@ class ConnectedAgent:
     ws: WebSocket
     connected_at: float = field(default_factory=time.time)
     last_heartbeat: float = field(default_factory=time.time)
+    _last_db_heartbeat: float = field(default_factory=time.time, repr=False)
 
 
 class AgentRegistry:
@@ -44,10 +51,15 @@ class AgentRegistry:
     def __init__(self) -> None:
         self._agents: Dict[str, ConnectedAgent] = {}   # agent_id -> ConnectedAgent
         self._counter: int = 0
+        self._db: Any = None  # Optional Database instance
+
+    def set_db(self, db: Any) -> None:
+        """Wire a Database instance for WorkerAgent persistence."""
+        self._db = db
 
     # ── Registration ──────────────────────────────────────────
 
-    def register(self, info: AgentInfo, ws: WebSocket) -> ConnectedAgent:
+    async def register(self, info: AgentInfo, ws: WebSocket) -> ConnectedAgent:
         """Register a new agent connection and return its record."""
         self._counter += 1
         agent_id = f"{info.name}_{self._counter}"
@@ -67,13 +79,37 @@ class AgentRegistry:
             agent_id, info.name, agent.tags,
             (info.wallet_address[:10] + "...") if info.wallet_address else "(none)",
         )
+
+        # Persist to WorkerAgent table
+        if self._db:
+            try:
+                await self._db.upsert_worker_agent(
+                    worker_id=agent_id,
+                    name=info.name,
+                    tags=agent.tags,
+                    version=info.version,
+                    wallet_address=info.wallet_address,
+                    capabilities=info.capabilities,
+                    status="online",
+                    source="sdk",
+                )
+            except Exception as e:
+                logger.warning("Failed to persist SDK agent registration: %s", e)
+
         return agent
 
-    def unregister(self, agent_id: str) -> None:
+    async def unregister(self, agent_id: str) -> None:
         """Remove an agent from the registry (on disconnect)."""
         removed = self._agents.pop(agent_id, None)
         if removed:
             logger.info("Agent unregistered: id=%s  name=%s", agent_id, removed.name)
+
+            # Mark offline in DB
+            if self._db:
+                try:
+                    await self._db.update_worker_status(agent_id, "offline")
+                except Exception as e:
+                    logger.warning("Failed to mark agent offline in DB: %s", e)
 
     # ── Queries ───────────────────────────────────────────────
 
@@ -99,7 +135,16 @@ class AgentRegistry:
 
     # ── Heartbeat ─────────────────────────────────────────────
 
-    def touch_heartbeat(self, agent_id: str) -> None:
+    async def touch_heartbeat(self, agent_id: str) -> None:
         agent = self._agents.get(agent_id)
         if agent:
-            agent.last_heartbeat = time.time()
+            now = time.time()
+            agent.last_heartbeat = now
+
+            # Throttled DB write (every 30s)
+            if self._db and (now - agent._last_db_heartbeat) >= _HEARTBEAT_DB_INTERVAL:
+                agent._last_db_heartbeat = now
+                try:
+                    await self._db.touch_worker_heartbeat(agent_id)
+                except Exception as e:
+                    logger.warning("Failed to persist heartbeat for %s: %s", agent_id, e)
