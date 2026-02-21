@@ -1,9 +1,9 @@
 # SOTA SDK (standalone repo)
-sota-sdk @ git+https://github.com/BabyBoss45/SOTA_SDK.git
+sota-sdk @ git+https://github.com/BabyBoss45/SOTA_SDK.git@d1d9b9bd28b5e9a0c85aaccca3cd6119bec1e648
 
 # Solana / Blockchain (Solana Devnet)
-solana>=0.34.0
-solders>=0.21.0
+solana==0.34.3
+solders>=0.21.0,<0.22.0
 anchorpy>=0.20.0
 
 # Core (All scripts)
@@ -14,9 +14,6 @@ pydantic>=2.9.0
 uvicorn>=0.32.0
 fastapi>=0.115.0
 starlette>=0.27.0
-
-# Database
-asyncpg>=0.29.0
 
 # Database (PostgreSQL via Railway)
 asyncpg>=0.30.0

@@ -15,6 +15,7 @@ RUN pip install -e ./agents/
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 RUN playwright install chromium --with-deps
+RUN chmod -R 755 /opt/playwright
 
 RUN useradd -m -u 1000 appuser
 USER appuser
