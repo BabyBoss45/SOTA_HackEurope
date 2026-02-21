@@ -13,6 +13,8 @@ RUN pip install --no-cache-dir -r agents/requirements.txt
 COPY . ./agents/
 RUN pip install -e ./agents/
 
+RUN playwright install chromium --with-deps
+
 RUN useradd -m -u 1000 appuser
 USER appuser
 

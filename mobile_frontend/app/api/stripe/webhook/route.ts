@@ -39,7 +39,7 @@ function pruneProcessedEvents(): void {
 }
 
 const PROGRAM_ID = new PublicKey(
-  process.env.NEXT_PUBLIC_PROGRAM_ID || "EuGy9m9G5H5QNm3YaHQ26Peo5ZTABqWHk83R3AT2nYSD"
+  process.env.NEXT_PUBLIC_PROGRAM_ID || "F6dYHixw4PB4qCEERCYP19BxzKpuLV6JbbWRMUYrRZLY"
 );
 
 // ---------------------------------------------------------------------------
@@ -214,6 +214,7 @@ export async function POST(request: NextRequest) {
         await prisma.payment.create({
           data: {
             jobId: jobId,
+            onChainJobId: onChainJobId,
             paymentIntentId: paymentIntent.id,
             amountCents: paymentIntent.amount,
             usdcAmountRaw: usdcAmountRaw,

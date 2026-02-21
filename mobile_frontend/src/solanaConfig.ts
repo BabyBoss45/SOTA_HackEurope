@@ -7,13 +7,13 @@ export const SOLANA_RPC_URL =
 // ── Anchor program ID ───────────────────────────────────────
 export const PROGRAM_ID = new PublicKey(
   process.env.NEXT_PUBLIC_PROGRAM_ID ||
-    "EuGy9m9G5H5QNm3YaHQ26Peo5ZTABqWHk83R3AT2nYSD"
+    "F6dYHixw4PB4qCEERCYP19BxzKpuLV6JbbWRMUYrRZLY"
 );
 
 // ── USDC SPL Token mint (devnet) ────────────────────────────
 export const USDC_MINT = new PublicKey(
   process.env.NEXT_PUBLIC_USDC_MINT ||
-    "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" // common devnet USDC mint
+    "9yry7vqkhZGaynE37qX3FYpUqBx8z9n9MFNF8f1FP6Hm" // common devnet USDC mint
 );
 
 // ── Butler wallet (SPL token destination) ───────────────────

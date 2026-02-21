@@ -20,7 +20,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 });
 
 const PROGRAM_ID = new PublicKey(
-  process.env.NEXT_PUBLIC_PROGRAM_ID || "EuGy9m9G5H5QNm3YaHQ26Peo5ZTABqWHk83R3AT2nYSD"
+  process.env.NEXT_PUBLIC_PROGRAM_ID || "F6dYHixw4PB4qCEERCYP19BxzKpuLV6JbbWRMUYrRZLY"
 );
 
 // ---------------------------------------------------------------------------
@@ -160,6 +160,7 @@ export async function POST(request: NextRequest) {
 
       // Derive PDAs
       const configPDA = findPDA([Buffer.from("config")]);
+      const jobPDA = findPDA([Buffer.from("job"), jobIdBytes]);
       const depositPDA = findPDA([Buffer.from("deposit"), jobIdBytes]);
       const escrowVaultPDA = findPDA([Buffer.from("escrow_vault"), jobIdBytes]);
 
@@ -200,6 +201,7 @@ export async function POST(request: NextRequest) {
           .refund()
           .accounts({
             config: configPDA,
+            job: jobPDA,
             deposit: depositPDA,
             escrowVault: escrowVaultPDA,
             posterAta: posterATA,

@@ -82,7 +82,7 @@ def _get_config():
         usdc_mint = str(USDC_MINT)
     except Exception:
         rpc_url = os.getenv("RPC_URL", "https://api.devnet.solana.com")
-        usdc_mint = os.getenv("USDC_MINT", "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
+        usdc_mint = os.getenv("USDC_MINT", "9yry7vqkhZGaynE37qX3FYpUqBx8z9n9MFNF8f1FP6Hm")
 
     platform_wallet = os.getenv(
         "PLATFORM_WALLET_ADDRESS",

@@ -1,7 +1,7 @@
 # Backend Architect Memory - SOTA Marketplace
 
 ## Project Structure
-- **Anchor program**: `/anchor/programs/sota_marketplace/src/` (program ID: `EuGy9m9G5H5QNm3YaHQ26Peo5ZTABqWHk83R3AT2nYSD`)
+- **Anchor program**: `/anchor/programs/sota_marketplace/src/` (program ID: `F6dYHixw4PB4qCEERCYP19BxzKpuLV6JbbWRMUYrRZLY`)
 - **IDL (JSON)**: `/anchor/target/idl/sota_marketplace.json`
 - **IDL (TS types)**: `/anchor/target/types/sota_marketplace.ts`
 - **Next.js frontend**: `/mobile_frontend/` (Next.js 15, React 19)
