@@ -25,7 +25,13 @@
       "WebFetch(domain:www.eventbrite.com)",
       "WebFetch(domain:lu.ma)",
       "WebFetch(domain:luma.com)",
-      "WebFetch(domain:api.lu.ma)"
+      "WebFetch(domain:api.lu.ma)",
+      "Bash(curl -s http://localhost:3000/developers/docs 2>&1 | python3 -c \"\nimport sys, re, html\ncontent = sys.stdin.read\\(\\)\n# Remove script and style tags\ncontent = re.sub\\(r'<script[^>]*>.*?</script>', '', content, flags=re.DOTALL\\)\ncontent = re.sub\\(r'<style[^>]*>.*?</style>', '', content, flags=re.DOTALL\\)\n# Replace common tags with newlines\ncontent = re.sub\\(r'<br\\\\s*/?>', '\\\\n', content\\)\ncontent = re.sub\\(r'</\\(p|div|h[1-6]|li|tr|section\\)>', '\\\\n', content\\)\ncontent = re.sub\\(r'<\\(p|div|h[1-6]|li|tr|section\\)[^>]*>', '\\\\n', content\\)\n# Remove all remaining HTML tags\ncontent = re.sub\\(r'<[^>]+>', ' ', content\\)\n# Decode HTML entities\ncontent = html.unescape\\(content\\)\n# Clean up whitespace\ncontent = re.sub\\(r'[ \\\\t]+', ' ', content\\)\ncontent = re.sub\\(r'\\\\n\\\\s*\\\\n', '\\\\n\\\\n', content\\)\nprint\\(content.strip\\(\\)\\)\n\" 2>&12)",
+      "Bash(tail:*)",
+      "Bash(curl:*)",
+      "Bash(curl -s http://localhost:3000/developers/docs 2>&1 | python3 -c \"\nimport sys, re, html\ncontent = sys.stdin.read\\(\\)\ncontent = re.sub\\(r'<script[^>]*>.*?</script>', '', content, flags=re.DOTALL\\)\ncontent = re.sub\\(r'<style[^>]*>.*?</style>', '', content, flags=re.DOTALL\\)\ncontent = re.sub\\(r'<br\\\\s*/?>', '\\\\n', content\\)\ncontent = re.sub\\(r'</\\(p|div|h[1-6]|li|tr|section\\)>', '\\\\n', content\\)\ncontent = re.sub\\(r'<[^>]+>', ' ', content\\)\ncontent = html.unescape\\(content\\)\ncontent = re.sub\\(r'[ \\\\t]+', ' ', content\\)\ncontent = re.sub\\(r'\\\\n\\\\s*\\\\n', '\\\\n\\\\n', content\\)\n# Search for key sections\nfor term in ['Step 7', 'Step 8', 'Post jobs', 'API reference', 'WebSocket protocol', 'Authentication methods', 'config.py', 'Windows', 'On failure', 'setup\\(\\)', 'git clone', '.env.example', 'Docker deployment', 'BabyBoss45']:\n    if term in content:\n        print\\(f'  FOUND: {term}'\\)\n    else:\n        print\\(f'  MISSING: {term}'\\)\n\" 2>&1)",
+      "Bash(cmd.exe:*)",
+      "Bash(cd /d/SOTA_HackEurope/sota-sdk-repo && git remote add origin https://github.com/BabyBoss45/SOTA_SDK.git && git push -u origin main 2>&1)"
     ]
   }
 }

@@ -1,3 +1,6 @@
+# SOTA SDK (standalone repo)
+sota-sdk @ git+https://github.com/BabyBoss45/SOTA_SDK.git
+
 # Solana / Blockchain (Solana Devnet)
 solana>=0.34.0
 solders>=0.21.0
