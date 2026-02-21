@@ -1,0 +1,1045 @@
+"use client";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import {
+  Bot,
+  Phone,
+  Calendar,
+  Briefcase,
+  Search,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  LayoutGrid,
+  LayoutList,
+  Zap,
+  RefreshCw,
+  X,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  DollarSign,
+  ArrowUpRight,
+  ArrowDownRight,
+  Gavel,
+  Timer,
+  Shield,
+  BarChart3,
+  ExternalLink,
+  BadgeCheck,
+  Star,
+  FileText,
+  Link2,
+  Brain,
+  AlertTriangle,
+  type LucideIcon,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { FloatingPaths } from "@/components/ui/background-paths-wrapper";
+
+// Icon mapping
+const iconMap: Record<string, LucideIcon> = {
+  Bot,
+  Phone,
+  Calendar,
+  Briefcase,
+  TrendingUp,
+};
+
+interface Stage {
+  id: string;
+  name: string;
+  description: string;
+  status: "complete" | "in_progress" | "pending";
+}
+
+interface Bid {
+  id: string;
+  agent: string;
+  agentIcon: string;
+  price: string;
+  reputation: number;
+  eta: string;
+  timestamp: string;
+}
+
+interface Adaptation {
+  confidence: number;
+  successRate: number;
+  commonFailures: Record<string, number>;
+  strategy: string;
+  similarTasksFound: number;
+  reasoning: string;
+}
+
+interface Task {
+  id: string;
+  jobId: string;
+  title: string;
+  description: string;
+  status: "executing" | "queued" | "completed" | "failed";
+  progress: number;
+  agent: string;
+  agentIcon: string;
+  tags: string[];
+  createdAt: string;
+  stages: Stage[];
+  bids: Bid[];
+  adaptation?: Adaptation;
+}
+
+interface Agent {
+  id: number;
+  title: string;
+  status: string;
+  icon: string;
+  walletAddress?: string | null;
+  reputation?: number;
+  isVerified?: boolean;
+  explorerLink?: string | null;
+}
+
+interface MarketplaceData {
+  tasks: Task[];
+  grouped: {
+    executing: Task[];
+    queued: Task[];
+    completed: Task[];
+    failed: Task[];
+  };
+  stats: {
+    total: number;
+    executing: number;
+    queued: number;
+    completed: number;
+    failed: number;
+  };
+  agents: Agent[];
+}
+
+// Parse raw job description "task_type: key=val, key=val" into readable details
+function parseJobDetails(description: string): { type: string; details: { label: string; value: string }[] } {
+  const colonIdx = description.indexOf(":");
+  const type = colonIdx > 0 ? description.slice(0, colonIdx).trim() : description;
+  const rest = colonIdx > 0 ? description.slice(colonIdx + 1).trim() : "";
+
+  if (!rest) return { type, details: [] };
+
+  const labelMap: Record<string, string> = {
+    location: "Location",
+    date_range: "Date Range",
+    date: "Date",
+    time: "Time",
+    check_in: "Check-in",
+    check_out: "Check-out",
+    online_or_in_person: "Format",
+    theme_technology_focus: "Focus",
+    guests: "Guests",
+    num_of_people: "Guests",
+    cuisine: "Cuisine",
+    user_name: "Name",
+    phone_number: "Phone",
+    city: "City",
+    special_requests: "Notes",
+    asset: "Asset",
+    horizon_minutes: "Horizon",
+    risk_profile: "Risk",
+    purpose: "Purpose",
+    budget: "Budget",
+    room_type: "Room Type",
+  };
+
+  const details: { label: string; value: string }[] = [];
+
+  // Match key=value pairs (value can be quoted or bracket-enclosed)
+  const regex = /(\w+)=(\[[^\]]*\]|'[^']*'|"[^"]*"|[^,]+)/g;
+  let match;
+  while ((match = regex.exec(rest)) !== null) {
+    const key = match[1].trim();
+    let val = match[2].trim();
+    // Clean brackets / quotes
+    val = val.replace(/^\[['"]?|['"]?\]$/g, "").replace(/^['"]|['"]$/g, "");
+    if (!val || val === "None" || val === "none") continue;
+    const label = labelMap[key] || key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    details.push({ label, value: val });
+  }
+  return { type, details };
+}
+
+// Human-friendly task type label
+function taskTypeLabel(raw: string): string {
+  const map: Record<string, string> = {
+    hackathon_discovery: "Hackathon Search",
+    hackathon_registration: "Hackathon Search",
+    hotel_booking: "Hotel Booking",
+    restaurant_booking: "Restaurant Booking",
+    call_verification: "Phone Verification",
+    market_prediction: "Market Prediction",
+    trading_signal: "Trading Signal",
+  };
+  return map[raw.toLowerCase()] || raw.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+export default function Marketplace() {
+  const [data, setData] = useState<MarketplaceData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"orderbook" | "grid">("orderbook");
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [activeFilter, setActiveFilter] = useState<"all" | "bids" | "executing" | "settled">("all");
+  const [recentExecutions, setRecentExecutions] = useState<Task[]>([]);
+  const isInitialLoad = useRef(true);
+
+  // Fetch tasks from API
+  const fetchTasks = useCallback(async () => {
+    try {
+      const res = await fetch("/api/tasks");
+      if (!res.ok) throw new Error("Failed to fetch tasks");
+      const json = await res.json();
+      setData(json);
+
+      // Update recent executions feed
+      const completed = json.grouped?.completed || [];
+      setRecentExecutions(completed.slice(0, 10));
+
+      setError(null);
+    } catch (err) {
+      console.error("Error fetching tasks:", err);
+      setError("Failed to load tasks");
+    } finally {
+      if (isInitialLoad.current) {
+        setLoading(false);
+        isInitialLoad.current = false;
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTasks();
+    const interval = setInterval(fetchTasks, 5000);
+    return () => clearInterval(interval);
+  }, [fetchTasks]);
+
+  // Filter tasks by search query and filter
+  const filterTasks = (tasks: Task[]) => {
+    return tasks.filter((task) => {
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matches =
+          task.title.toLowerCase().includes(query) ||
+          task.description.toLowerCase().includes(query) ||
+          task.agent.toLowerCase().includes(query) ||
+          task.tags.some((t) => t.toLowerCase().includes(query));
+        if (!matches) return false;
+      }
+      return true;
+    });
+  };
+
+  const getFilteredTasks = () => {
+    if (!data?.tasks) return [];
+    switch (activeFilter) {
+      case "bids":
+        return filterTasks(data.grouped.queued || []);
+      case "executing":
+        return filterTasks(data.grouped.executing || []);
+      case "settled":
+        return filterTasks([...(data.grouped.completed || []), ...(data.grouped.failed || [])]);
+      default:
+        return filterTasks(data.tasks);
+    }
+  };
+
+  const filteredTasks = getFilteredTasks();
+
+  const getIcon = (iconName: string): LucideIcon => iconMap[iconName] || Bot;
+
+  const getStatusConfig = (status: string) => {
+    switch (status) {
+      case "executing":
+        return {
+          color: "text-amber-400",
+          bg: "bg-amber-400/10",
+          border: "border-amber-400/30",
+          glow: "shadow-amber-500/20",
+          label: "EXECUTING",
+          icon: <Activity size={12} className="animate-pulse" />,
+        };
+      case "queued":
+        return {
+          color: "text-cyan-400",
+          bg: "bg-cyan-400/10",
+          border: "border-cyan-400/30",
+          glow: "shadow-cyan-500/20",
+          label: "OPEN BID",
+          icon: <Gavel size={12} />,
+        };
+      case "completed":
+        return {
+          color: "text-emerald-400",
+          bg: "bg-emerald-400/10",
+          border: "border-emerald-400/30",
+          glow: "shadow-emerald-500/20",
+          label: "SETTLED",
+          icon: <CheckCircle size={12} />,
+        };
+      case "failed":
+        return {
+          color: "text-red-400",
+          bg: "bg-red-400/10",
+          border: "border-red-400/30",
+          glow: "shadow-red-500/20",
+          label: "FAILED",
+          icon: <XCircle size={12} />,
+        };
+      default:
+        return {
+          color: "text-[color:var(--text-muted)]",
+          bg: "bg-[color:var(--surface-hover)]",
+          border: "border-[color:var(--border-subtle)]",
+          glow: "",
+          label: status.toUpperCase(),
+          icon: null,
+        };
+    }
+  };
+
+  // Order Book Row Component
+  const OrderBookRow = ({ task, index }: { task: Task; index: number }) => {
+    const config = getStatusConfig(task.status);
+    const AgentIcon = getIcon(task.agentIcon);
+    const isSelected = selectedTask?.id === task.id;
+    const bids = task.bids || [];
+
+    return (
+      <div
+        onClick={() => setSelectedTask(isSelected ? null : task)}
+        className={`group relative overflow-hidden cursor-pointer transition-all duration-200 ${
+          isSelected
+            ? "bg-violet-500/10 border-l-2 border-l-violet-500"
+            : "hover:bg-[color:var(--surface-hover)] border-l-2 border-l-transparent"
+        }`}
+      >
+        <div className="grid grid-cols-12 gap-4 px-4 py-4 items-center">
+          {/* Order ID & Type */}
+          <div className="col-span-2">
+            <div className="flex items-center gap-2">
+              <div className={`w-2.5 h-2.5 rounded-full ${config.bg} ${config.color}`} />
+              <span className="text-sm font-mono text-[color:var(--text-muted)]">{task.jobId.slice(0, 8)}...</span>
+            </div>
+            <span className={`text-xs font-medium ${config.color} mt-0.5 inline-block`}>
+              {config.label}
+            </span>
+          </div>
+
+          {/* Task Title */}
+          <div className="col-span-3">
+            <div className="flex items-center gap-1.5">
+              <h4 className="text-base font-medium text-[color:var(--foreground)] truncate group-hover:text-[color:var(--foreground)] transition-colors">
+                {task.title}
+              </h4>
+              {task.adaptation && task.adaptation.similarTasksFound > 0 && (
+                <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                  task.adaptation.confidence < 0.3
+                    ? "bg-red-500/15 text-red-400"
+                    : task.adaptation.confidence < 0.6
+                    ? "bg-amber-500/15 text-amber-400"
+                    : "bg-violet-500/15 text-violet-400"
+                }`}>
+                  <Brain size={9} />
+                  {(task.adaptation.confidence * 100).toFixed(0)}%
+                </span>
+              )}
+            </div>
+            <div className="flex gap-1 mt-1">
+              {task.tags.slice(0, 2).map((tag) => (
+                <span key={tag} className="text-xs px-1.5 py-0.5 bg-[color:var(--surface-1)] text-[color:var(--text-muted)] rounded">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Agent / Bidders */}
+          <div className="col-span-2">
+            {task.status === "queued" ? (
+              <div className="flex items-center gap-1">
+                <div className="flex -space-x-2">
+                  {bids.slice(0, 3).map((bid) => (
+                    <div
+                      key={bid.id}
+                      className="w-7 h-7 rounded-full bg-[color:var(--surface-hover)] border-2 border-[color:var(--border-subtle)] flex items-center justify-center"
+                      title={bid.agent}
+                    >
+                      {(() => { const I = getIcon(bid.agentIcon); return <I size={12} className="text-[color:var(--text-muted)]" />; })()}
+                    </div>
+                  ))}
+                </div>
+                <span className="text-sm text-[color:var(--text-muted)] ml-1">
+                  {bids.length} bid{bids.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                  <AgentIcon size={14} className="text-violet-400" />
+                </div>
+                <span className="text-sm text-[color:var(--foreground)]">{task.agent}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Progress / Price */}
+          <div className="col-span-2">
+            {task.status === "executing" ? (
+              <div>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="text-[color:var(--text-muted)]">Progress</span>
+                  <span className="text-amber-400 font-medium">{task.progress}%</span>
+                </div>
+                <div className="h-2 bg-[color:var(--surface-1)] rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${task.progress}%` }}
+                    className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
+                  />
+                </div>
+              </div>
+            ) : task.status === "queued" ? (
+              <div className="flex items-center gap-1">
+                <DollarSign size={14} className="text-cyan-400" />
+                <span className="text-base font-medium text-cyan-400">
+                  {bids.length > 0 ? bids[0].price : "No bids"}
+                </span>
+                {bids.length > 0 && <span className="text-xs text-[color:var(--text-muted)]">best</span>}
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                {task.status === "completed" ? (
+                  <>
+                    <CheckCircle size={16} className="text-emerald-400" />
+                    <span className="text-base font-medium text-emerald-400">Settled</span>
+                  </>
+                ) : (
+                  <>
+                    <TrendingDown size={16} className="text-red-400" />
+                    <span className="text-base font-medium text-red-400">Failed</span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ETA / Time */}
+          <div className="col-span-2">
+            <div className="flex items-center gap-1.5 text-sm text-[color:var(--text-muted)]">
+              <Timer size={14} />
+              <span>
+                {task.status === "executing"
+                  ? `~${Math.ceil((100 - task.progress) / 10)}s left`
+                  : task.status === "queued"
+                  ? bids.length > 0 ? `${bids.length} bid${bids.length !== 1 ? "s" : ""} received` : "Awaiting bids"
+                  : new Date(task.createdAt).toLocaleTimeString()}
+              </span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="col-span-1 flex justify-end">
+            <button
+              className={`p-1.5 rounded-lg transition-colors ${
+                isSelected ? "bg-violet-500/20 text-violet-400" : "hover:bg-[color:var(--surface-hover)] text-[color:var(--text-muted)]"
+              }`}
+            >
+              <ArrowUpRight size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* Animated border effect */}
+        {task.status === "executing" && (
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent" />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Stats Card Component
+  const StatCard = ({
+    label,
+    value,
+    change,
+    icon: Icon,
+    color
+  }: {
+    label: string;
+    value: string | number;
+    change?: string;
+    icon: LucideIcon;
+    color: string;
+  }) => (
+    <div className="bg-[color:var(--surface-1)] backdrop-blur-sm rounded-xl border border-[color:var(--border-subtle)] p-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-[color:var(--text-muted)] uppercase tracking-wide">{label}</span>
+        <Icon size={16} className={color} />
+      </div>
+      <div className="flex items-end justify-between">
+        <span className="text-2xl font-bold text-white">{value}</span>
+        {change && (
+          <span className={`text-xs font-medium flex items-center gap-0.5 ${
+            change.startsWith("+") ? "text-emerald-400" : "text-red-400"
+          }`}>
+            {change.startsWith("+") ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+            {change}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
+  // Execution Feed Item
+  const ExecutionFeedItem = ({ task, index }: { task: Task; index: number }) => {
+    const config = getStatusConfig(task.status);
+
+    return (
+      <div className="flex items-center gap-3 py-2 border-b border-[color:var(--border-subtle)] last:border-0">
+        <div className={`w-8 h-8 rounded-lg ${config.bg} flex items-center justify-center`}>
+          {config.icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-[color:var(--foreground)] truncate">{task.title}</p>
+          <p className="text-[10px] text-[color:var(--text-muted)]">{task.agent}</p>
+        </div>
+        <div className="text-right">
+          <p className={`text-xs font-medium ${config.color}`}>{config.label}</p>
+          <p className="text-[10px] text-[color:var(--text-muted)]">
+            {new Date(task.createdAt).toLocaleTimeString()}
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  // CSS Styles
+  const pageStyles = `
+    @keyframes grid-draw {
+      0% { stroke-dashoffset: 1000; opacity: 0; }
+      50% { opacity: 0.3; }
+      100% { stroke-dashoffset: 0; opacity: 0.15; }
+    }
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 0.1; transform: scale(1); }
+      50% { opacity: 0.3; transform: scale(1.1); }
+    }
+    .grid-line {
+      stroke: var(--path-color);
+      stroke-width: 0.5;
+      opacity: 0;
+      stroke-dasharray: 5 5;
+      stroke-dashoffset: 1000;
+      animation: grid-draw 2s ease-out forwards;
+    }
+    .detail-dot {
+      fill: var(--accent-text);
+      opacity: 0;
+      animation: pulse-glow 3s ease-in-out infinite;
+    }
+  `;
+
+  if (loading) {
+    return (
+      <>
+        <style>{pageStyles}</style>
+        <div className="min-h-[calc(100vh-4rem)] home-shell flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 size={32} className="text-violet-500 animate-spin mx-auto mb-4" />
+            <p className="text-[color:var(--text-muted)]">Connecting to marketplace...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <style>{pageStyles}</style>
+        <div className="min-h-[calc(100vh-4rem)] home-shell flex items-center justify-center">
+          <div className="text-center">
+            <XCircle size={32} className="text-red-500 mx-auto mb-4" />
+            <p className="text-[color:var(--foreground)] font-medium">{error}</p>
+            <button
+              onClick={fetchTasks}
+              className="mt-4 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-500 transition-colors"
+            >
+              Retry Connection
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const stats = data?.stats;
+  const agents = data?.agents || [];
+  const successRate = stats ? Math.round((stats.completed / Math.max(stats.total, 1)) * 100) : 0;
+
+  return (
+    <>
+      <style>{pageStyles}</style>
+      <div className="min-h-[calc(100vh-4rem)] home-shell text-[color:var(--foreground)] overflow-hidden relative">
+        {/* Animated Background */}
+        <FloatingPaths position={1} />
+        <FloatingPaths position={-1} />
+
+        {/* Grid Background */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="gridMarket" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="var(--home-grid-stroke)" strokeWidth="0.5" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#gridMarket)" />
+        </svg>
+
+        {/* Header */}
+        <div className="relative z-10 max-w-7xl mx-auto px-6 pt-6">
+          <div className="flex items-center justify-between mb-6">
+            {/* Title */}
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
+                  <Gavel size={24} className="text-white" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-[color:var(--border-subtle)] animate-pulse" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-[color:var(--foreground)] flex items-center gap-2">
+                  Order Book
+                  <span className="text-xs font-normal px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">LIVE</span>
+                </h1>
+                <p className="text-sm text-[color:var(--text-muted)]">Real-time AI agent task marketplace</p>
+              </div>
+            </div>
+
+            {/* Search & Controls */}
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--text-muted)]" />
+                <input
+                  type="text"
+                  placeholder="Search orders..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-64 pl-10 pr-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500/50 transition-all"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-[color:var(--text-muted)]">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>{agents.filter((a) => a.status === "active").length} agents online</span>
+              </div>
+
+              <button
+                onClick={fetchTasks}
+                className="p-2 hover:bg-[color:var(--surface-hover)] rounded-lg transition-colors group"
+                title="Refresh"
+              >
+                <RefreshCw size={16} className="text-[color:var(--text-muted)] group-hover:text-[color:var(--foreground)] transition-colors" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <main className="relative z-10 max-w-7xl mx-auto px-6 pb-8">
+          {/* Stats Row */}
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <StatCard
+              label="Open Orders"
+              value={stats?.queued || 0}
+              icon={Gavel}
+              color="text-cyan-400"
+            />
+            <StatCard
+              label="Executing"
+              value={stats?.executing || 0}
+              icon={Activity}
+              color="text-amber-400"
+            />
+            <StatCard
+              label="Settled Today"
+              value={stats?.completed || 0}
+              change="+12%"
+              icon={CheckCircle}
+              color="text-emerald-400"
+            />
+            <StatCard
+              label="Success Rate"
+              value={`${successRate}%`}
+              change={successRate >= 80 ? "+5%" : "-2%"}
+              icon={BarChart3}
+              color="text-violet-400"
+            />
+          </div>
+
+          <div className="flex gap-6 items-stretch">
+            {/* Order Book Panel */}
+            <div className="flex-1 flex flex-col">
+              {/* Filter Tabs */}
+              <div className="bg-[color:var(--surface-1)] backdrop-blur-sm rounded-t-xl border border-[color:var(--border-subtle)] border-b-0 px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    {[
+                      { key: "all", label: "All Orders", count: stats?.total },
+                      { key: "bids", label: "Open Bids", count: stats?.queued },
+                      { key: "executing", label: "Executing", count: stats?.executing },
+                      { key: "settled", label: "Settled", count: (stats?.completed || 0) + (stats?.failed || 0) },
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setActiveFilter(tab.key as typeof activeFilter)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                          activeFilter === tab.key
+                            ? "bg-violet-500/20 text-violet-400"
+                            : "text-[color:var(--text-muted)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface-hover)]"
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-xs ${
+                          activeFilter === tab.key
+                            ? "bg-violet-500/30 text-violet-300"
+                            : "bg-[color:var(--surface-1)] text-[color:var(--text-muted)]"
+                        }`}>
+                          {tab.count || 0}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center bg-[color:var(--surface-1)] rounded-lg p-1">
+                    <button
+                      onClick={() => setViewMode("orderbook")}
+                      className={`p-1.5 rounded transition-colors ${
+                        viewMode === "orderbook" ? "bg-violet-500/20 text-violet-400" : "text-[color:var(--text-muted)] hover:text-[color:var(--foreground)]"
+                      }`}
+                    >
+                      <LayoutList size={16} />
+                    </button>
+                    <button
+                      onClick={() => setViewMode("grid")}
+                      className={`p-1.5 rounded transition-colors ${
+                        viewMode === "grid" ? "bg-violet-500/20 text-violet-400" : "text-[color:var(--text-muted)] hover:text-[color:var(--foreground)]"
+                      }`}
+                    >
+                      <LayoutGrid size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Order Book Table Header */}
+              <div className="bg-[color:var(--surface-hover)] border-x border-[color:var(--border-subtle)] px-4 py-2">
+                <div className="grid grid-cols-12 gap-4 text-xs text-[color:var(--text-muted)] uppercase tracking-wide">
+                  <div className="col-span-2">Order ID</div>
+                  <div className="col-span-3">Task</div>
+                  <div className="col-span-2">Agent / Bids</div>
+                  <div className="col-span-2">Progress / Price</div>
+                  <div className="col-span-2">Time</div>
+                  <div className="col-span-1"></div>
+                </div>
+              </div>
+
+              {/* Order Book Rows */}
+              <div className="bg-[color:var(--surface-1)] backdrop-blur-sm rounded-b-xl border border-[color:var(--border-subtle)] border-t-0 divide-y divide-[color:var(--border-subtle)] flex-1 min-h-0 overflow-y-auto">
+                {filteredTasks.length > 0 ? (
+                  filteredTasks.map((task, index) => (
+                    <OrderBookRow key={task.id} task={task} index={index} />
+                  ))
+                ) : (
+                  <div className="py-12 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-[color:var(--surface-1)] flex items-center justify-center mx-auto mb-4">
+                      <Gavel size={28} className="text-[color:var(--text-muted)]" />
+                    </div>
+                    <h3 className="text-lg font-medium text-[color:var(--text-muted)] mb-2">No orders found</h3>
+                    <p className="text-sm text-[color:var(--text-muted)]">Orders will appear here when tasks are created</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right Sidebar */}
+            <div className="w-80 flex-shrink-0 space-y-4">
+              {/* Selected Order Detail */}
+              {selectedTask && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-[color:var(--surface-1)] backdrop-blur-sm rounded-xl border border-[color:var(--border-subtle)] p-4"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-[color:var(--foreground)]">{selectedTask.title}</h4>
+                      <p className="text-xs text-[color:var(--text-muted)] font-mono mt-0.5">{selectedTask.jobId}</p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedTask(null)}
+                      className="p-1 hover:bg-[color:var(--surface-hover)] rounded transition-colors"
+                    >
+                      <X size={14} className="text-[color:var(--text-muted)]" />
+                    </button>
+                  </div>
+
+                  {/* Job Details */}
+                  {(() => {
+                    const parsed = parseJobDetails(selectedTask.description);
+                    return (
+                      <div className="mb-3">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <FileText size={10} className="text-[color:var(--text-muted)]" />
+                          <span className="text-[10px] font-medium text-[color:var(--text-muted)] uppercase tracking-wide">
+                            {taskTypeLabel(parsed.type)}
+                          </span>
+                        </div>
+                        {parsed.details.length > 0 ? (
+                          <div className="bg-[color:var(--surface-1)]/40 rounded-lg p-2.5 space-y-1.5">
+                            {parsed.details.map((d, i) => (
+                              <div key={i} className="flex items-start gap-2">
+                                <span className="text-[10px] text-[color:var(--text-muted)] w-16 flex-shrink-0 pt-px">{d.label}</span>
+                                <span className="text-[11px] text-[color:var(--foreground)]">{d.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-[color:var(--text-muted)] italic">No additional details</p>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Tags */}
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {selectedTask.tags.map((tag) => (
+                      <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-[color:var(--surface-1)] text-[color:var(--text-muted)] rounded">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Adaptation Card */}
+                  {selectedTask.adaptation && selectedTask.adaptation.similarTasksFound > 0 && (
+                    <div className="mb-3 p-3 rounded-lg border border-violet-500/20 bg-violet-500/5">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Brain size={12} className="text-violet-400" />
+                        <span className="text-[11px] font-semibold text-violet-400 uppercase tracking-wide">
+                          Pattern Detected
+                        </span>
+                        <span className="text-[10px] text-[color:var(--text-muted)] ml-auto">
+                          {selectedTask.adaptation.similarTasksFound} similar task{selectedTask.adaptation.similarTasksFound !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        <div className="bg-[color:var(--surface-1)] rounded p-2">
+                          <span className="text-[9px] text-[color:var(--text-muted)] uppercase tracking-wide block mb-0.5">Confidence</span>
+                          <span className={`text-sm font-bold ${
+                            selectedTask.adaptation.confidence < 0.3 ? "text-red-400"
+                            : selectedTask.adaptation.confidence < 0.6 ? "text-amber-400"
+                            : "text-emerald-400"
+                          }`}>
+                            {(selectedTask.adaptation.confidence * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <div className="bg-[color:var(--surface-1)] rounded p-2">
+                          <span className="text-[9px] text-[color:var(--text-muted)] uppercase tracking-wide block mb-0.5">Success Rate</span>
+                          <span className={`text-sm font-bold ${
+                            selectedTask.adaptation.successRate < 0.3 ? "text-red-400"
+                            : selectedTask.adaptation.successRate < 0.6 ? "text-amber-400"
+                            : "text-emerald-400"
+                          }`}>
+                            {(selectedTask.adaptation.successRate * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Strategy badge */}
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span className="text-[10px] text-[color:var(--text-muted)]">Strategy:</span>
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                          selectedTask.adaptation.strategy === "decline" ? "bg-red-500/20 text-red-400"
+                          : selectedTask.adaptation.strategy === "human_assisted" ? "bg-amber-500/20 text-amber-400"
+                          : selectedTask.adaptation.strategy === "cautious" ? "bg-yellow-500/20 text-yellow-400"
+                          : "bg-emerald-500/20 text-emerald-400"
+                        }`}>
+                          {selectedTask.adaptation.strategy.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                        </span>
+                      </div>
+
+                      {/* Failure chips */}
+                      {Object.keys(selectedTask.adaptation.commonFailures).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {Object.entries(selectedTask.adaptation.commonFailures).map(([type, count]) => (
+                            <span key={type} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 bg-red-500/10 text-red-400 rounded">
+                              <AlertTriangle size={8} />
+                              {type} ({count}x)
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Reasoning */}
+                      {selectedTask.adaptation.reasoning && (
+                        <p className="text-[10px] text-[color:var(--text-muted)] leading-relaxed italic">
+                          {selectedTask.adaptation.reasoning}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Bids Section */}
+                  {selectedTask.bids.length > 0 && (
+                    <div className="mb-3">
+                      <h5 className="text-[10px] font-medium text-[color:var(--text-muted)] uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                        <Gavel size={10} />
+                        Bids ({selectedTask.bids.length})
+                      </h5>
+                      <div className="space-y-1.5 max-h-[150px] overflow-y-auto">
+                        {selectedTask.bids.map((bid) => {
+                          const BidIcon = getIcon(bid.agentIcon);
+                          return (
+                            <div key={bid.id} className="flex items-center gap-2 p-2 bg-[color:var(--surface-hover)] rounded-lg">
+                              <div className="w-6 h-6 rounded-md bg-cyan-500/10 flex items-center justify-center flex-shrink-0">
+                                <BidIcon size={11} className="text-cyan-400" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-[11px] font-medium text-[color:var(--foreground)] truncate block">{bid.agent}</span>
+                                <div className="flex items-center gap-2 text-[10px] text-[color:var(--text-muted)]">
+                                  <span className="flex items-center gap-0.5">
+                                    <Star size={8} />
+                                    {bid.reputation}
+                                  </span>
+                                  <span>{bid.eta}</span>
+                                </div>
+                              </div>
+                              <span className="text-[11px] font-medium text-cyan-400 flex-shrink-0">
+                                {bid.price}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Stage Pipeline */}
+                  <div className="space-y-3">
+                    {selectedTask.stages.map((stage, index) => {
+                      const isComplete = stage.status === "complete";
+                      const isInProgress = stage.status === "in_progress";
+
+                      return (
+                        <div key={stage.id} className="relative flex gap-3">
+                          <div className="flex flex-col items-center">
+                            <div
+                              className={`w-2.5 h-2.5 rounded-full ${
+                                isComplete
+                                  ? "bg-emerald-500"
+                                  : isInProgress
+                                  ? "bg-amber-500 animate-pulse"
+                                  : "bg-[color:var(--surface-hover)]"
+                              }`}
+                            />
+                            {index < selectedTask.stages.length - 1 && (
+                              <div className={`w-0.5 flex-1 min-h-[30px] ${isComplete ? "bg-emerald-500/30" : "bg-[color:var(--surface-hover)]"}`} />
+                            )}
+                          </div>
+                          <div className="flex-1 pb-3">
+                            <p className={`text-xs font-medium ${isComplete || isInProgress ? "text-[color:var(--foreground)]" : "text-[color:var(--text-muted)]"}`}>
+                              {stage.name}
+                            </p>
+                            <p className="text-[10px] text-[color:var(--text-muted)] mt-0.5">{stage.description}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Execution Feed */}
+              <div className="bg-[color:var(--surface-1)] backdrop-blur-sm rounded-xl border border-[color:var(--border-subtle)] p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-[color:var(--foreground)] flex items-center gap-2">
+                    <Activity size={14} className="text-violet-400" />
+                    Recent Executions
+                  </h3>
+                  <span className="text-[10px] text-[color:var(--text-muted)]">Auto-updating</span>
+                </div>
+
+                <div className="space-y-0 max-h-[300px] overflow-y-auto">
+                  {recentExecutions.length > 0 ? (
+                    recentExecutions.map((task, index) => (
+                      <ExecutionFeedItem key={task.id} task={task} index={index} />
+                    ))
+                  ) : (
+                    <p className="text-xs text-[color:var(--text-muted)] text-center py-4">No recent executions</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Active Agents */}
+              <div className="bg-[color:var(--surface-1)] backdrop-blur-sm rounded-xl border border-[color:var(--border-subtle)] p-4">
+                <h3 className="text-sm font-semibold text-[color:var(--foreground)] flex items-center gap-2 mb-4">
+                  <Shield size={14} className="text-emerald-400" />
+                  Active Agents
+                </h3>
+                <div className="space-y-2">
+                  {agents.filter(a => a.status === "active").slice(0, 5).map((agent) => {
+                    const AgentIcon = getIcon(agent.icon);
+                    return (
+                      <div key={agent.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-[color:var(--surface-hover)] transition-colors">
+                        <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                          <AgentIcon size={14} className="text-violet-400" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-1">
+                            {agent.explorerLink ? (
+                              <a
+                                href={agent.explorerLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-medium text-[color:var(--foreground)] hover:text-violet-400 transition-colors"
+                              >
+                                {agent.title}
+                              </a>
+                            ) : (
+                              <p className="text-xs font-medium text-[color:var(--foreground)]">{agent.title}</p>
+                            )}
+                            {agent.isVerified && <BadgeCheck size={10} className="text-emerald-400" />}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span className="text-[10px] text-emerald-400">Ready</span>
+                            {agent.reputation !== undefined && agent.reputation > 0 && (
+                              <span className="text-[10px] text-[color:var(--text-muted)] flex items-center gap-0.5">
+                                <Star size={8} />
+                                {agent.reputation.toFixed(1)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </>
+  );
+}
