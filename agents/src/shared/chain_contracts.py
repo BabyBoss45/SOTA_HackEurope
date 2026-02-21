@@ -46,9 +46,7 @@ logger = logging.getLogger(__name__)
 
 # ---- IDL Loading ---------------------------------------------------------
 
-_IDL_PATH = Path(__file__).resolve().parent.parent.parent.parent / (
-    Path("anchor") / "target" / "idl" / "sota_marketplace.json"
-)
+_IDL_PATH = Path(__file__).resolve().parent.parent.parent.parent / "anchor" / "target" / "idl" / "sota_marketplace.json"
 
 _idl_cache: Optional[dict] = None
 
