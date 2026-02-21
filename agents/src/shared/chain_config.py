@@ -148,6 +148,14 @@ def get_keypair(agent_type: str = "butler") -> Optional[Keypair]:
 
     raw = raw.strip()
 
+    # Reject Ethereum hex keys early (common misconfiguration)
+    if raw.startswith("0x") or (len(raw) == 64 and all(c in "0123456789abcdefABCDEF" for c in raw)):
+        raise ValueError(
+            f"{env_var} looks like an Ethereum hex key (starts with '{raw[:6]}...'). "
+            "This is a Solana project — provide a base58-encoded keypair, "
+            "a base64-encoded keypair, or a JSON byte array from `solana-keygen`."
+        )
+
     # Try JSON array first: [12, 34, 56, ...]
     if raw.startswith("["):
         try:
@@ -156,10 +164,10 @@ def get_keypair(agent_type: str = "butler") -> Optional[Keypair]:
         except (json.JSONDecodeError, ValueError, OverflowError):
             pass
 
-    # Try base58
+    # Try base58 (catch BaseException because solders raises Rust PanicException)
     try:
         return Keypair.from_base58_string(raw)
-    except Exception:
+    except BaseException:
         pass
 
     # Try base64

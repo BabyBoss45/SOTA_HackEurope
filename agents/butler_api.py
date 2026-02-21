@@ -21,6 +21,7 @@ import time
 import asyncio
 import logging
 import json
+from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, HTTPException
@@ -79,18 +80,7 @@ load_dotenv(_here / ".env")  # fallback: agents/.env
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="SOTA Butler API")
-app.mount("/hub", marketplace_hub_app)
-logger.info("Marketplace Hub mounted at /hub")
-
 _cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "*").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # ─── Globals ──────────────────────────────────────────────────
 
@@ -179,10 +169,10 @@ class ReleaseRequest(BaseModel):
     job_id: int
 
 
-# ─── Startup ──────────────────────────────────────────────────
+# ─── Lifespan ─────────────────────────────────────────────────
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global contracts, butler_agent, job_board, hackathon_agent, caller_agent, db, task_memory
     cluster = get_cluster()
     print(f"Starting SOTA Butler API...")
@@ -324,6 +314,21 @@ async def startup_event():
     # Log registered workers
     workers = job_board.workers
     print(f"{len(workers)} worker(s) registered: {list(workers.keys())}")
+
+    yield
+
+
+app = FastAPI(title="SOTA Butler API", lifespan=lifespan)
+app.mount("/hub", marketplace_hub_app)
+logger.info("Marketplace Hub mounted at /hub")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")
