@@ -208,6 +208,7 @@ class JobType(IntEnum):
     CALL_VERIFICATION = 5
     GENERIC = 6
     JOB_SCOURING = 7
+    FUN_ACTIVITY = 8
 
 
 JOB_TYPE_LABELS = {
@@ -218,6 +219,7 @@ JOB_TYPE_LABELS = {
     JobType.CALL_VERIFICATION: "Call Verification",
     JobType.GENERIC: "Generic Task",
     JobType.JOB_SCOURING: "Job Scouring",
+    JobType.FUN_ACTIVITY: "Fun Activity",
 }
 
 
@@ -225,4 +227,5 @@ AGENT_CAPABILITIES = {
     "BUTLER": ["job_planning", "agent_coordination", "user_interaction"],
     "CALLER": ["phone_call", "voice_verification", "reservation_booking"],
     "HACKATHON": ["hackathon_search", "web_scraping", "event_filtering"],
+    "FUN_ACTIVITY": ["event_search", "preference_learning", "weather_adaptation", "confidence_inference"],
 }

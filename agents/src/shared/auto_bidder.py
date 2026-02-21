@@ -36,6 +36,7 @@ JOB_TYPE_TAGS: dict[JobType, str] = {
     JobType.HACKATHON_REGISTRATION: "hackathon_registration",
     JobType.CALL_VERIFICATION:      "call_verification",
     JobType.GENERIC:                "generic",
+    JobType.FUN_ACTIVITY:           "fun_activity",
 }
 
 

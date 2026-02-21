@@ -69,6 +69,7 @@ from agents.src.restaurant_booker.agent import create_restaurant_booker_agent
 from agents.src.refund_claim.agent import create_refund_claim_agent
 from agents.src.smart_shopper.agent import create_smart_shopper_agent
 from agents.src.trip_planner.agent import create_trip_planner_agent
+from agents.src.fun_activity.agent import create_fun_activity_agent
 
 # Load .env from project root (single source of truth)
 _here = Path(__file__).resolve().parent
@@ -332,6 +333,14 @@ async def startup_event():
     except Exception as e:
         print(f"TripPlannerAgent init failed (non-critical): {e}")
 
+    try:
+        fun_activity_agent = await create_fun_activity_agent()
+        if task_memory:
+            fun_activity_agent.task_memory = task_memory
+        print(f"FunActivityAgent registered on JobBoard")
+    except Exception as e:
+        print(f"FunActivityAgent init failed (non-critical): {e}")
+
     # Log registered workers
     workers = job_board.workers
     print(f"{len(workers)} worker(s) registered: {list(workers.keys())}")
@@ -492,6 +501,9 @@ async def post_job_from_elevenlabs(req: MarketplacePostRequest):
         "smart_shopping": "smart_shopping",
         "trip_planning": "trip_planning",
         "refund_claim": "refund_claim",
+        "fun_activity": "fun_activity",
+        "fun_activity_discovery": "fun_activity",
+        "event_discovery": "fun_activity",
     }
     tool_type = TASK_TO_TOOL.get(task_lower, task_lower)
 
@@ -513,6 +525,8 @@ async def post_job_from_elevenlabs(req: MarketplacePostRequest):
             tool_type = "trip_planning"
         elif "refund" in task_lower or "claim" in task_lower:
             tool_type = "refund_claim"
+        elif "fun" in task_lower or "event" in task_lower or "activity" in task_lower:
+            tool_type = "fun_activity"
 
     description = f"{task}: {', '.join(f'{k}={v}' for k, v in params.items())}"
 

@@ -53,6 +53,22 @@ async function main() {
       ownerId: user.id,
     },
   });
+
+  await prisma.agent.upsert({
+    where: { id: 3 },
+    update: {},
+    create: {
+      title: "Fun Activity",
+      description:
+        "Find something fun with zero friction. Uses your location, calendar, budget, and past events to recommend concerts, workshops, exhibitions, comedy, and more. Learns your preferences over time.",
+      category: "Events",
+      priceUsd: 3,
+      tags: "events,fun,recommendations",
+      network: "solana-devnet",
+      ownerId: user.id,
+      icon: "PartyPopper",
+    },
+  });
 }
 
 main()
