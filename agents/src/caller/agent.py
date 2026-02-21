@@ -236,7 +236,6 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
 
         logger.info("📞 Executing call job #%s → %s (%s)", job.job_id, phone_number, purpose)
 
-        # ── Try ElevenLabs ConvAI outbound call ──────────────
         from .tools import MakeElevenLabsCallTool, MakePhoneCallTool, GetCallStatusTool
         import json as _json
 
@@ -244,8 +243,10 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
         el_phone_id = os.getenv("ELEVENLABS_PHONE_ID")
         el_agent_id = os.getenv("ELEVENLABS_CALLER_AGENT_ID") or os.getenv("ELEVENLABS_AGENT_ID")
 
+        # ── ElevenLabs ConvAI: fully conversational AI call ──
+        # Requires ELEVENLABS_PHONE_ID (import your Twilio number into ElevenLabs dashboard)
         if el_api_key and el_phone_id and el_agent_id:
-            logger.info("📞 Using ElevenLabs ConvAI for outbound call")
+            logger.info("📞 Using ElevenLabs ConvAI (conversational AI via Twilio number)")
             tool = MakeElevenLabsCallTool()
             raw = await tool.execute(
                 to_number=phone_number,
@@ -272,10 +273,15 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
                         f"The AI assistant is handling the conversation now."
                     ),
                 }
-            logger.warning("ElevenLabs call failed, falling back to Twilio: %s", result.get("error"))
+            logger.warning("ElevenLabs ConvAI call failed, falling back to Twilio: %s", result.get("error"))
+        else:
+            if not el_phone_id:
+                logger.info("📞 ELEVENLABS_PHONE_ID not set — using Twilio TwiML (scripted call)")
+            elif not el_api_key:
+                logger.info("📞 ELEVENLABS_API_KEY not set — using Twilio TwiML (scripted call)")
 
-        # ── Fallback: Twilio TwiML call ──────────────────────
-        logger.info("📞 Using Twilio TwiML for outbound call")
+        # ── Twilio TwiML: scripted call with pauses for response ──
+        logger.info("📞 Placing Twilio call to %s", phone_number)
         if booking_type == "hotel":
             script = (
                 f"Hello, I'm calling on behalf of {user_name} through a concierge service. "
