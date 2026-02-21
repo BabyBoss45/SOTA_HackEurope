@@ -1,7 +1,7 @@
 """
 Tests for the Adaptive Task Memory system (agents/src/shared/task_memory.py).
 
-All external services (Firestore, Qdrant, OpenAI embeddings) are mocked.
+All external services (PostgreSQL, Qdrant, OpenAI embeddings) are mocked.
 No env vars or network access required.
 """
 
@@ -327,19 +327,19 @@ class TestPersistOutcome:
         return db
 
     @pytest.fixture
-    def memory_firestore_only(self, mock_db):
-        """TaskPatternMemory with Firestore only (no Qdrant)."""
+    def memory_db_only(self, mock_db):
+        """TaskPatternMemory with database only (no Qdrant)."""
         mem = TaskPatternMemory.__new__(TaskPatternMemory)
         mem.db = mock_db
         mem.qdrant = None
         mem.incident_io = None
         return mem
 
-    async def test_success_outcome(self, memory_firestore_only, mock_db):
+    async def test_success_outcome(self, memory_db_only, mock_db):
         job = FakeJob(tags=["hackathon_registration"])
         result = {"success": True, "hackathons": []}
 
-        outcome = await memory_firestore_only.persist_outcome(
+        outcome = await memory_db_only.persist_outcome(
             job=job, agent_id="hackathon", result=result, elapsed_ms=1200,
         )
 
@@ -351,11 +351,11 @@ class TestPersistOutcome:
         assert outcome.execution_time_ms == 1200
         mock_db.store_task_outcome.assert_awaited_once()
 
-    async def test_captcha_failure(self, memory_firestore_only):
+    async def test_captcha_failure(self, memory_db_only):
         job = FakeJob(description="Register for EU hackathons on devpost")
         result = {"success": False, "error": "CAPTCHA detected"}
 
-        outcome = await memory_firestore_only.persist_outcome(
+        outcome = await memory_db_only.persist_outcome(
             job=job, agent_id="hackathon", result=result, elapsed_ms=5000,
         )
 
@@ -366,29 +366,29 @@ class TestPersistOutcome:
         assert outcome.context.get("region") == "EU"
         assert outcome.context.get("site") == "devpost"
 
-    async def test_network_failure(self, memory_firestore_only):
+    async def test_network_failure(self, memory_db_only):
         result = {"success": False, "error": "Connection refused to target host"}
 
-        outcome = await memory_firestore_only.persist_outcome(
+        outcome = await memory_db_only.persist_outcome(
             job=FakeJob(), agent_id="caller", result=result, elapsed_ms=300,
         )
 
         assert outcome.failure_type == "network"
         assert outcome.recoverable is True
 
-    async def test_unknown_failure(self, memory_firestore_only):
+    async def test_unknown_failure(self, memory_db_only):
         result = {"success": False, "error": "Something bizarre"}
 
-        outcome = await memory_firestore_only.persist_outcome(
+        outcome = await memory_db_only.persist_outcome(
             job=FakeJob(), agent_id="caller", result=result, elapsed_ms=100,
         )
 
         assert outcome.failure_type == "unknown"
         assert outcome.recoverable is False
 
-    async def test_firestore_called_with_dict(self, memory_firestore_only, mock_db):
+    async def test_db_called_with_dict(self, memory_db_only, mock_db):
         job = FakeJob(tags=["call_verification"])
-        await memory_firestore_only.persist_outcome(
+        await memory_db_only.persist_outcome(
             job=job, agent_id="caller",
             result={"success": True}, elapsed_ms=800,
         )
@@ -400,42 +400,42 @@ class TestPersistOutcome:
         assert call_args["agent_id"] == "caller"
         assert call_args["success"] is True
 
-    async def test_no_qdrant_still_works(self, memory_firestore_only, mock_db):
-        """Without Qdrant configured, persist should still write to Firestore."""
-        await memory_firestore_only.persist_outcome(
+    async def test_no_qdrant_still_works(self, memory_db_only, mock_db):
+        """Without Qdrant configured, persist should still write to database."""
+        await memory_db_only.persist_outcome(
             job=FakeJob(), agent_id="hackathon",
             result={"success": False, "error": "timeout"}, elapsed_ms=100,
         )
         mock_db.store_task_outcome.assert_awaited_once()
 
-    async def test_no_incident_io_no_crash(self, memory_firestore_only):
+    async def test_no_incident_io_no_crash(self, memory_db_only):
         """Without incident.io client, persist should not raise."""
-        outcome = await memory_firestore_only.persist_outcome(
+        outcome = await memory_db_only.persist_outcome(
             job=FakeJob(), agent_id="hackathon",
             result={"success": False, "error": "captcha"}, elapsed_ms=100,
         )
         assert outcome.success is False
 
-    async def test_strategy_passed_through(self, memory_firestore_only):
-        outcome = await memory_firestore_only.persist_outcome(
+    async def test_strategy_passed_through(self, memory_db_only):
+        outcome = await memory_db_only.persist_outcome(
             job=FakeJob(), agent_id="hackathon",
             result={"success": True}, elapsed_ms=500,
             strategy="cautious",
         )
         assert outcome.strategy_used == "cautious"
 
-    async def test_task_type_inferred(self, memory_firestore_only):
+    async def test_task_type_inferred(self, memory_db_only):
         job = FakeJob(tags=["hotel_booking"])
-        outcome = await memory_firestore_only.persist_outcome(
+        outcome = await memory_db_only.persist_outcome(
             job=job, agent_id="caller",
             result={"success": True}, elapsed_ms=200,
         )
         assert outcome.task_type == "hotel_booking"
 
-    async def test_firestore_error_swallowed(self):
-        """Firestore failure should not crash persist_outcome."""
+    async def test_db_error_swallowed(self):
+        """Database failure should not crash persist_outcome."""
         db = AsyncMock()
-        db.store_task_outcome = AsyncMock(side_effect=RuntimeError("Firestore down"))
+        db.store_task_outcome = AsyncMock(side_effect=RuntimeError("Database down"))
 
         mem = TaskPatternMemory.__new__(TaskPatternMemory)
         mem.db = db

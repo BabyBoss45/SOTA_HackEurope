@@ -16,6 +16,8 @@ __pycache__/
 .env.local
 .env.*.local
 *.secrets.json
+*-firebase-sdk.json
+sota-firebase-sdk.json
 
 # OS
 .DS_Store

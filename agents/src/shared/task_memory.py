@@ -2,12 +2,12 @@
 Task Memory — Structured outcome persistence + similarity-based pattern detection.
 
 Dual storage:
-  Firestore = source of truth (structured data, analytics, UI)
-  Qdrant    = experience retrieval layer (embeddings for similarity search)
+  PostgreSQL = source of truth (structured data, analytics, UI)
+  Qdrant     = experience retrieval layer (embeddings for similarity search)
 
 Usage::
 
-    memory = TaskPatternMemory(db=firestore_db)
+    memory = TaskPatternMemory(db=database)
     await memory.persist_outcome(job, agent_id="hackathon", result=result, elapsed_ms=1820)
     pattern = await memory.analyze_similar("Register for EU hackathons", ["hackathon_registration"], "hackathon")
 """
@@ -172,8 +172,8 @@ class TaskPatternMemory:
     """
     Dual-write outcome store with similarity-based pattern retrieval.
 
-    Firestore = source of truth (structured records).
-    Qdrant    = experience retrieval (embedding similarity search).
+    PostgreSQL = source of truth (structured records).
+    Qdrant     = experience retrieval (embedding similarity search).
     """
 
     def __init__(
@@ -197,7 +197,7 @@ class TaskPatternMemory:
             from qdrant_client import QdrantClient  # type: ignore
             resolved_url = url or os.getenv("QDRANT_URL")
             if not resolved_url:
-                logger.info("QDRANT_URL not set — task memory will use Firestore only")
+                logger.info("QDRANT_URL not set — task memory will use PostgreSQL only")
                 return None
             return QdrantClient(
                 url=resolved_url,
@@ -233,7 +233,7 @@ class TaskPatternMemory:
         pattern_hint: Optional[PatternAnalysis] = None,
     ) -> TaskOutcome:
         """
-        Build a structured TaskOutcome and write it to Firestore + Qdrant.
+        Build a structured TaskOutcome and write it to PostgreSQL + Qdrant.
 
         ``pattern_hint`` is the pre-execution PatternAnalysis (if available).
         It's forwarded to ``_notify_incident_io`` so severity can escalate
@@ -264,8 +264,8 @@ class TaskPatternMemory:
             created_at=time.time(),
         )
 
-        # 1. Firestore (always)
-        await self._persist_firestore(outcome)
+        # 1. PostgreSQL (always)
+        await self._persist_db(outcome)
 
         # 2. Qdrant (if available)
         await self._persist_qdrant(outcome)
@@ -275,13 +275,13 @@ class TaskPatternMemory:
 
         return outcome
 
-    async def _persist_firestore(self, outcome: TaskOutcome) -> None:
+    async def _persist_db(self, outcome: TaskOutcome) -> None:
         if not self.db:
             return
         try:
             await self.db.store_task_outcome(asdict(outcome))
         except Exception as exc:
-            logger.warning("Firestore task outcome write failed: %s", exc)
+            logger.warning("Database task outcome write failed: %s", exc)
 
     async def _persist_qdrant(self, outcome: TaskOutcome) -> None:
         if not self.qdrant:

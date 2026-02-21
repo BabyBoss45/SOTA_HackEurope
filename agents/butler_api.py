@@ -170,18 +170,18 @@ class ReleaseRequest(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    global contracts, butler_agent, job_board, hackathon_agent, caller_agent, db
+    global contracts, butler_agent, job_board, hackathon_agent, caller_agent, db, task_memory
     network = get_network()
     print(f"Starting SOTA Butler API...")
     print(f"Network: {network.rpc_url} (chain {network.chain_id})")
 
-    # ── Connect to Firestore ────────────────────────────────
+    # ── Connect to PostgreSQL ────────────────────────────────
     if Database is not None:
         try:
             db = await Database.connect()
-            print("Connected to Firestore")
+            print("Connected to PostgreSQL")
         except Exception as e:
-            print(f"Firestore unavailable — running without persistence: {e}")
+            print(f"Database unavailable — running without persistence: {e}")
     else:
         print("Database module not available — running without persistence")
 
@@ -484,7 +484,7 @@ async def execute_job_after_escrow(job_id: str):
 
     logger.info(f"Executing job {job_id} with worker {winning_bid.bidder_id}")
 
-    # Persist "in_progress" to Firestore
+    # Persist "in_progress" to database
     if db:
         try:
             await db.update_job_status(job_id, "assigned")
@@ -587,7 +587,7 @@ async def execute_job_after_escrow(job_id: str):
             except Exception as fallback_err:
                 logger.warning(f"Direct search fallback failed: {fallback_err}")
 
-        # Persist "completed" to Firestore
+        # Persist "completed" to database
         if db:
             try:
                 await db.update_job_status(job_id, "completed")

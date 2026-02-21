@@ -411,14 +411,14 @@ class PostJobTool(BaseTool):
             return None
 
     async def _persist_job(self, db, job_id, description, tags, budget_usd, poster, metadata):
-        """Fire-and-forget: persist job to Firestore."""
+        """Fire-and-forget: persist job to database."""
         try:
             await db.create_job(job_id, description, tags, budget_usd, poster, metadata)
         except Exception as e:
             print(f"⚠️ DB create_job failed: {e}")
 
     async def _persist_bid_selection(self, db, job_id, result):
-        """Fire-and-forget: persist bid selection to Firestore."""
+        """Fire-and-forget: persist bid selection to database."""
         try:
             w = result.winning_bid
             await db.update_job_status(
@@ -443,7 +443,7 @@ class PostJobTool(BaseTool):
             print(f"⚠️ DB persist_bid_selection failed: {e}")
 
     async def _persist_no_bids(self, db, job_id):
-        """Fire-and-forget: mark job expired when no bids received."""
+        """Fire-and-forget: mark job expired in database when no bids received."""
         try:
             await db.update_job_status(job_id, "expired")
         except Exception as e:
@@ -519,7 +519,7 @@ class PostJobTool(BaseTool):
 
             print(f"📢 Job {job_id_str} posted — collecting bids for {listing.bid_window_seconds}s…")
 
-            # ── Persist job to Firestore (fire-and-forget) ────────
+            # ── Persist job to database (fire-and-forget) ────────
             db = await self._get_db()
             if db:
                 asyncio.ensure_future(self._persist_job(
@@ -548,7 +548,7 @@ class PostJobTool(BaseTool):
             # ── 3. After winner selected → return result with escrow info ──
             if result.winning_bid:
                 w = result.winning_bid
-                # Persist bid selection to Firestore
+                # Persist bid selection to database
                 if db:
                     asyncio.ensure_future(self._persist_bid_selection(db, job_id_str, result))
 
@@ -602,7 +602,7 @@ class PostJobTool(BaseTool):
                 
                 return json.dumps(response, indent=2)
             else:
-                # Persist expired status to Firestore
+                # Persist expired status to database
                 if db:
                     asyncio.ensure_future(self._persist_no_bids(db, job_id_str))
 

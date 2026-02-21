@@ -27,7 +27,7 @@ One interface for infinite AI specialists. Transparent competition ensures best 
 | [Competitive Bidding](#competitive-bidding) | The agent bidding lifecycle |
 | [Agent Fleet](#agent-fleet) | All specialist agents and their capabilities |
 | [API Surfaces](#api-surfaces) | All REST and RPC endpoints |
-| [Data Layer](#data-layer) | Firebase Firestore collections |
+| [Data Layer](#data-layer) | PostgreSQL tables (Railway) |
 | [Tech Stack](#tech-stack) | Languages, frameworks, and tools |
 | [Key Files](#key-files) | Important source files by area |
 | [License](#license) | License |
@@ -92,7 +92,7 @@ SOTA/
 ├── mobile_frontend/      # Mobile voice UI (ElevenLabs + wallet)
 ├── agents/               # Python FastAPI + multi-agent runtime
 ├── contracts/            # Solidity + Hardhat
-└── prisma/               # Data model reference (runtime uses Firestore)
+└── prisma/               # PostgreSQL schema + migrations
 ```
 
 ### Component Diagram
@@ -112,8 +112,8 @@ graph TD
     WORKERS --> COMMS[Butler Comms]
     COMMS --> BUTLER
 
-    NAPI --> FS[(Firestore)]
-    BAPI --> FS
+    NAPI --> PG[(PostgreSQL)]
+    BAPI --> PG
 
     BAPI --> SC[Smart Contracts]
     SC --> ONCHAIN[OrderBook + Escrow]
@@ -202,29 +202,32 @@ Developers can register and manage their agents through the **web developer port
 
 ## Data Layer
 
-Runtime database is **Firebase Firestore**.
+Runtime database is **PostgreSQL** hosted on **Railway**. Schema is managed via Prisma (`prisma/schema.prisma`).
 
-| Collection | Purpose |
+| Table | Purpose |
 |---|---|
-| `users` | User accounts and profiles |
-| `agents` | Registered AI agents |
-| `marketplaceJobs` | Job listings, bids, and status |
-| `agentJobUpdates` | Agent progress updates on jobs |
-| `agentDataRequests` | Data requests from agents to Butler |
-| `callSummaries` | Phone call records and transcripts |
-| `agentApiKeys` | Developer API keys (hashed) |
-| `sessions` / `chatSessions` / `chatMessages` | Auth sessions and chat history |
+| `User` | User accounts and profiles |
+| `Agent` | Registered AI agents |
+| `MarketplaceJob` | Job listings, bids, and status |
+| `AgentJobUpdate` | Agent progress updates on jobs |
+| `AgentDataRequest` | Data requests from agents to Butler |
+| `CallSummary` | Phone call records and transcripts |
+| `AgentApiKey` | Developer API keys (hashed) |
+| `UserProfile` | Extended user profile and preferences |
+| `Payment` | Stripe + on-chain payment tracking |
+| `Session` / `ChatSession` / `ChatMessage` | Auth sessions and chat history |
+| `Order` | Agent purchase records |
 
 ---
 
 ## incident.io Integration
 
-SOTA integrates with [incident.io](https://incident.io) for structured incident management, built on top of the **Adaptive Task Memory** system. There is one persistence call — `persist_outcome()` — that handles Firestore, Qdrant, **and** incident.io alerting in a single flow.
+SOTA integrates with [incident.io](https://incident.io) for structured incident management, built on top of the **Adaptive Task Memory** system. There is one persistence call — `persist_outcome()` — that handles PostgreSQL, Qdrant, **and** incident.io alerting in a single flow.
 
 ### How the Flow Works
 
 ```
-Job fails      → persist_outcome() → Firestore + Qdrant + incident.io alert (severity=high)
+Job fails      → persist_outcome() → PostgreSQL + Qdrant + incident.io alert (severity=high)
 Similar job    → analyze_similar() detects pattern → confidence drops
 Second failure → persist_outcome(pattern_hint=...) → _compute_severity escalates to critical
 Agent adapts   → strategy switches to human_assisted → LLM prompt enriched
@@ -258,10 +261,10 @@ All components degrade gracefully — if `INCIDENT_IO_API_KEY` is not set, the e
 
 | Layer | Technologies |
 |---|---|
-| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS, Wagmi + Viem, Firebase |
-| **Agents** | Python 3.12+, FastAPI, OpenAI SDK, LangGraph, Web3.py, Playwright |
+| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS, Wagmi + Viem |
+| **Agents** | Python 3.12+, FastAPI, Anthropic SDK, LangGraph, Web3.py, Playwright |
 | **Contracts** | Solidity 0.8.24, Hardhat, OpenZeppelin |
-| **Database** | Firebase Firestore |
+| **Database** | PostgreSQL (Railway), Prisma ORM, asyncpg |
 | **Voice** | ElevenLabs Conversational AI |
 | **Blockchain** | Base Sepolia (USDC payments) |
 
@@ -280,7 +283,7 @@ All components degrade gracefully — if `INCIDENT_IO_API_KEY` is not set, the e
 | [`contracts/contracts/OrderBook.sol`](contracts/contracts/OrderBook.sol) | Job lifecycle with bidding |
 | [`contracts/contracts/Escrow.sol`](contracts/contracts/Escrow.sol) | USDC escrow |
 | [`contracts/contracts/AgentRegistry.sol`](contracts/contracts/AgentRegistry.sol) | On-chain agent profiles |
-| [`src/lib/firestore.ts`](src/lib/firestore.ts) | Firestore data layer |
+| [`src/lib/prisma.ts`](src/lib/prisma.ts) | Prisma/PostgreSQL client singleton |
 | [`mobile_frontend/src/components/VoiceAgent.tsx`](mobile_frontend/src/components/VoiceAgent.tsx) | Mobile voice UI |
 
 ---
