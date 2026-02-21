@@ -77,9 +77,10 @@ app = FastAPI(title="SOTA Butler API")
 app.mount("/hub", marketplace_hub_app)
 logger.info("Marketplace Hub mounted at /hub")
 
+_cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
