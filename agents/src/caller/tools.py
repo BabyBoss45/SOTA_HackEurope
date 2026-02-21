@@ -57,57 +57,47 @@ class MakePhoneCallTool(BaseTool):
         phone_number: str,
         script: str,
         gather_input: bool = False,
-        record: bool = True
+        record: bool = True,
     ) -> str:
-        """Make a phone call using Twilio"""
+        """Make a basic TwiML phone call (one-way script only).
+
+        This is an emergency fallback; prefer MakeElevenLabsCallTool for
+        real conversational calls.
+        """
         from twilio.rest import Client
-        from twilio.twiml.voice_response import VoiceResponse, Gather
-        
+        from twilio.twiml.voice_response import VoiceResponse
+
         account_sid = os.getenv("TWILIO_ACCOUNT_SID")
         auth_token = os.getenv("TWILIO_AUTH_TOKEN")
         from_number = os.getenv("TWILIO_PHONE_NUMBER")
-        
+
         if not all([account_sid, auth_token, from_number]):
             return json.dumps({
                 "success": False,
                 "error": "Twilio credentials not configured"
             })
-        
+
         try:
             client = Client(account_sid, auth_token)
-            
-            # Build TwiML
             response = VoiceResponse()
-            
-            if gather_input:
-                gather = Gather(
-                    num_digits=1,
-                    action="/handle-key",
-                    method="POST"
-                )
-                gather.say(script, language="en-US")
-                response.append(gather)
-                response.say("We didn't receive any input. Goodbye!")
-            else:
-                response.say(script, language="en-US")
-            
-            # Make the call
+            response.say(script, language="en-US")
+
             call = client.calls.create(
                 to=phone_number,
                 from_=from_number,
                 twiml=str(response),
-                record=record
+                record=record,
             )
-            
+
             return json.dumps({
                 "success": True,
                 "call_sid": call.sid,
                 "status": call.status,
                 "phone_number": phone_number,
                 "from_number": from_number,
-                "direction": call.direction
+                "direction": call.direction,
             }, indent=2)
-            
+
         except Exception as e:
             return json.dumps({
                 "success": False,
@@ -350,19 +340,67 @@ class ComputeProofHashTool(BaseTool):
             })
 
 
+class GetElevenLabsConversationTool(BaseTool):
+    """
+    Poll ElevenLabs for conversation status, transcript, and analysis.
+    """
+    name: str = "get_elevenlabs_conversation"
+    description: str = (
+        "Retrieve the current status, transcript, and analysis of an "
+        "ElevenLabs ConvAI conversation by its conversation_id."
+    )
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "conversation_id": {
+                "type": "string",
+                "description": "The ElevenLabs conversation ID",
+            }
+        },
+        "required": ["conversation_id"],
+    }
+
+    async def execute(self, conversation_id: str) -> str:
+        api_key = os.getenv("ELEVENLABS_API_KEY")
+        if not api_key:
+            return json.dumps({"success": False, "error": "ELEVENLABS_API_KEY not set"})
+
+        url = f"https://api.elevenlabs.io/v1/convai/conversations/{conversation_id}"
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(
+                    url, headers={"xi-api-key": api_key}
+                )
+                if resp.status_code == 404:
+                    return json.dumps({
+                        "success": True,
+                        "status": "not_found",
+                        "data": None,
+                    })
+                resp.raise_for_status()
+                return json.dumps({
+                    "success": True,
+                    "status": "ok",
+                    "data": resp.json(),
+                }, indent=2, default=str)
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+
 def create_caller_tools() -> list[BaseTool]:
     """
     Create all caller-specific tools.
-    
+
     Note: Bidding and wallet tools are created separately in the agent.
     """
     return [
         MakePhoneCallTool(),
+        MakeElevenLabsCallTool(),
+        GetElevenLabsConversationTool(),
         GetCallStatusTool(),
         SendSMSTool(),
         UploadCallResultTool(),
         ComputeProofHashTool(),
-        MakeElevenLabsCallTool(),
     ]
 
 

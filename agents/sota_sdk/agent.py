@@ -69,20 +69,16 @@ class SOTAAgent:
         self.tags = list(self.__class__.tags)
         if self.bid_strategy is None:
             self.bid_strategy = DefaultBidStrategy()
-        else:
-            import copy
-            self.bid_strategy = copy.copy(self.__class__.bid_strategy)
 
         self._wallet = None                          # Optional[AgentWallet]
         self._ws_client: Optional[MarketplaceClient] = None
         self._active_jobs: Dict[str, asyncio.Task] = {}
         self._job_cache: Dict[str, Job] = {}         # jobs seen in job_available
-        self._shutdown_event = None                  # created in _boot() when loop is running
-        self._reserved_jobs: set = set()             # H1: guard against duplicate bid_accepted
+        self._shutdown_event = asyncio.Event()
 
     # -- Lifecycle hooks (developer overrides) ---------------------------------
 
-    async def setup(self) -> None:
+    def setup(self) -> None:
         """
         Called once before the agent starts listening for jobs.
         Override to initialise LLM clients, API keys, etc.
@@ -156,44 +152,21 @@ class SOTAAgent:
             format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
         )
 
-        # C1: Create Event inside running loop (not in __init__)
-        self._shutdown_event = asyncio.Event()
-
         logger.info("Booting %s v%s ...", self.name, self.version)
 
         # 0 -- Paid.ai cost tracking (before setup so dev LLM clients get instrumented)
         from . import cost as _cost
         _cost.initialize_cost_tracking()
 
-        # 1 -- setup() (H5: supports both sync and async overrides)
-        if asyncio.iscoroutinefunction(self.setup):
-            await self.setup()
-        else:
-            logger.warning("Sync setup() is deprecated, use 'async def setup()'")
-            await asyncio.get_running_loop().run_in_executor(None, self.setup)
+        # 1 -- setup()
+        self.setup()
         logger.info("setup() complete")
-
-        # 1.5 -- preflight validation (run in executor to avoid blocking event loop)
-        from .preflight import run_preflight
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, run_preflight, self)
-        for w in result.warnings:
-            logger.warning("PREFLIGHT: %s", w)
-        if not result.ok:
-            for e in result.errors:
-                logger.error("PREFLIGHT: %s", e)
-            raise SystemExit(
-                f"Preflight failed with {len(result.errors)} error(s). "
-                "Fix the issues above and try again."
-            )
-        logger.info("Preflight checks passed")
 
         # 2 -- wallet (optional)
         if SOTA_AGENT_PRIVATE_KEY:
             from .chain.wallet import AgentWallet
             self._wallet = AgentWallet(SOTA_AGENT_PRIVATE_KEY)
-            from .server import _mask_address
-            logger.info("Wallet initialised: %s", _mask_address(self._wallet.address))
+            logger.info("Wallet initialised: %s", self._wallet.address)
         else:
             logger.warning(
                 "SOTA_AGENT_PRIVATE_KEY not set -- running off-chain only"
@@ -232,19 +205,18 @@ class SOTAAgent:
             await self._ws_client.disconnect()
         server_task.cancel()
         ws_task.cancel()
-        # H3: Await infrastructure tasks so exceptions are not lost
-        await asyncio.gather(server_task, ws_task, return_exceptions=True)
 
-        # H4: Cancel active jobs with safe snapshot (avoid dict mutation during iteration)
-        tasks = list(self._active_jobs.values())
-        for task in tasks:
-            task.cancel()
-        if tasks:
+        # Cancel active jobs and wait with a timeout
+        if self._active_jobs:
+            for task in self._active_jobs.values():
+                task.cancel()
             logger.info(
                 "Waiting for %d active jobs (%ds timeout) ...",
-                len(tasks), _SHUTDOWN_TIMEOUT,
+                len(self._active_jobs), _SHUTDOWN_TIMEOUT,
             )
-            done, pending = await asyncio.wait(tasks, timeout=_SHUTDOWN_TIMEOUT)
+            done, pending = await asyncio.wait(
+                self._active_jobs.values(), timeout=_SHUTDOWN_TIMEOUT,
+            )
             if pending:
                 logger.warning(
                     "%d jobs did not finish within shutdown timeout", len(pending)
@@ -312,6 +284,9 @@ class SOTAAgent:
             params=job_data.get("params", job_data.get("metadata", {}).get("parameters", {})),
         )
 
+        # Cache so we have full data when bid_accepted arrives
+        self._job_cache[job.id] = job
+
         logger.info(
             "Job available: %s (%.2f USDC) tags=%s",
             job.id, job.budget_usdc, job.tags,
@@ -322,11 +297,6 @@ class SOTAAgent:
         if bid is None:
             logger.info("Skipping job %s", job.id)
             return
-
-        # C2: Only cache jobs the agent actually bids on
-        self._job_cache[job.id] = job
-        if len(self._job_cache) > 1000:
-            self._job_cache.pop(next(iter(self._job_cache)))
 
         # Send bid to hub
         bid_msg = {
@@ -350,12 +320,6 @@ class SOTAAgent:
             logger.warning("Received bid_accepted with no job ID, ignoring")
             return
 
-        # H1: Guard against TOCTOU race — reserve before any await
-        if job_id in self._reserved_jobs:
-            logger.warning("Duplicate bid_accepted for %s (reserved), ignoring", job_id)
-            return
-        self._reserved_jobs.add(job_id)
-
         # Guard against duplicate acceptance for the same job
         if job_id in self._active_jobs:
             logger.warning(
@@ -369,8 +333,6 @@ class SOTAAgent:
                 "Concurrency limit reached (%d/%d), declining job %s",
                 len(self._active_jobs), _MAX_CONCURRENT_JOBS, job_id,
             )
-            self._reserved_jobs.discard(job_id)
-            self._job_cache.pop(job_id, None)
             await self._send_job_failed(job_id, "agent at concurrency limit")
             return
 
@@ -384,17 +346,11 @@ class SOTAAgent:
         # Execute in a background task
         task = asyncio.create_task(self._execute_and_deliver(job, bid_id))
         self._active_jobs[job_id] = task
-
-        def _on_job_done(_t):
-            self._active_jobs.pop(job_id, None)
-            self._reserved_jobs.discard(job_id)
-
-        task.add_done_callback(_on_job_done)
+        task.add_done_callback(lambda _t: self._active_jobs.pop(job_id, None))
 
     async def _on_bid_rejected(self, msg: dict) -> None:
         job_id = msg.get("job_id", "")
         self._job_cache.pop(job_id, None)
-        self._reserved_jobs.discard(job_id)
         logger.info(
             "Bid rejected | job=%s reason=%s",
             job_id, msg.get("reason", ""),
@@ -404,7 +360,6 @@ class SOTAAgent:
         job_id = msg.get("job_id", "")
         logger.info("Job cancelled: %s", job_id)
         self._job_cache.pop(job_id, None)
-        self._reserved_jobs.discard(job_id)
         task = self._active_jobs.pop(job_id, None)
         if task and not task.done():
             task.cancel()
@@ -431,7 +386,7 @@ class SOTAAgent:
         try:
             from paid.tracing import paid_tracing
             return paid_tracing(
-                external_customer_id=job.poster or job.id,
+                customer=job.poster or job.id,
                 external_product_id=self.name,
             )
         except ImportError:
@@ -445,10 +400,6 @@ class SOTAAgent:
         # Compute a reasonable timeout from the job's deadline
         if job.deadline_ts > 0:
             remaining = job.deadline_ts - int(time.time())
-            # M3: Reject jobs whose deadline has already passed
-            if remaining <= 0:
-                await self._send_job_failed(job.id, "Job deadline already passed")
-                return
             timeout = max(remaining, 30)  # at least 30s
         else:
             timeout = _DEFAULT_EXECUTE_TIMEOUT
@@ -469,7 +420,7 @@ class SOTAAgent:
                 job_id=job.id, agent_name=self.name,
                 revenue_usdc=job.budget_usdc, success=False,
             )
-            await self._send_job_failed(job.id, f"execution failed: {type(e).__name__}: {e}")
+            await self._send_job_failed(job.id, str(e))
             return
 
         success = result.get("success", True) if isinstance(result, dict) else True
@@ -496,11 +447,7 @@ class SOTAAgent:
             try:
                 from .chain.contracts import submit_delivery_proof
 
-                if not job.id.isdigit():
-                    logger.info(
-                        "Skipping on-chain delivery proof for job %s (non-numeric ID)", job.id
-                    )
-                else:
+                if job.id.isdigit():
                     loop = asyncio.get_running_loop()
                     await asyncio.wait_for(
                         loop.run_in_executor(
@@ -526,18 +473,13 @@ class SOTAAgent:
                 )
 
         # -- Notify hub --------------------------------------------------------
-        if self._ws_client:
-            await self._ws_client.send({
-                "type": "job_completed",
-                "job_id": job.id,
-                "success": True,
-                "result": result_data,
-            })
-            logger.info("Job %s completed and reported to hub", job.id)
-        else:
-            logger.warning(
-                "Job %s completed but WS client is gone — cannot notify hub", job.id
-            )
+        await self._ws_client.send({
+            "type": "job_completed",
+            "job_id": job.id,
+            "success": True,
+            "result": result_data,
+        })
+        logger.info("Job %s completed and reported to hub", job.id)
 
     async def _send_job_failed(self, job_id: str, error: str) -> None:
         if self._ws_client:

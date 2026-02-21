@@ -50,8 +50,4 @@ def create_app(agent: "SOTAAgent") -> FastAPI:
             ),
         }
 
-    # Let subclasses add custom routes
-    if hasattr(agent, 'register_routes'):
-        agent.register_routes(app)
-
     return app

@@ -354,7 +354,7 @@ class BaseArchiveAgent(ABC):
                         "Pattern detected for job #%s: confidence=%.2f strategy=%s",
                         job.job_id, pattern.confidence, pattern.recommended_strategy,
                     )
-                job.params["_pattern_analysis"] = pattern
+                job.params["pattern_analysis"] = pattern
             except Exception:
                 logger.debug("Pre-exec analysis skipped", exc_info=True)
 
@@ -375,7 +375,7 @@ class BaseArchiveAgent(ABC):
         finally:
             elapsed_ms = int(_time.time() * 1000 - start_ms)
             strategy = "standard"
-            pa = job.params.get("_pattern_analysis")
+            pa = job.params.get("pattern_analysis")
             if pa:
                 strategy = getattr(pa, "recommended_strategy", "standard")
 

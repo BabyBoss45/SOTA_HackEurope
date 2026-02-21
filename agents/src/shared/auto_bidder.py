@@ -132,7 +132,7 @@ class AutoBidderMixin:
                         "Pattern detected for job %s: confidence=%.2f strategy=%s",
                         job.job_id, pattern.confidence, pattern.recommended_strategy,
                     )
-                active_job.params["_pattern_analysis"] = pattern
+                active_job.params["pattern_analysis"] = pattern
             except Exception:
                 logger.debug("Pre-exec analysis skipped", exc_info=True)
 
@@ -154,7 +154,7 @@ class AutoBidderMixin:
         if task_memory:
             try:
                 strategy = "standard"
-                pa = active_job.params.get("_pattern_analysis")
+                pa = active_job.params.get("pattern_analysis")
                 if pa:
                     strategy = getattr(pa, "recommended_strategy", "standard")
                 await task_memory.persist_outcome(

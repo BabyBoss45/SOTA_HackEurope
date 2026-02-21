@@ -64,6 +64,11 @@ from agents.src.shared.job_board import JobBoard, JobStatus
 # Worker agents — created in-process for JobBoard bidding
 from agents.src.hackathon.agent import HackathonAgent, create_hackathon_agent
 from agents.src.caller.agent import CallerAgent
+from agents.src.gift_suggestion.agent import create_gift_suggestion_agent
+from agents.src.restaurant_booker.agent import create_restaurant_booker_agent
+from agents.src.refund_claim.agent import create_refund_claim_agent
+from agents.src.smart_shopper.agent import create_smart_shopper_agent
+from agents.src.trip_planner.agent import create_trip_planner_agent
 
 # Load .env from project root (single source of truth)
 _here = Path(__file__).resolve().parent
@@ -108,7 +113,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     session_id: Optional[str] = None
-    model: str = "claude-sonnet-4-5-20241022"
+    model: str = ""
 
 
 class CreateJobRequest(BaseModel):
@@ -147,7 +152,7 @@ class MarketplacePostRequest(BaseModel):
     check_out: Optional[str] = None
     room_type: Optional[str] = None
     budget: Optional[str] = None
-    budget_usd: float = 0.02
+    budget_usd: float = 1.0
     deadline_hours: int = 24
     wallet_address: Optional[str] = None
 
@@ -177,17 +182,21 @@ class ReleaseRequest(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     global contracts, butler_agent, job_board, hackathon_agent, caller_agent, db, task_memory
+<<<<<<< HEAD
     cluster = get_cluster()
+=======
+    network = get_network()
+>>>>>>> adaptable-agents
     print(f"Starting SOTA Butler API...")
     print(f"Cluster: {cluster.rpc_url} ({cluster.cluster_name})")
 
-    # ── Connect to Firestore ────────────────────────────────
+    # ── Connect to PostgreSQL ────────────────────────────────
     if Database is not None:
         try:
             db = await Database.connect()
-            print("Connected to Firestore")
+            print("Connected to PostgreSQL")
         except Exception as e:
-            print(f"Firestore unavailable — running without persistence: {e}")
+            print(f"Database unavailable — running without persistence: {e}")
     else:
         print("Database module not available — running without persistence")
 
@@ -212,12 +221,22 @@ async def startup_event():
     try:
         from agents.src.shared.task_memory import TaskPatternMemory
         task_memory = TaskPatternMemory(db=db, incident_io_client=_incident_io)
-        print(f"TaskPatternMemory initialized (qdrant={'yes' if task_memory.qdrant else 'no'}, incident_io={'yes' if _incident_io else 'no'})")
+        qdrant_ok = "yes" if task_memory.qdrant else "no"
+        print(f"TaskPatternMemory initialized (qdrant={qdrant_ok}, incident_io={'yes' if _incident_io else 'no'})")
+        if task_memory.qdrant:
+            try:
+                cols = task_memory.qdrant.get_collections().collections
+                for c in cols:
+                    info = task_memory.qdrant.get_collection(c.name)
+                    print(f"  Qdrant collection '{c.name}': {info.points_count} points")
+            except Exception:
+                pass
     except Exception as e:
         print(f"TaskPatternMemory init failed (non-critical): {e}")
 
     pk = get_private_key("butler")
     if not pk:
+<<<<<<< HEAD
         print("PRIVATE_KEY not set. Read-only mode.")
         return
 
@@ -230,16 +249,30 @@ async def startup_event():
         print(f"  Signer:     {contracts.keypair.pubkey() if contracts.keypair else 'read-only'}")
     except Exception as e:
         print(f"Failed to connect: {e}")
+=======
+        print("PRIVATE_KEY not set — blockchain features disabled, marketplace-only mode")
+    else:
+        # ── Contracts ─────────────────────────────────────────────
+        try:
+            contracts = get_contracts(pk)
+            print(f"Connected to chain ({network.native_currency})")
+            print(f"  OrderBook:     {contracts.addresses.order_book}")
+            print(f"  Escrow:        {contracts.addresses.escrow}")
+            print(f"  USDC:          {contracts.addresses.usdc}")
+            print(f"  AgentRegistry: {contracts.addresses.agent_registry}")
+        except Exception as e:
+            print(f"Chain connection failed (non-critical): {e}")
+>>>>>>> adaptable-agents
 
     # ── Anthropic Claude Butler Agent ────────────────────────
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
     if anthropic_key:
         try:
             butler_agent = create_butler_agent(
-                private_key=pk,
+                private_key=pk or "0x" + "0" * 64,
                 anthropic_api_key=anthropic_key,
             )
-            print(f"Butler Agent initialized (Claude claude-sonnet-4-5-20241022)")
+            print(f"Butler Agent initialized (model={butler_agent.model})")
         except Exception as e:
             print(f"Butler Agent init failed: {e}")
     else:
@@ -268,6 +301,36 @@ async def startup_event():
     except Exception as e:
         print(f"CallerAgent init failed (non-critical): {e}")
 
+    try:
+        gift_agent = await create_gift_suggestion_agent()
+        print(f"GiftSuggestionAgent registered on JobBoard")
+    except Exception as e:
+        print(f"GiftSuggestionAgent init failed (non-critical): {e}")
+
+    try:
+        restaurant_agent = await create_restaurant_booker_agent()
+        print(f"RestaurantBookerAgent registered on JobBoard")
+    except Exception as e:
+        print(f"RestaurantBookerAgent init failed (non-critical): {e}")
+
+    try:
+        refund_agent = await create_refund_claim_agent()
+        print(f"RefundClaimAgent registered on JobBoard")
+    except Exception as e:
+        print(f"RefundClaimAgent init failed (non-critical): {e}")
+
+    try:
+        shopper_agent = await create_smart_shopper_agent()
+        print(f"SmartShopperAgent registered on JobBoard")
+    except Exception as e:
+        print(f"SmartShopperAgent init failed (non-critical): {e}")
+
+    try:
+        trip_agent = await create_trip_planner_agent()
+        print(f"TripPlannerAgent registered on JobBoard")
+    except Exception as e:
+        print(f"TripPlannerAgent init failed (non-critical): {e}")
+
     # Log registered workers
     workers = job_board.workers
     print(f"{len(workers)} worker(s) registered: {list(workers.keys())}")
@@ -295,7 +358,7 @@ async def chat_with_butler(req: ChatRequest):
         return {
             "response": result["response"],
             "session_id": req.session_id,
-            "model": "claude-sonnet-4-5-20241022",
+            "model": butler_agent.model if butler_agent else "",
             "job_posted": result.get("job_posted"),
         }
     except Exception as e:
@@ -421,8 +484,13 @@ async def post_job_from_elevenlabs(req: MarketplacePostRequest):
         "hackathon_discovery": "hackathon_registration",
         "hackathon_registration": "hackathon_registration",
         "hotel_booking": "hotel_booking",
-        "restaurant_booking": "restaurant_booking",
+        "restaurant_booking": "restaurant_booking_smart",
+        "restaurant_booking_smart": "restaurant_booking_smart",
         "call_verification": "call_verification",
+        "gift_suggestion": "gift_suggestion",
+        "smart_shopping": "smart_shopping",
+        "trip_planning": "trip_planning",
+        "refund_claim": "refund_claim",
     }
     tool_type = TASK_TO_TOOL.get(task_lower, task_lower)
 
@@ -432,10 +500,18 @@ async def post_job_from_elevenlabs(req: MarketplacePostRequest):
             tool_type = "hackathon_registration"
         elif "hotel" in task_lower:
             tool_type = "hotel_booking"
-        elif "restaurant" in task_lower:
-            tool_type = "restaurant_booking"
-        elif "call" in task_lower:
+        elif "restaurant" in task_lower or "booking" in task_lower:
+            tool_type = "restaurant_booking_smart"
+        elif "call" in task_lower or "phone" in task_lower:
             tool_type = "call_verification"
+        elif "gift" in task_lower:
+            tool_type = "gift_suggestion"
+        elif "shop" in task_lower or "product" in task_lower or "buy" in task_lower:
+            tool_type = "smart_shopping"
+        elif "trip" in task_lower or "travel" in task_lower or "flight" in task_lower:
+            tool_type = "trip_planning"
+        elif "refund" in task_lower or "claim" in task_lower:
+            tool_type = "refund_claim"
 
     description = f"{task}: {', '.join(f'{k}={v}' for k, v in params.items())}"
 
@@ -443,19 +519,32 @@ async def post_job_from_elevenlabs(req: MarketplacePostRequest):
 
     try:
         post_tool = PostJobTool()
-        result = await post_tool.execute(
+        result_str = await post_tool.execute(
             description=description,
             tool=tool_type,
             parameters=params,
             budget_usd=req.budget_usd,
             deadline_hours=req.deadline_hours,
         )
-        return {
+
+        response = {
             "success": True,
-            "message": result,
+            "message": result_str,
             "tool_type": tool_type,
             "description": description,
         }
+
+        try:
+            parsed = json.loads(result_str)
+            response["job_posted"] = parsed
+            if parsed.get("formatted_results"):
+                response["formatted_results"] = parsed["formatted_results"]
+            if parsed.get("execution_result"):
+                response["execution_result"] = parsed["execution_result"]
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        return response
     except Exception as e:
         logger.error(f"Marketplace post failed: {e}")
         return {
@@ -489,7 +578,7 @@ async def execute_job_after_escrow(job_id: str):
 
     logger.info(f"Executing job {job_id} with worker {winning_bid.bidder_id}")
 
-    # Persist "in_progress" to Firestore
+    # Persist "in_progress" to database
     if db:
         try:
             await db.update_job_status(job_id, "assigned")
@@ -592,7 +681,7 @@ async def execute_job_after_escrow(job_id: str):
             except Exception as fallback_err:
                 logger.warning(f"Direct search fallback failed: {fallback_err}")
 
-        # Persist "completed" to Firestore
+        # Persist "completed" to database
         if db:
             try:
                 await db.update_job_status(job_id, "completed")
@@ -696,6 +785,7 @@ async def execute_job_after_escrow(job_id: str):
             except Exception:
                 logger.warning("Failed to persist task outcome (error path)", exc_info=True)
 
+        # Persist error to PostgreSQL
         if db:
             try:
                 await db.update_job_status(job_id, "expired")

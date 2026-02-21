@@ -25,6 +25,8 @@ credentials.json
 service-account*.json
 **/secret*
 !**/secret*.example
+*-firebase-sdk.json
+sota-firebase-sdk.json
 
 # OS
 .DS_Store

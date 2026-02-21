@@ -346,12 +346,13 @@ class QdrantTemplateStore:
         query_filter = Filter(must=must or None, should=should or None)
 
         try:
-            results = self.client.search(
+            response = self.client.query_points(
                 collection_name=self.collection,
-                query_vector=vector,
+                query=vector,
                 limit=limit,
                 query_filter=query_filter,
             )
+            results = response.points
         except Exception as exc:
             logger.debug("Qdrant search failed: %s", exc)
             return []

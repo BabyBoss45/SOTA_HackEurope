@@ -118,21 +118,13 @@ def search_qdrant(client: QdrantClient, query_vec: List[float]) -> Any:
     flt = Filter(
         must=[FieldCondition(key="privacy", match=MatchValue(value="anonymized"))]
     )
-    try:
-        return client.search(
-            collection_name=QDRANT_COLLECTION,
-            query_vector=query_vec,
-            limit=3,
-            query_filter=flt,
-        )
-    except AttributeError:
-        # Fallback for clients exposing query_points instead of search
-        return client.query_points(
-            collection_name=QDRANT_COLLECTION,
-            query=query_vec,
-            limit=3,
-            query_filter=flt,
-        )
+    response = client.query_points(
+        collection_name=QDRANT_COLLECTION,
+        query=query_vec,
+        limit=3,
+        query_filter=flt,
+    )
+    return response.points
 
 
 def main() -> None:
