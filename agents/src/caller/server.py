@@ -116,46 +116,63 @@ async def get_active_jobs():
     }
 
 
+# Shared result store: conversation_id → call result dict.
+# Populated by the webhook, readable by agent polling as a secondary source.
+call_results: dict[str, dict] = {}
+
+
+def _detect_webhook_outcome(transcript, analysis: dict | None) -> str:
+    """Light-weight outcome detection reused from agent module."""
+    from .agent import _detect_booking_outcome
+
+    transcript_text = ""
+    if isinstance(transcript, list):
+        for turn in transcript:
+            role = turn.get("role", "unknown")
+            msg = turn.get("message", "")
+            transcript_text += f"{role}: {msg}\n"
+    elif isinstance(transcript, str):
+        transcript_text = transcript
+    return _detect_booking_outcome(transcript_text, analysis or {})
+
+
 # ElevenLabs webhook endpoint (post-call/status)
 @app.post("/webhooks/elevenlabs")
 async def elevenlabs_webhook(request: Request):
     """
     Receive ElevenLabs ConvAI/Twilio webhook callbacks.
-    Validates the shared secret if provided, extracts summary info,
-    stores it, and returns the storage URI.
+    Extracts transcript, detects booking outcome, stores the result
+    in the shared ``call_results`` dict, and optionally forwards to
+    the web-app DB.
     """
     secret_expected = os.getenv("ELEVENLABS_WEBHOOK_SECRET")
-    provided = request.headers.get("x-elevenlabs-signature") or request.headers.get("x-webhook-secret")
+    provided = (
+        request.headers.get("x-elevenlabs-signature")
+        or request.headers.get("x-webhook-secret")
+    )
 
-    # Validate secret if configured (header must be present)
     if secret_expected:
-        if not provided:
-            logger.warning("❌ ElevenLabs webhook: missing signature header")
-            raise HTTPException(status_code=401, detail="missing signature")
-        if provided != secret_expected:
-            logger.warning("❌ ElevenLabs webhook: invalid secret")
+        if not provided or provided != secret_expected:
+            logger.warning("ElevenLabs webhook: bad/missing signature")
             raise HTTPException(status_code=401, detail="invalid secret")
 
     raw_body = await request.body()
     try:
         payload = json.loads(raw_body.decode("utf-8") or "{}")
     except Exception as e:
-        logger.warning(f"❌ ElevenLabs webhook: invalid json ({e})")
-        raise HTTPException(status_code=400, detail="invalid json")
+        raise HTTPException(status_code=400, detail=f"invalid json: {e}")
 
     event_type = payload.get("type")
     event_timestamp = payload.get("event_timestamp")
 
-    # ElevenLabs wraps data inside "data"; keep backward compatibility with legacy shape
     data = payload.get("data") if isinstance(payload.get("data"), dict) else None
     if not data:
         data = payload
         if not event_type:
             event_type = "legacy"
 
-    logger.info(f"📨 ElevenLabs webhook type={event_type} payload={payload}")
+    logger.info("ElevenLabs webhook type=%s", event_type)
 
-    # Extract known fields while tolerating schema changes
     conversation_id = data.get("conversation_id") or data.get("conversationId")
     call_sid = data.get("callSid") or data.get("call_sid")
     status = data.get("status") or data.get("call_status")
@@ -170,49 +187,54 @@ async def elevenlabs_webhook(request: Request):
         summary = analysis.get("transcript_summary") or analysis.get("summary")
     summary = summary or data.get("summary") or data.get("transcript_summary")
 
-    try:
-        if event_type == "post_call_audio" and not full_audio:
-            raise HTTPException(status_code=400, detail="missing full_audio for audio webhook")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.warning(f"❌ ElevenLabs webhook: validation error {e}")
-        raise HTTPException(status_code=400, detail="invalid payload")
+    if event_type == "post_call_audio" and not full_audio:
+        raise HTTPException(status_code=400, detail="missing full_audio")
 
-    # Prepare call result doc (keep original payload untouched)
+    outcome = _detect_webhook_outcome(transcript, analysis)
+
+    from datetime import datetime as _dt
     call_result = {
         "conversation_id": conversation_id,
         "callSid": call_sid,
         "status": status,
         "summary": summary,
+        "outcome": outcome,
         "to": to_number,
         "job_id": job_id,
         "type": event_type,
         "event_timestamp": event_timestamp,
-        "received_at": __import__("datetime").datetime.utcnow().isoformat(),
+        "received_at": _dt.utcnow().isoformat(),
         "analysis": analysis,
         "transcript": transcript,
-        "full_audio": bool(full_audio),  # avoid storing raw base64 twice; kept in payload
-        "payload": payload,
+        "full_audio": bool(full_audio),
     }
 
+    # Store for agent polling
+    if conversation_id:
+        call_results[conversation_id] = call_result
+    if call_sid:
+        call_results[call_sid] = call_result
+
+    logger.info(
+        "Webhook stored: conv=%s outcome=%s summary=%s",
+        conversation_id, outcome, (summary or "")[:80],
+    )
+
+    import hashlib
     storage_uri = None
     try:
-        import hashlib
-        result_hash = hashlib.sha256(json.dumps(call_result, sort_keys=True, default=str).encode()).hexdigest()[:16]
-        storage_uri = f"ipfs://sota-call-{result_hash}"
-    except Exception as e:
-        logger.warning(f"⚠️ Failed to generate storage URI: {e}")
+        h = hashlib.sha256(
+            json.dumps(call_result, sort_keys=True, default=str).encode()
+        ).hexdigest()[:16]
+        storage_uri = f"ipfs://sota-call-{h}"
+    except Exception:
+        pass
 
-    # Optionally persist to web app DB via API if configured
+    # Forward to web-app DB if configured
     calls_api = os.getenv("CALL_SUMMARY_WEBHOOK_URL")
     call_summary_secret = os.getenv("CALL_SUMMARY_SECRET") or secret_expected
     if calls_api:
         try:
-            # Add storage_uri into the payload we forward, so DB has full content + archival pointer
-            payload_with_uri = dict(payload)
-            payload_with_uri["storage_uri"] = storage_uri
-
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.post(
                     calls_api,
@@ -221,10 +243,11 @@ async def elevenlabs_webhook(request: Request):
                         "callSid": call_sid,
                         "status": status,
                         "summary": summary,
+                        "outcome": outcome,
                         "toNumber": to_number,
                         "jobId": str(job_id),
                         "storageUri": storage_uri,
-                        "payload": payload_with_uri,
+                        "payload": payload,
                     },
                     headers={
                         "x-call-summary-secret": call_summary_secret or "",
@@ -232,16 +255,18 @@ async def elevenlabs_webhook(request: Request):
                 )
                 if resp.status_code >= 300:
                     logger.warning(
-                        f"⚠️ Failed to persist call summary to web app: {resp.status_code} {resp.text}"
+                        "Failed to persist call summary: %s %s",
+                        resp.status_code, resp.text[:200],
                     )
         except Exception as e:
-            logger.warning(f"⚠️ Error posting call summary to web app: {e}")
+            logger.warning("Error posting call summary: %s", e)
 
     return {
         "received": True,
         "conversation_id": conversation_id,
         "callSid": call_sid,
         "status": status,
+        "outcome": outcome,
         "storage_uri": storage_uri,
     }
 
