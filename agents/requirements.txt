@@ -36,8 +36,16 @@ playwright>=1.40.0
 # Cost tracking (Paid.ai)
 paid-python>=1.0.5
 
-# Optional: Agent-specific tools
-# twilio>=9.3.0  # For Caller Agent
+# Crypto (A2A protocol)
+PyNaCl>=1.5.0
+
+# WebSocket
+websockets>=12.0
+
+# Agent-specific tools
+twilio>=9.3.0
+elevenlabs>=1.0.0
+firebase-admin>=6.0.0
 
 # Dev
 pytest>=8.0.0
