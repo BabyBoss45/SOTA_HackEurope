@@ -425,6 +425,43 @@ const AgentOrbitalLanding = () => {
     .oc-panel {
       background: #050811;
       color: #e2e8f0;
+      position: relative;
+      overflow: hidden;
+    }
+    .oc-stars {
+      position: absolute;
+      inset: 0;
+      background-image:
+        radial-gradient(2px 2px at 20px 30px, rgba(255,255,255,0.8), transparent),
+        radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.5), transparent),
+        radial-gradient(1px 1px at 90px 40px, rgba(255,255,255,0.6), transparent),
+        radial-gradient(2px 2px at 130px 80px, rgba(255,255,255,0.4), transparent),
+        radial-gradient(1px 1px at 160px 120px, rgba(255,255,255,0.7), transparent),
+        radial-gradient(2px 2px at 200px 60px, rgba(0,229,204,0.6), transparent),
+        radial-gradient(1px 1px at 250px 150px, rgba(255,255,255,0.5), transparent),
+        radial-gradient(2px 2px at 300px 40px, rgba(255,77,77,0.4), transparent);
+      background-size: 350px 200px;
+      animation: oc-twinkle 8s ease-in-out infinite alternate;
+      pointer-events: none;
+      z-index: 0;
+    }
+    @keyframes oc-twinkle {
+      0% { opacity: 0.4; }
+      100% { opacity: 0.7; }
+    }
+    .oc-nebula {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 20%, rgba(255,77,77,0.12), transparent 50%),
+        radial-gradient(ellipse 60% 60% at 80% 30%, rgba(0,229,204,0.08), transparent 50%),
+        radial-gradient(ellipse 90% 70% at 50% 90%, rgba(255,77,77,0.06), transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .oc-content {
+      position: relative;
+      z-index: 1;
     }
     .oc-surface {
       background: rgba(255,255,255,0.03);
@@ -823,7 +860,10 @@ const AgentOrbitalLanding = () => {
                   </div>
                 ) : (
                   /* ── ClawBots — OpenClaw style ── */
-                  <div className="oc-panel h-full px-6 py-4 sm:px-8 sm:py-6 md:px-12 md:py-8">
+                  <div className="oc-panel h-full">
+                    <div className="oc-stars" />
+                    <div className="oc-nebula" />
+                    <div className="oc-content h-full overflow-y-auto px-6 py-4 sm:px-8 sm:py-6 md:px-12 md:py-8">
                     <div className="max-w-xl mx-auto">
 
                       {/* Header */}
@@ -964,6 +1004,7 @@ const AgentOrbitalLanding = () => {
                           </div>
                         </div>
                       )}
+                    </div>
                     </div>
                   </div>
                 )}
