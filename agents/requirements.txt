@@ -1,5 +1,5 @@
 # Solana / Blockchain (Solana Devnet)
-solana==0.34.3
+solana>=0.34.0
 solders>=0.21.0
 anchorpy>=0.20.0
 
@@ -10,6 +10,10 @@ pydantic>=2.9.0
 # Server (Butler API)
 uvicorn>=0.32.0
 fastapi>=0.115.0
+starlette>=0.27.0
+
+# Database
+asyncpg>=0.29.0
 
 # AI / Vector DB (Butler + Seeding)
 anthropic>=0.39.0
@@ -32,15 +36,11 @@ beautifulsoup4>=4.12.0
 # Browser Automation (Hackathon Registration)
 playwright>=1.40.0
 
-
 # Cost tracking (Paid.ai)
 paid-python>=1.0.5
 
 # Crypto (A2A protocol)
 PyNaCl>=1.5.0
-
-# WebSocket
-websockets>=12.0
 
 # Agent-specific tools
 twilio>=9.3.0
