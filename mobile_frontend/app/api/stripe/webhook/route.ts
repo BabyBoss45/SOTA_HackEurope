@@ -13,7 +13,7 @@ import bs58 from "bs58";
 import { prisma } from "@/src/lib/prisma";
 
 // IDL type import from Anchor build output
-import idl from "../../../../../anchor/target/idl/sota_marketplace.json";
+import idl from "@/src/lib/sota_marketplace_idl.json";
 
 export const runtime = "nodejs";
 
