@@ -170,11 +170,11 @@ class FunActivityAgent(AutoBidderMixin, BaseArchiveAgent):
             return {"success": False, "error": str(e), "job_id": job.job_id}
 
 
-async def create_fun_activity_agent() -> FunActivityAgent:
+async def create_fun_activity_agent(db=None) -> FunActivityAgent:
     """Factory function to create and initialize a Fun Activity Agent."""
     agent = FunActivityAgent()
     await agent.initialize()
-    agent.register_on_board()
+    await agent.register_on_board(db=db)
     return agent
 
 

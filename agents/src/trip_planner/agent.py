@@ -210,11 +210,11 @@ class TripPlannerAgent(AutoBidderMixin, BaseArchiveAgent):
             return {"success": False, "error": str(e), "job_id": job.job_id}
 
 
-async def create_trip_planner_agent() -> TripPlannerAgent:
+async def create_trip_planner_agent(db=None) -> TripPlannerAgent:
     """Factory function to create and initialize a Trip Planner Agent."""
     agent = TripPlannerAgent()
     await agent.initialize()
-    agent.register_on_board()
+    await agent.register_on_board(db=db)
     return agent
 
 

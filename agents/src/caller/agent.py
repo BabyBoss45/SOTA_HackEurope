@@ -469,11 +469,11 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
         }
 
 
-async def create_caller_agent() -> CallerAgent:
+async def create_caller_agent(db=None) -> CallerAgent:
     """Factory function to create and initialize a Caller Agent"""
     agent = CallerAgent()
     await agent.initialize()
-    agent.register_on_board()          # ← register on JobBoard marketplace
+    await agent.register_on_board(db=db)          # register on JobBoard marketplace
     return agent
 
 

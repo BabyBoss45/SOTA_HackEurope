@@ -32,7 +32,7 @@ import asyncpg  # type: ignore
 logger = logging.getLogger(__name__)
 
 _JSON_COLUMNS = frozenset(("metadata", "data", "answerData", "preferences", "extra", "payload"))
-_DATETIME_COLUMNS = frozenset(("createdAt", "updatedAt", "answeredAt"))
+_DATETIME_COLUMNS = frozenset(("createdAt", "updatedAt", "answeredAt", "lastHeartbeat", "connectedAt"))
 
 
 def _now() -> datetime:
@@ -463,3 +463,172 @@ class Database:
             now,
         )
         return _row_to_dict(row) or {}
+
+    # =====================================================================
+    #  WorkerAgent
+    # =====================================================================
+
+    async def upsert_worker_agent(
+        self,
+        worker_id: str,
+        name: str,
+        *,
+        tags: list[str] | None = None,
+        version: str = "1.0.0",
+        wallet_address: str | None = None,
+        capabilities: list[str] | None = None,
+        status: str = "online",
+        max_concurrent: int = 5,
+        bid_price_ratio: float = 0.80,
+        bid_eta_seconds: int = 1800,
+        min_profit_margin: float = 0.1,
+        icon: str | None = None,
+        metadata: dict | None = None,
+        api_endpoint: str | None = None,
+        source: str = "sdk",
+        description: str | None = None,
+    ) -> dict:
+        """Insert or update a worker agent. Preserves stats on conflict."""
+        now = _now()
+        row = await self._pool.fetchrow(
+            """
+            INSERT INTO "WorkerAgent"
+                ("workerId", "name", "description", "tags", "version",
+                 "walletAddress", "capabilities", "status",
+                 "lastHeartbeat", "connectedAt",
+                 "maxConcurrent", "bidPriceRatio", "bidEtaSeconds",
+                 "minProfitMargin", "icon", "metadata", "apiEndpoint",
+                 "source", "createdAt", "updatedAt")
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+            ON CONFLICT ("workerId") DO UPDATE SET
+                "name"            = EXCLUDED."name",
+                "description"     = COALESCE(EXCLUDED."description", "WorkerAgent"."description"),
+                "tags"            = EXCLUDED."tags",
+                "version"         = EXCLUDED."version",
+                "walletAddress"   = COALESCE(EXCLUDED."walletAddress", "WorkerAgent"."walletAddress"),
+                "capabilities"    = EXCLUDED."capabilities",
+                "status"          = EXCLUDED."status",
+                "lastHeartbeat"   = EXCLUDED."lastHeartbeat",
+                "connectedAt"     = EXCLUDED."connectedAt",
+                "maxConcurrent"   = EXCLUDED."maxConcurrent",
+                "bidPriceRatio"   = EXCLUDED."bidPriceRatio",
+                "bidEtaSeconds"   = EXCLUDED."bidEtaSeconds",
+                "minProfitMargin" = EXCLUDED."minProfitMargin",
+                "icon"            = COALESCE(EXCLUDED."icon", "WorkerAgent"."icon"),
+                "metadata"        = COALESCE(EXCLUDED."metadata", "WorkerAgent"."metadata"),
+                "apiEndpoint"     = COALESCE(EXCLUDED."apiEndpoint", "WorkerAgent"."apiEndpoint"),
+                "source"          = EXCLUDED."source",
+                "updatedAt"       = EXCLUDED."updatedAt"
+            RETURNING *
+            """,
+            worker_id,                          # $1
+            name,                               # $2
+            description,                        # $3
+            tags or [],                         # $4
+            version,                            # $5
+            wallet_address,                     # $6
+            capabilities or [],                 # $7
+            status,                             # $8
+            now,                                # $9  lastHeartbeat
+            now,                                # $10 connectedAt
+            max_concurrent,                     # $11
+            bid_price_ratio,                    # $12
+            bid_eta_seconds,                    # $13
+            min_profit_margin,                  # $14
+            icon,                               # $15
+            _prepare_jsonb(metadata),           # $16
+            api_endpoint,                       # $17
+            source,                             # $18
+            now,                                # $19 createdAt
+            now,                                # $20 updatedAt
+        )
+        return _row_to_dict(row) or {}
+
+    async def update_worker_status(self, worker_id: str, status: str) -> dict | None:
+        """Update a worker agent's status."""
+        now = _now()
+        row = await self._pool.fetchrow(
+            """
+            UPDATE "WorkerAgent"
+            SET "status" = $2, "updatedAt" = $3
+            WHERE "workerId" = $1
+            RETURNING *
+            """,
+            worker_id, status, now,
+        )
+        return _row_to_dict(row)
+
+    async def touch_worker_heartbeat(self, worker_id: str) -> None:
+        """Update lastHeartbeat timestamp."""
+        now = _now()
+        await self._pool.execute(
+            """
+            UPDATE "WorkerAgent"
+            SET "lastHeartbeat" = $2, "updatedAt" = $3
+            WHERE "workerId" = $1
+            """,
+            worker_id, now, now,
+        )
+
+    async def increment_worker_job_stats(
+        self, worker_id: str, success: bool, earnings_usdc: float = 0
+    ) -> None:
+        """Increment job counters for a worker agent."""
+        now = _now()
+        if success:
+            await self._pool.execute(
+                """
+                UPDATE "WorkerAgent"
+                SET "totalJobs" = "totalJobs" + 1,
+                    "successfulJobs" = "successfulJobs" + 1,
+                    "totalEarningsUsdc" = "totalEarningsUsdc" + $2,
+                    "updatedAt" = $3
+                WHERE "workerId" = $1
+                """,
+                worker_id, earnings_usdc, now,
+            )
+        else:
+            await self._pool.execute(
+                """
+                UPDATE "WorkerAgent"
+                SET "totalJobs" = "totalJobs" + 1,
+                    "failedJobs" = "failedJobs" + 1,
+                    "updatedAt" = $2
+                WHERE "workerId" = $1
+                """,
+                worker_id, now,
+            )
+
+    async def get_worker_agent(self, worker_id: str) -> dict | None:
+        """Get a single worker agent by workerId."""
+        row = await self._pool.fetchrow(
+            'SELECT * FROM "WorkerAgent" WHERE "workerId" = $1',
+            worker_id,
+        )
+        return _row_to_dict(row)
+
+    async def list_worker_agents(
+        self, status: str | None = None, source: str | None = None, limit: int = 100
+    ) -> list[dict]:
+        """List worker agents with optional status/source filters."""
+        conditions = []
+        values: list[Any] = []
+        idx = 1
+
+        if status:
+            conditions.append(f'"status" = ${idx}')
+            values.append(status)
+            idx += 1
+        if source:
+            conditions.append(f'"source" = ${idx}')
+            values.append(source)
+            idx += 1
+
+        where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+        values.append(limit)
+
+        rows = await self._pool.fetch(
+            f'SELECT * FROM "WorkerAgent"{where} ORDER BY "createdAt" ASC LIMIT ${idx}',
+            *values,
+        )
+        return [_row_to_dict(r) for r in rows]

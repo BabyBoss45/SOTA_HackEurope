@@ -192,11 +192,11 @@ class RefundClaimAgent(AutoBidderMixin, BaseArchiveAgent):
             return {"success": False, "error": str(e), "job_id": job.job_id}
 
 
-async def create_refund_claim_agent() -> RefundClaimAgent:
+async def create_refund_claim_agent(db=None) -> RefundClaimAgent:
     """Factory function to create and initialize a Refund Claim Agent."""
     agent = RefundClaimAgent()
     await agent.initialize()
-    agent.register_on_board()
+    await agent.register_on_board(db=db)
     return agent
 
 

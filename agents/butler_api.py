@@ -33,7 +33,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from agents.marketplace.hub import app as marketplace_hub_app
+from agents.marketplace.hub import app as marketplace_hub_app, registry as hub_registry
 
 import hashlib
 
@@ -63,7 +63,7 @@ from agents.src.shared.job_board import JobBoard, JobStatus
 
 # Worker agents — created in-process for JobBoard bidding
 from agents.src.hackathon.agent import HackathonAgent, create_hackathon_agent
-from agents.src.caller.agent import CallerAgent
+from agents.src.caller.agent import CallerAgent, create_caller_agent
 from agents.src.gift_suggestion.agent import create_gift_suggestion_agent
 from agents.src.restaurant_booker.agent import create_restaurant_booker_agent
 from agents.src.refund_claim.agent import create_refund_claim_agent
@@ -184,11 +184,7 @@ class ReleaseRequest(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     global contracts, butler_agent, job_board, hackathon_agent, caller_agent, db, task_memory
-<<<<<<< HEAD
     cluster = get_cluster()
-=======
-    network = get_network()
->>>>>>> adaptable-agents
     print(f"Starting SOTA Butler API...")
     print(f"Cluster: {cluster.rpc_url} ({cluster.cluster_name})")
 
@@ -197,6 +193,8 @@ async def startup_event():
         try:
             db = await Database.connect()
             print("Connected to PostgreSQL")
+            # Wire DB to hub registry for SDK agent persistence
+            hub_registry.set_db(db)
         except Exception as e:
             print(f"Database unavailable — running without persistence: {e}")
     else:
@@ -238,33 +236,17 @@ async def startup_event():
 
     pk = get_private_key("butler")
     if not pk:
-<<<<<<< HEAD
         print("PRIVATE_KEY not set. Read-only mode.")
-        return
-
-    # ── Contracts ─────────────────────────────────────────────
-    try:
-        contracts = get_contracts(pk)
-        print(f"Connected to Solana ({cluster.cluster_name})")
-        print(f"  Program ID: {contracts.program_id}")
-        print(f"  USDC Mint:  {USDC_MINT}")
-        print(f"  Signer:     {contracts.keypair.pubkey() if contracts.keypair else 'read-only'}")
-    except Exception as e:
-        print(f"Failed to connect: {e}")
-=======
-        print("PRIVATE_KEY not set — blockchain features disabled, marketplace-only mode")
     else:
         # ── Contracts ─────────────────────────────────────────────
         try:
             contracts = get_contracts(pk)
-            print(f"Connected to chain ({network.native_currency})")
-            print(f"  OrderBook:     {contracts.addresses.order_book}")
-            print(f"  Escrow:        {contracts.addresses.escrow}")
-            print(f"  USDC:          {contracts.addresses.usdc}")
-            print(f"  AgentRegistry: {contracts.addresses.agent_registry}")
+            print(f"Connected to Solana ({cluster.cluster_name})")
+            print(f"  Program ID: {contracts.program_id}")
+            print(f"  USDC Mint:  {USDC_MINT}")
+            print(f"  Signer:     {contracts.keypair.pubkey() if contracts.keypair else 'read-only'}")
         except Exception as e:
-            print(f"Chain connection failed (non-critical): {e}")
->>>>>>> adaptable-agents
+            print(f"Failed to connect: {e}")
 
     # ── Anthropic Claude Butler Agent ────────────────────────
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
@@ -286,7 +268,7 @@ async def startup_event():
 
     # ── Register Worker Agents ────────────────────────────────
     try:
-        hackathon_agent = await create_hackathon_agent()
+        hackathon_agent = await create_hackathon_agent(db=db)
         if task_memory:
             hackathon_agent.task_memory = task_memory
         print(f"HackathonAgent registered on JobBoard")
@@ -294,47 +276,45 @@ async def startup_event():
         print(f"HackathonAgent init failed (non-critical): {e}")
 
     try:
-        caller_agent = CallerAgent()
-        await caller_agent.initialize()
+        caller_agent = await create_caller_agent(db=db)
         if task_memory:
             caller_agent.task_memory = task_memory
-        caller_agent.register_on_board()
         print(f"CallerAgent registered on JobBoard")
     except Exception as e:
         print(f"CallerAgent init failed (non-critical): {e}")
 
     try:
-        gift_agent = await create_gift_suggestion_agent()
+        gift_agent = await create_gift_suggestion_agent(db=db)
         print(f"GiftSuggestionAgent registered on JobBoard")
     except Exception as e:
         print(f"GiftSuggestionAgent init failed (non-critical): {e}")
 
     try:
-        restaurant_agent = await create_restaurant_booker_agent()
+        restaurant_agent = await create_restaurant_booker_agent(db=db)
         print(f"RestaurantBookerAgent registered on JobBoard")
     except Exception as e:
         print(f"RestaurantBookerAgent init failed (non-critical): {e}")
 
     try:
-        refund_agent = await create_refund_claim_agent()
+        refund_agent = await create_refund_claim_agent(db=db)
         print(f"RefundClaimAgent registered on JobBoard")
     except Exception as e:
         print(f"RefundClaimAgent init failed (non-critical): {e}")
 
     try:
-        shopper_agent = await create_smart_shopper_agent()
+        shopper_agent = await create_smart_shopper_agent(db=db)
         print(f"SmartShopperAgent registered on JobBoard")
     except Exception as e:
         print(f"SmartShopperAgent init failed (non-critical): {e}")
 
     try:
-        trip_agent = await create_trip_planner_agent()
+        trip_agent = await create_trip_planner_agent(db=db)
         print(f"TripPlannerAgent registered on JobBoard")
     except Exception as e:
         print(f"TripPlannerAgent init failed (non-critical): {e}")
 
     try:
-        fun_activity_agent = await create_fun_activity_agent()
+        fun_activity_agent = await create_fun_activity_agent(db=db)
         if task_memory:
             fun_activity_agent.task_memory = task_memory
         print(f"FunActivityAgent registered on JobBoard")
@@ -708,6 +688,16 @@ async def execute_job_after_escrow(job_id: str):
             except Exception as e:
                 logger.warning(f"DB completed update failed: {e}")
 
+            # Increment worker agent job stats
+            try:
+                await db.increment_worker_job_stats(
+                    winning_bid.bidder_id,
+                    success=True,
+                    earnings_usdc=winning_bid.amount_usdc,
+                )
+            except Exception as e:
+                logger.warning(f"Worker stats update failed: {e}")
+
         # ── On-chain completion: markCompleted → confirm delivery → release payment ──
         on_chain_job_id = job.metadata.get("on_chain_job_id") if job.metadata else None
         release_tx = None
@@ -805,6 +795,12 @@ async def execute_job_after_escrow(job_id: str):
             try:
                 await db.update_job_status(job_id, "expired")
                 await db.create_update(job_id, agent=winning_bid.bidder_id, status="error", message=str(e))
+            except Exception:
+                pass
+
+            # Increment worker agent job stats (failure)
+            try:
+                await db.increment_worker_job_stats(winning_bid.bidder_id, success=False)
             except Exception:
                 pass
 

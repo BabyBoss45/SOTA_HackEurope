@@ -15,23 +15,22 @@ export interface DashboardAgent {
 
 export async function GET() {
   try {
-    // Fetch all agents from DB
-    const dbAgents = await prisma.agent.findMany();
+    // Fetch portal agents from DB
+    const dbAgents = await prisma.agent.findMany({
+      orderBy: { createdAt: 'asc' },
+    });
 
-    // Sort by creation date ascending
-    dbAgents.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    // Transform to dashboard format
+    // Transform portal agents to dashboard format
     const agents: DashboardAgent[] = dbAgents.map((agent) => {
       const totalReqs = (agent as { totalRequests?: number }).totalRequests ?? 0;
       const successReqs = (agent as { successfulRequests?: number }).successfulRequests ?? 0;
       const rep = (agent as { reputation?: number }).reputation ?? 5.0;
       const iconName = (agent as { icon?: string }).icon ?? "Bot";
-      
-      const successRate = totalReqs > 0 
-        ? Math.round((successReqs / totalReqs) * 1000) / 10 
+
+      const successRate = totalReqs > 0
+        ? Math.round((successReqs / totalReqs) * 1000) / 10
         : 100;
-      
+
       // Determine status based on DB status field
       let status: "online" | "busy" | "offline" = "online";
       if (agent.status === "busy" || agent.status === "processing") {
@@ -53,8 +52,29 @@ export async function GET() {
       };
     });
 
+    // Fetch worker agents from WorkerAgent table
+    const dbWorkers = await prisma.workerAgent.findMany({
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Transform WorkerAgent rows into DashboardAgent[]
+    const workerDashboard: DashboardAgent[] = dbWorkers.map((w) => ({
+      id: 100000 + w.id,  // offset to avoid ID collision with Agent table
+      title: w.name,
+      description: w.description || "",
+      icon: w.icon || "Bot",
+      status: (w.status === "online" ? "online" : w.status === "busy" ? "busy" : "offline") as "online" | "busy" | "offline",
+      totalRequests: w.totalJobs,
+      reputation: w.reputation,
+      successRate: w.totalJobs > 0 ? Math.round((w.successfulJobs / w.totalJobs) * 1000) / 10 : 100,
+      isButler: false,
+    }));
+
+    // Merge portal agents and worker agents
+    const allAgents = [...agents, ...workerDashboard];
+
     // Separate Butler from other agents
-    const butler = agents.find(a => a.isButler) || {
+    const butler = allAgents.find(a => a.isButler) || {
       id: 0,
       title: "Butler",
       description: "Your AI concierge orchestrating all agents",
@@ -66,12 +86,12 @@ export async function GET() {
       isButler: true,
     };
 
-    const workerAgents = agents.filter(a => !a.isButler);
+    const workerAgents = allAgents.filter(a => !a.isButler);
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       butler,
       agents: workerAgents,
-      total: agents.length,
+      total: allAgents.length,
     });
   } catch (error) {
     console.error("Failed to fetch dashboard agents:", error);

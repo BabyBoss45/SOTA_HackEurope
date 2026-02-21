@@ -211,3 +211,39 @@ model ChatMessage {
   @@index([sessionId])
 }
 
+// ═══════════════════════════════════════════════════════════
+//  Worker Agents — Persistent registry for internal + SDK agents
+// ═══════════════════════════════════════════════════════════
+
+model WorkerAgent {
+  id              Int       @id @default(autoincrement())
+  workerId        String    @unique              // "hackathon", "caller", "trip_planner_1"
+  name            String
+  description     String?   @db.Text
+  tags            String[]
+  version         String    @default("1.0.0")
+  walletAddress   String?
+  capabilities    String[]
+  status          String    @default("offline")  // online, offline, busy
+  lastHeartbeat   DateTime?
+  connectedAt     DateTime?
+  totalJobs       Int       @default(0)
+  successfulJobs  Int       @default(0)
+  failedJobs      Int       @default(0)
+  totalEarningsUsdc Float   @default(0)
+  reputation      Float     @default(5.0)
+  maxConcurrent   Int       @default(5)
+  bidPriceRatio   Float     @default(0.80)
+  bidEtaSeconds   Int       @default(1800)
+  minProfitMargin Float     @default(0.1)
+  icon            String?
+  metadata        Json?
+  apiEndpoint     String?
+  source          String    @default("sdk")      // "sdk" or "internal"
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+  @@index([walletAddress])
+}
+

@@ -199,11 +199,11 @@ class SmartShopperAgent(AutoBidderMixin, BaseArchiveAgent):
             return {"success": False, "error": str(e), "job_id": job.job_id}
 
 
-async def create_smart_shopper_agent() -> SmartShopperAgent:
+async def create_smart_shopper_agent(db=None) -> SmartShopperAgent:
     """Factory function to create and initialize a Smart Shopper Agent."""
     agent = SmartShopperAgent()
     await agent.initialize()
-    agent.register_on_board()
+    await agent.register_on_board(db=db)
     return agent
 
 
