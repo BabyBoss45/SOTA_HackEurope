@@ -1,5 +1,5 @@
 # Solana / Blockchain (Solana Devnet)
-solana==0.34.3
+solana>=0.34.0
 solders>=0.21.0
 anchorpy>=0.20.0
 
@@ -10,6 +10,10 @@ pydantic>=2.9.0
 # Server (Butler API)
 uvicorn>=0.32.0
 fastapi>=0.115.0
+starlette>=0.27.0
+
+# Database
+asyncpg>=0.29.0
 
 # Database (PostgreSQL via Railway)
 asyncpg>=0.30.0
@@ -45,12 +49,15 @@ google-search-results>=2.4.2
 # Browser Automation (Hackathon Registration)
 playwright>=1.40.0
 
-
 # Cost tracking (Paid.ai)
 paid-python>=1.0.5
 
+# Crypto (A2A protocol)
+PyNaCl>=1.5.0
+
 # Caller Agent (phone bookings and verification)
 twilio>=9.3.0
+elevenlabs>=1.0.0
 
 # Dev
 pytest>=8.0.0

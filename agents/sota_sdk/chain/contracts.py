@@ -42,9 +42,13 @@ logger = logging.getLogger(__name__)
 
 # -- IDL Loading ---------------------------------------------------------------
 
-_IDL_PATH = Path(__file__).resolve().parent.parent.parent.parent / (
-    "anchor" / "target" / "idl" / "sota_marketplace.json"
-)
+# Try multiple IDL locations: local agents copy first, then anchor build output
+_AGENTS_ROOT = Path(__file__).resolve().parent.parent.parent
+_IDL_CANDIDATES = [
+    _AGENTS_ROOT / "sota_marketplace_idl.json",                          # Docker / agents dir
+    _AGENTS_ROOT.parent / "anchor" / "target" / "idl" / "sota_marketplace.json",  # Local dev
+]
+_IDL_PATH = next((p for p in _IDL_CANDIDATES if p.exists()), _IDL_CANDIDATES[0])
 
 _idl_cache: Optional[dict] = None
 
