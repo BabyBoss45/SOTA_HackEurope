@@ -304,14 +304,16 @@ class BaseArchiveAgent(ABC):
             except Exception as e:
                 logger.error(f"Could not fetch job details: {e}")
         
-        # Safely unpack job details (get_job returns a dict)
-        # Note: OrderBook has no separate job_type field; default to 0
-        job_type_val = 0
-        job_description = job_details.get("metadata_uri", "") if job_details else ""
-        job_deadline = job_details.get("deadline", 0) if job_details else 0
+        # Safely unpack job state
+        job_state = job_details[0] if job_details and len(job_details) > 0 else None
+        bids = job_details[1] if job_details and len(job_details) > 1 else []
+
+        job_type_val = job_state[2] if job_state and len(job_state) > 2 else 0
+        job_description = job_state[1] if job_state and len(job_state) > 1 else ""
+        job_deadline = job_state[4] if job_state and len(job_state) > 4 else 0
 
         # Resolve job metadata URI with fallback to JobRegistry when OrderBook value is missing
-        job_metadata_uri = self._resolve_job_metadata_uri(job_details, event.job_id)
+        job_metadata_uri = self._resolve_job_metadata_uri(job_state, event.job_id)
 
         # Track the active job
         active_job = ActiveJob(

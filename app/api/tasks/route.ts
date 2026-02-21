@@ -1,6 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
 
 // ── Contract deployment addresses (Base Sepolia testnet) ──────────
 const EXPLORER_BASE = "https://sepolia.basescan.org";
@@ -54,13 +53,8 @@ export interface DashboardTask {
   adaptation?: AdaptationInfo;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     // Fetch marketplace jobs with ALL updates (no take limit)
     const jobs = await prisma.marketplaceJob.findMany({
       orderBy: { createdAt: 'desc' },
@@ -69,7 +63,7 @@ export async function GET(request: NextRequest) {
           orderBy: { createdAt: 'desc' },
         },
       },
-    });
+    }) as Awaited<ReturnType<typeof prisma.marketplaceJob.findMany>>;
 
     // Fetch all agents and build lookup maps
     const allAgents = await prisma.agent.findMany();
@@ -94,7 +88,7 @@ export async function GET(request: NextRequest) {
     };
 
     // Transform jobs to dashboard format
-    const tasks: DashboardTask[] = jobs.map((job: typeof jobs[number]) => {
+    const tasks: DashboardTask[] = jobs.map((job) => {
       // Parse metadata for additional info
       const metadata = job.metadata as Record<string, unknown> || {};
 
@@ -124,7 +118,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Get latest non-bid update for progress tracking
-      const latestUpdate = job.updates?.find((u: typeof job.updates[number]) => u.status !== "bid_submitted");
+      const latestUpdate = job.updates?.find(u => u.status !== "bid_submitted");
       if (latestUpdate) {
         if (latestUpdate.status === "in_progress") {
           status = "executing";
@@ -138,8 +132,8 @@ export async function GET(request: NextRequest) {
       }
 
       // Extract real bids from updates
-      const bidUpdates = (job.updates || []).filter((u: typeof job.updates[number]) => u.status === "bid_submitted");
-      const bids: TaskBid[] = bidUpdates.map((u: typeof job.updates[number]) => {
+      const bidUpdates = (job.updates || []).filter(u => u.status === "bid_submitted");
+      const bids: TaskBid[] = bidUpdates.map((u) => {
         const bidData = u.data as Record<string, unknown> || {};
         return {
           id: u.id.toString(),
@@ -195,7 +189,7 @@ export async function GET(request: NextRequest) {
 
     // Get online agents with extended info
     const activeAgents = allAgents.filter(
-      (a: typeof allAgents[number]) => a.status === "active" || a.status === "busy"
+      (a) => a.status === "active" || a.status === "busy"
     );
 
     return NextResponse.json({
@@ -214,7 +208,7 @@ export async function GET(request: NextRequest) {
         failed: failed.length,
         pendingRequests: dataRequests.length,
       },
-      agents: activeAgents.map((a: typeof allAgents[number]) => ({
+      agents: activeAgents.map((a) => ({
         id: a.id,
         title: a.title,
         status: a.status,

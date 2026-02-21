@@ -47,7 +47,6 @@ from agents.src.shared.chain_contracts import (
     get_job,
     get_escrow_deposit,
 )
-from agents.src.shared.refund import trigger_refund
 from agents.src.shared.butler_comms import ButlerDataExchange
 try:
     from agents.src.shared.database import Database
@@ -67,9 +66,6 @@ _here = Path(__file__).resolve().parent
 load_dotenv(_here.parent / ".env")
 load_dotenv(_here / ".env")  # fallback: agents/.env
 
-_cors_raw = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001")
-_cors_origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -77,7 +73,7 @@ app = FastAPI(title="SOTA Butler API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -106,7 +102,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     session_id: Optional[str] = None
-    model: str = "claude-haiku-4-5-20251001"
+    model: str = "claude-sonnet-4-5-20241022"
 
 
 class CreateJobRequest(BaseModel):
@@ -179,13 +175,13 @@ async def startup_event():
     print(f"Starting SOTA Butler API...")
     print(f"Network: {network.rpc_url} (chain {network.chain_id})")
 
-    # ── Connect to PostgreSQL ────────────────────────────────
+    # ── Connect to Firestore ────────────────────────────────
     if Database is not None:
         try:
             db = await Database.connect()
-            print("Connected to PostgreSQL")
+            print("Connected to Firestore")
         except Exception as e:
-            print(f"PostgreSQL unavailable — running without persistence: {e}")
+            print(f"Firestore unavailable — running without persistence: {e}")
     else:
         print("Database module not available — running without persistence")
 
@@ -238,7 +234,7 @@ async def startup_event():
                 private_key=pk,
                 anthropic_api_key=anthropic_key,
             )
-            print(f"Butler Agent initialized (Claude claude-haiku-4-5-20251001)")
+            print(f"Butler Agent initialized (Claude claude-sonnet-4-5-20241022)")
         except Exception as e:
             print(f"Butler Agent init failed: {e}")
     else:
@@ -294,7 +290,7 @@ async def chat_with_butler(req: ChatRequest):
         return {
             "response": result["response"],
             "session_id": req.session_id,
-            "model": "claude-haiku-4-5-20251001",
+            "model": "claude-sonnet-4-5-20241022",
             "job_posted": result.get("job_posted"),
         }
     except Exception as e:
@@ -488,7 +484,7 @@ async def execute_job_after_escrow(job_id: str):
 
     logger.info(f"Executing job {job_id} with worker {winning_bid.bidder_id}")
 
-    # Persist "in_progress" to PostgreSQL
+    # Persist "in_progress" to Firestore
     if db:
         try:
             await db.update_job_status(job_id, "assigned")
@@ -591,7 +587,7 @@ async def execute_job_after_escrow(job_id: str):
             except Exception as fallback_err:
                 logger.warning(f"Direct search fallback failed: {fallback_err}")
 
-        # Persist "completed" to PostgreSQL
+        # Persist "completed" to Firestore
         if db:
             try:
                 await db.update_job_status(job_id, "completed")
@@ -608,9 +604,9 @@ async def execute_job_after_escrow(job_id: str):
         release_tx = None
         if on_chain_job_id and contracts:
             try:
-                from web3 import Web3
+                import hashlib
                 proof_data = json.dumps(exec_result, default=str).encode() if isinstance(exec_result, dict) else str(exec_result).encode()
-                proof_hash = Web3.keccak(proof_data)
+                proof_hash = hashlib.sha256(proof_data).digest()
 
                 # 1. Mark completed on-chain
                 try:
@@ -696,7 +692,6 @@ async def execute_job_after_escrow(job_id: str):
             except Exception:
                 logger.warning("Failed to persist task outcome (error path)", exc_info=True)
 
-        # Persist error to PostgreSQL
         if db:
             try:
                 await db.update_job_status(job_id, "expired")
@@ -704,46 +699,7 @@ async def execute_job_after_escrow(job_id: str):
             except Exception:
                 pass
 
-        # Auto-refund: issue Stripe + on-chain refund for the failed job
-        try:
-            refund_result = await trigger_refund(
-                job_id=job_id,
-                reason=f"Job execution failed: {e}",
-            )
-            if refund_result.get("success"):
-                logger.info("Auto-refund succeeded for job %s: %s", job_id, refund_result)
-            else:
-                logger.error("Auto-refund FAILED for job %s — customer may not be refunded: %s", job_id, refund_result)
-        except Exception as refund_err:
-            logger.error("Auto-refund exception for job %s: %s", job_id, refund_err)
-
         raise HTTPException(500, f"Job execution failed: {e}")
-
-
-class RefundRequest(BaseModel):
-    job_id: str
-    reason: Optional[str] = None
-
-
-@app.post("/api/v1/refund")
-async def manual_refund(req: RefundRequest):
-    """Manually trigger a Stripe + on-chain refund for a job (admin use)."""
-    try:
-        result = await trigger_refund(
-            job_id=req.job_id,
-            reason=req.reason or "Manual refund requested",
-        )
-        if result.get("success"):
-            return result
-        # Forward the error from the refund endpoint
-        status_code = 500
-        if result.get("error") == "No payment record found for this job":
-            status_code = 404
-        raise HTTPException(status_code, result.get("error", "Refund failed"))
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"Refund failed: {e}")
 
 
 @app.get("/api/v1/marketplace/execute/{job_id}/stream")
@@ -755,7 +711,8 @@ async def execute_job_with_sse(job_id: str):
     if not job:
         raise HTTPException(404, f"Job {job_id} not found")
 
-    winning_bid = board.get_winning_bid(job_id)
+    bids = board.get_bids(job_id)
+    winning_bid = next((b for b in bids if b.bidder_id), None)
 
     if not winning_bid:
         raise HTTPException(400, f"No winning bid for job {job_id}")
@@ -904,7 +861,7 @@ async def check_status(req: JobStatusRequest):
         except Exception:
             pass
 
-        status_names = ["OPEN", "ASSIGNED", "COMPLETED", "RELEASED", "CANCELLED", "DISPUTED"]
+        status_names = ["OPEN", "ASSIGNED", "COMPLETED", "RELEASED", "CANCELLED"]
         status = status_names[job["status"]] if job["status"] < len(status_names) else "UNKNOWN"
 
         return JobStatusResponse(
@@ -1130,7 +1087,7 @@ async def handle_agent_data_request(req: AgentDataRequest):
                 "message": "Auto-confirmed (BUTLER_AUTO_CONFIRM=true)",
             }
 
-    await exchange.post_request(req.request_id, req.job_id, req.model_dump())
+    exchange.post_request(req.request_id, req.job_id, req.model_dump())
     return {
         "request_id": req.request_id,
         "data_type": req.data_type,

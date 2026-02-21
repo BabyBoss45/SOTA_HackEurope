@@ -411,14 +411,14 @@ class PostJobTool(BaseTool):
             return None
 
     async def _persist_job(self, db, job_id, description, tags, budget_usd, poster, metadata):
-        """Fire-and-forget: persist job to database."""
+        """Fire-and-forget: persist job to Firestore."""
         try:
             await db.create_job(job_id, description, tags, budget_usd, poster, metadata)
         except Exception as e:
             print(f"⚠️ DB create_job failed: {e}")
 
     async def _persist_bid_selection(self, db, job_id, result):
-        """Fire-and-forget: persist bid selection to database."""
+        """Fire-and-forget: persist bid selection to Firestore."""
         try:
             w = result.winning_bid
             await db.update_job_status(
@@ -519,7 +519,7 @@ class PostJobTool(BaseTool):
 
             print(f"📢 Job {job_id_str} posted — collecting bids for {listing.bid_window_seconds}s…")
 
-            # ── Persist job to database (fire-and-forget) ────────
+            # ── Persist job to Firestore (fire-and-forget) ────────
             db = await self._get_db()
             if db:
                 asyncio.ensure_future(self._persist_job(
@@ -548,7 +548,7 @@ class PostJobTool(BaseTool):
             # ── 3. After winner selected → return result with escrow info ──
             if result.winning_bid:
                 w = result.winning_bid
-                # Persist bid selection to database
+                # Persist bid selection to Firestore
                 if db:
                     asyncio.ensure_future(self._persist_bid_selection(db, job_id_str, result))
 
@@ -602,7 +602,7 @@ class PostJobTool(BaseTool):
                 
                 return json.dumps(response, indent=2)
             else:
-                # Persist expired status to database
+                # Persist expired status to Firestore
                 if db:
                     asyncio.ensure_future(self._persist_no_bids(db, job_id_str))
 
@@ -851,7 +851,7 @@ class CheckJobStatusTool(BaseTool):
             contracts = get_contracts(pk)
             job_data = get_job(contracts, job_id)
 
-            status_names = ["OPEN", "ASSIGNED", "COMPLETED", "RELEASED", "CANCELLED", "DISPUTED"]
+            status_names = ["OPEN", "ASSIGNED", "COMPLETED", "RELEASED", "CANCELLED"]
             status_idx = job_data.get("status", 0)
             status = status_names[status_idx] if status_idx < len(status_names) else "UNKNOWN"
 
@@ -921,7 +921,7 @@ class GetDeliveryTool(BaseTool):
                 try:
                     contracts = get_contracts(pk)
                     job_data = get_job(contracts, job_id)
-                    status_names = ["OPEN", "ASSIGNED", "COMPLETED", "RELEASED", "CANCELLED", "DISPUTED"]
+                    status_names = ["OPEN", "ASSIGNED", "COMPLETED", "RELEASED", "CANCELLED"]
                     status_idx = job_data.get("status", 0)
                     result["status"] = status_names[status_idx] if status_idx < len(status_names) else "UNKNOWN"
                     result["provider"] = job_data.get("provider", "")

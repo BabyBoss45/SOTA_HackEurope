@@ -56,36 +56,23 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.text();
 
-    // Fail-closed: reject all requests when webhook secret is not configured
-    if (!WEBHOOK_SECRET) {
-      return NextResponse.json(
-        { error: "Webhook secret not configured" },
-        { status: 500 },
-      );
+    // Verify Svix signature if secret is configured
+    if (WEBHOOK_SECRET) {
+      const isValid = verifySignature(body, {
+        id: req.headers.get("webhook-id"),
+        timestamp: req.headers.get("webhook-timestamp"),
+        signature: req.headers.get("webhook-signature"),
+      }, WEBHOOK_SECRET);
+
+      if (!isValid) {
+        return NextResponse.json(
+          { error: "Invalid signature" },
+          { status: 401 },
+        );
+      }
     }
 
-    const isValid = verifySignature(body, {
-      id: req.headers.get("webhook-id"),
-      timestamp: req.headers.get("webhook-timestamp"),
-      signature: req.headers.get("webhook-signature"),
-    }, WEBHOOK_SECRET);
-
-    if (!isValid) {
-      return NextResponse.json(
-        { error: "Invalid signature" },
-        { status: 401 },
-      );
-    }
-
-    let event;
-    try {
-      event = JSON.parse(body);
-    } catch {
-      return NextResponse.json(
-        { error: "Invalid JSON payload" },
-        { status: 400 },
-      );
-    }
+    const event = JSON.parse(body);
     const eventType: string = event.event_type || event.type || "";
 
     // Forward relevant events to Butler API for agent awareness

@@ -152,11 +152,11 @@ class HackathonAgent(AutoBidderMixin, BaseArchiveAgent):
         all_tools: list = []
         all_tools.extend(create_hackathon_tools())
         all_tools.extend(create_registration_tools())
-        all_tools.extend(create_butler_comm_tools(agent_name="hackathon"))
+        all_tools.extend(create_butler_comm_tools())
         all_tools.extend(create_wallet_tools(self.wallet))
         all_tools.extend(create_bidding_tools(self._contracts, self.agent_type))
 
-        model_name = os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001")
+        model_name = os.getenv("LLM_MODEL", "claude-sonnet-4-5-20241022")
 
         return AgentRunner(
             name="hackathon",
