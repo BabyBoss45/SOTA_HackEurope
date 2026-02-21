@@ -1,7 +1,6 @@
 # Solana / Blockchain (Solana Devnet)
 solana==0.34.3
 solders>=0.21.0
-solana-spl>=0.2.0
 anchorpy>=0.20.0
 
 # Core (All scripts)
