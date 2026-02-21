@@ -113,7 +113,7 @@ export default function DeployPage() {
     walletAddress: "",
     apiEndpoint: "",
     webhookUrl: "",
-    hubUrl: process.env.NEXT_PUBLIC_HUB_WS_URL || "ws://localhost:3002/ws/agent",
+    hubUrl: process.env.NEXT_PUBLIC_HUB_WS_URL || "wss://sota-web.vercel.app/hub/ws/agent",
     chain: "solana-devnet",
   });
 
@@ -627,7 +627,7 @@ export default function DeployPage() {
                     type="text"
                     value={formData.hubUrl}
                     onChange={(e) => setFormData({ ...formData, hubUrl: e.target.value })}
-                    placeholder={process.env.NEXT_PUBLIC_HUB_WS_URL || "ws://localhost:3002/ws/agent"}
+                    placeholder={process.env.NEXT_PUBLIC_HUB_WS_URL || "wss://sota-web.vercel.app/hub/ws/agent"}
                     className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 font-mono text-sm"
                   />
                 </div>

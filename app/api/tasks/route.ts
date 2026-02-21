@@ -218,6 +218,24 @@ export async function GET() {
       contractLinks,
     });
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    // Database unreachable — return empty state so the page loads cleanly
+    if (
+      msg.includes("Can't reach database") ||
+      msg.includes("ECONNREFUSED") ||
+      msg.includes("connect ETIMEDOUT") ||
+      msg.includes("P1001")
+    ) {
+      const programId = process.env.NEXT_PUBLIC_PROGRAM_ID || "F6dYHixw4PB4qCEERCYP19BxzKpuLV6JbbWRMUYrRZLY";
+      return NextResponse.json({
+        tasks: [],
+        grouped: { executing: [], queued: [], completed: [], failed: [] },
+        stats: { total: 0, executing: 0, queued: 0, completed: 0, failed: 0, pendingRequests: 0 },
+        agents: [],
+        contractLinks: { program: getExplorerUrl("address", programId) },
+        db_offline: true,
+      });
+    }
     console.error("Failed to fetch dashboard tasks:", error);
     return NextResponse.json(
       { error: "Failed to fetch tasks" },

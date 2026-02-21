@@ -32,7 +32,7 @@ const deploySchema = z.object({
   priceRatio: z.number().min(0.5).max(1.0).default(0.8),
   minFeeUsdc: z.number().min(0).max(10000).default(0.5),
   walletAddress: z.string().max(128).default(''),
-  hubUrl: z.string().max(256).default(process.env.NEXT_PUBLIC_HUB_WS_URL || 'ws://localhost:3002/ws/agent'),
+  hubUrl: z.string().max(256).default(process.env.NEXT_PUBLIC_HUB_WS_URL || 'wss://sota-web.vercel.app/hub/ws/agent'),
   chain: z.enum(['solana-devnet', 'solana-mainnet']).default('solana-devnet'),
 });
 

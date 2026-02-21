@@ -195,7 +195,7 @@ export default function Marketplace() {
   const fetchTasks = useCallback(async () => {
     try {
       const res = await fetch("/api/tasks");
-      if (!res.ok) throw new Error("Failed to fetch tasks");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
 
@@ -205,7 +205,10 @@ export default function Marketplace() {
 
       setError(null);
     } catch (err) {
-      console.error("Error fetching tasks:", err);
+      // Only log on first failure or when error state changes to avoid spamming console
+      if (!error) {
+        console.error("Failed to fetch tasks:", err);
+      }
       setError("Failed to load tasks");
     } finally {
       if (isInitialLoad.current) {
@@ -213,7 +216,7 @@ export default function Marketplace() {
         isInitialLoad.current = false;
       }
     }
-  }, []);
+  }, [error]);
 
   useEffect(() => {
     fetchTasks();

@@ -46,6 +46,7 @@ from agents.src.shared.chain_contracts import (
     fund_job,
     mark_completed,
     release_payment,
+    refund_escrow,
     confirm_delivery,
     is_delivery_confirmed,
     get_job,
@@ -101,6 +102,7 @@ hackathon_agent: Optional[HackathonAgent] = None
 caller_agent: Optional[CallerAgent] = None
 db: Optional[Any] = None  # Database connection
 task_memory: Optional[Any] = None  # TaskPatternMemory instance
+_db_pool: Optional[Any] = None  # asyncpg pool for ClawBot token/reputation ops
 
 
 # ─── Request / Response Models ────────────────────────────────
@@ -183,7 +185,7 @@ class ReleaseRequest(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    global contracts, butler_agent, job_board, hackathon_agent, caller_agent, db, task_memory
+    global contracts, butler_agent, job_board, hackathon_agent, caller_agent, db, task_memory, _db_pool
     cluster = get_cluster()
     print(f"Starting SOTA Butler API...")
     print(f"Cluster: {cluster.rpc_url} ({cluster.cluster_name})")
@@ -199,6 +201,16 @@ async def startup_event():
             print(f"Database unavailable — running without persistence: {e}")
     else:
         print("Database module not available — running without persistence")
+
+    # ── asyncpg pool for ClawBot operations ──────────────────
+    database_url = os.getenv("DATABASE_URL", "")
+    if database_url:
+        try:
+            import asyncpg
+            _db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=5)
+            print("asyncpg pool created for ClawBot operations")
+        except Exception as e:
+            print(f"asyncpg pool creation failed (non-critical): {e}")
 
     # ── incident.io client (graceful no-op if unconfigured) ──
     _incident_io = None
@@ -265,6 +277,23 @@ async def startup_event():
     # ── JobBoard Marketplace ─────────────────────────────────
     job_board = JobBoard.instance()
     print(f"JobBoard marketplace ready (in-memory)")
+
+    # ── ClawBot External Agent Inviter ────────────────────────
+    if database_url and _db_pool:
+        try:
+            from agents.src.shared.hmac_signer import HMACSigner
+            from agents.src.shared.external_agent_inviter import ExternalAgentInviter
+            _signer = HMACSigner()
+            _inviter = ExternalAgentInviter(db_url=database_url, signer=_signer)
+            job_board.set_external_inviter(_inviter)
+            job_board.set_db_pool(_db_pool)
+            print("ClawBot ExternalAgentInviter attached to JobBoard")
+        except Exception as e:
+            print(f"ExternalAgentInviter init failed (non-critical): {e}")
+
+    # ── Stale execution token cleanup loop ────────────────────
+    if _db_pool and contracts:
+        asyncio.create_task(_expire_stale_tokens_loop())
 
     # ── Register Worker Agents ────────────────────────────────
     try:
@@ -1238,6 +1267,139 @@ async def get_agent_updates(job_id: str):
     exchange = ButlerDataExchange.instance()
     updates = exchange.get_updates(job_id)
     return {"job_id": job_id, "updates": updates, "count": len(updates)}
+
+
+# ═════════════════════════════════════════════════════════════
+#  ClawBot Internal Bridge Endpoints
+#  Called only by the Next.js API routes (same internal network).
+#  Protected by X-Internal-Secret header.
+# ═════════════════════════════════════════════════════════════
+
+class InternalReleaseRequest(BaseModel):
+    job_id: str        # MarketplaceJob.jobId (UUID string)
+    wallet_address: str
+
+
+class InternalRefundRequest(BaseModel):
+    job_id: str
+
+
+def _verify_internal_secret(request) -> bool:
+    secret = os.getenv("INTERNAL_API_SECRET", "")
+    if not secret:
+        return False  # not configured — reject all
+    return request.headers.get("X-Internal-Secret") == secret
+
+
+from fastapi import Request as _FastAPIRequest, Depends as _Depends
+
+
+def _check_internal_secret(request: _FastAPIRequest):
+    secret = os.getenv("INTERNAL_API_SECRET", "")
+    if not secret or request.headers.get("X-Internal-Secret") != secret:
+        from fastapi import HTTPException as _HTTPException
+        raise _HTTPException(status_code=403, detail="Forbidden")
+
+
+@app.post("/internal/release-payment")
+async def clawbot_release_payment(
+    req: InternalReleaseRequest,
+    _: None = _Depends(_check_internal_secret),
+):
+    """
+    Release escrow payment to an external ClawBot wallet.
+    Called by app/api/marketplace/external/execute/route.ts after successful execution.
+    """
+    if not contracts:
+        raise HTTPException(503, "Blockchain contracts not initialised")
+
+    # Retrieve on-chain job id from MarketplaceJob metadata
+    on_chain_job_id = await _get_onchain_job_id(req.job_id)
+    if on_chain_job_id is None:
+        logger.warning("No on-chain job id found for marketplace job %s", req.job_id)
+        return {"success": False, "reason": "no_onchain_job"}
+
+    try:
+        confirm_delivery(contracts, int(on_chain_job_id))
+    except Exception as e:
+        logger.warning("confirm_delivery skipped for job %s: %s", on_chain_job_id, e)
+
+    try:
+        tx = release_payment(contracts, int(on_chain_job_id))
+        logger.info("Payment released for job %s → tx %s", on_chain_job_id, tx)
+        return {"success": True, "tx_hash": tx}
+    except Exception as e:
+        logger.error("release_payment failed for job %s: %s", on_chain_job_id, e)
+        raise HTTPException(500, f"Release failed: {e}")
+
+
+@app.post("/internal/refund-escrow")
+async def clawbot_refund_escrow(
+    req: InternalRefundRequest,
+    _: None = _Depends(_check_internal_secret),
+):
+    """
+    Refund escrow to the job poster after a failed ClawBot execution.
+    Called by app/api/marketplace/external/execute/route.ts on failure.
+    """
+    if not contracts:
+        raise HTTPException(503, "Blockchain contracts not initialised")
+
+    on_chain_job_id = await _get_onchain_job_id(req.job_id)
+    if on_chain_job_id is None:
+        logger.warning("No on-chain job id found for marketplace job %s", req.job_id)
+        return {"success": False, "reason": "no_onchain_job"}
+
+    try:
+        tx = refund_escrow(contracts, int(on_chain_job_id))
+        logger.info("Escrow refunded for job %s → tx %s", on_chain_job_id, tx)
+        return {"success": True, "tx_hash": tx}
+    except Exception as e:
+        logger.error("refund_escrow failed for job %s: %s", on_chain_job_id, e)
+        raise HTTPException(500, f"Refund failed: {e}")
+
+
+async def _get_onchain_job_id(marketplace_job_id: str) -> Optional[str]:
+    """Look up the on-chain job ID from MarketplaceJob.metadata."""
+    if _db_pool is None:
+        return None
+    try:
+        row = await _db_pool.fetchrow(
+            'SELECT metadata FROM "MarketplaceJob" WHERE "jobId" = $1',
+            marketplace_job_id,
+        )
+        if not row or not row['metadata']:
+            return None
+        meta = row['metadata'] if isinstance(row['metadata'], dict) else json.loads(row['metadata'])
+        return str(meta.get('on_chain_job_id', '')) or None
+    except Exception as exc:
+        logger.warning("_get_onchain_job_id failed: %s", exc)
+        return None
+
+
+# ─── Stale execution token cleanup ───────────────────────────
+
+async def _expire_stale_tokens_loop() -> None:
+    """
+    Background task: every 60s, expire unused tokens and trigger refunds.
+    """
+    from agents.src.shared.execution_token import expire_stale_tokens
+    while True:
+        await asyncio.sleep(60)
+        if _db_pool is None:
+            continue
+        try:
+            expired_job_ids = await expire_stale_tokens(_db_pool)
+            for job_id in expired_job_ids:
+                logger.info("Execution token expired for job %s — triggering refund", job_id)
+                on_chain_job_id = await _get_onchain_job_id(job_id)
+                if on_chain_job_id and contracts:
+                    try:
+                        refund_escrow(contracts, int(on_chain_job_id))
+                    except Exception as e:
+                        logger.warning("Auto-refund failed for job %s: %s", job_id, e)
+        except Exception as exc:
+            logger.warning("_expire_stale_tokens_loop error: %s", exc)
 
 
 if __name__ == "__main__":

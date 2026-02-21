@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Phone, Calendar, Briefcase, X, Zap, Star, Activity, Loader2, Search, Map, Receipt, Gift, UtensilsCrossed, ShoppingCart, PartyPopper, type LucideIcon } from 'lucide-react';
+import { Bot, Phone, Calendar, Briefcase, X, Zap, Star, Activity, Loader2, Search, Map, Receipt, Gift, UtensilsCrossed, ShoppingCart, PartyPopper, Globe, FlipHorizontal, BadgeCheck, Trophy, type LucideIcon } from 'lucide-react';
 import { FloatingPaths } from './background-paths-wrapper';
 
 // Icon mapping for dynamic icons from DB
@@ -26,6 +26,23 @@ interface Agent {
   totalRequests: number;
   reputation: number;
   successRate: number;
+}
+
+interface ClawBot {
+  agentId: string;
+  name: string;
+  description: string;
+  capabilities: string[];
+  supportedDomains: string[];
+  walletAddress: string;
+  status: string;
+  verifiedAt: string | null;
+  reputation: {
+    reputationScore: number;
+    totalJobs: number;
+    successfulJobs: number;
+    avgExecutionTimeMs: number;
+  } | null;
 }
 
 interface ButlerData {
@@ -66,6 +83,9 @@ const AgentOrbitalLanding = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showClawBots, setShowClawBots] = useState(false);
+  const [flipStage, setFlipStage] = useState<'idle' | 'out' | 'in'>('idle');
+  const [clawBots, setClawBots] = useState<ClawBot[]>([]);
 
   // Fetch agents from API
   useEffect(() => {
@@ -127,8 +147,36 @@ const AgentOrbitalLanding = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch ClawBots
+  useEffect(() => {
+    const fetchClawBots = async () => {
+      try {
+        const res = await fetch('/api/agents/external');
+        if (res.ok) {
+          const data = await res.json();
+          setClawBots(data.agents || []);
+        }
+      } catch {
+        // silently ignore — no ClawBots registered yet
+      }
+    };
+    fetchClawBots();
+    const interval = setInterval(fetchClawBots, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleFlip = () => {
+    if (flipStage !== 'idle') return;
+    setFlipStage('out');
+    setTimeout(() => {
+      setShowClawBots(prev => !prev);
+      setFlipStage('in');
+      setTimeout(() => setFlipStage('idle'), 350);
+    }, 350);
+  };
+
   // Filter agents by search query
-  const filteredAgents = allAgents.filter(agent => 
+  const filteredAgents = allAgents.filter(agent =>
     agent.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     agent.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -349,6 +397,65 @@ const AgentOrbitalLanding = () => {
     }
     .orbit-ring {
       animation: orbit-pulse 3s ease-in-out infinite;
+    }
+    .panel-flip-wrapper {
+      perspective: 1200px;
+      height: 100%;
+      overflow: hidden;
+    }
+    .panel-flip-card {
+      height: 100%;
+      overflow-y: auto;
+    }
+    .panel-flip-card.flip-out {
+      animation: flipOut 0.35s ease-in forwards;
+    }
+    .panel-flip-card.flip-in {
+      animation: flipIn 0.35s ease-out forwards;
+    }
+    @keyframes flipOut {
+      0%   { transform: rotateY(0deg); opacity: 1; }
+      100% { transform: rotateY(90deg); opacity: 0; }
+    }
+    @keyframes flipIn {
+      0%   { transform: rotateY(-90deg); opacity: 0; }
+      100% { transform: rotateY(0deg); opacity: 1; }
+    }
+    /* ── OpenClaw theme ── */
+    .oc-panel {
+      background: #050811;
+      color: #e2e8f0;
+    }
+    .oc-surface {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .oc-surface:hover {
+      background: rgba(255,255,255,0.055);
+      border-color: rgba(234,70,71,0.3);
+    }
+    @keyframes oc-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(234,70,71,0.25); }
+      50% { box-shadow: 0 0 0 6px rgba(234,70,71,0); }
+    }
+    .oc-icon-pulse { animation: oc-pulse 2.5s ease-in-out infinite; }
+    .oc-accent { color: #ea4647; }
+    .oc-accent-bg { background: #ea4647; }
+    .oc-accent-bg:hover { background: #d63e3f; }
+    .oc-pill {
+      background: rgba(234,70,71,0.1);
+      border: 1px solid rgba(234,70,71,0.2);
+      color: #ea4647;
+    }
+    .oc-tag {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.55);
+    }
+    .oc-muted { color: rgba(255,255,255,0.45); }
+    .oc-text { color: rgba(255,255,255,0.86); }
+    .oc-divider {
+      background: linear-gradient(90deg, rgba(234,70,71,0.4), rgba(234,70,71,0.08), transparent);
     }
   `;
 
@@ -627,82 +734,241 @@ const AgentOrbitalLanding = () => {
           </div>
           </div>
 
-          {/* Right Side - All Agents List */}
-          <div id="all-agents-section" className="w-1/2 max-h-[calc(100vh-4rem)] overflow-y-auto px-6 py-4 sm:px-8 sm:py-6 md:px-12 md:py-8 border-l border-[color:var(--border-subtle)]">
-            <div className="max-w-xl mx-auto">
-            {/* Section Header with Search */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
-              <div>
-                <h3 className="text-xl font-semibold text-[color:var(--foreground)] text-center sm:text-left">All Agents</h3>
-                <p className="text-sm text-[color:var(--text-muted)] text-center sm:text-left">Browse and search available agents</p>
-              </div>
-              
-              {/* Search Bar */}
-              <div className="relative w-full sm:w-72">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--text-muted)]" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search agents..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-xl text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500/50 transition-colors"
-                />
-              </div>
-            </div>
+          {/* Right Side - Flip Card Panel */}
+          <div className="w-1/2 h-[calc(100vh-4rem)] border-l border-[color:var(--border-subtle)]">
+            <div className="panel-flip-wrapper">
+              <div className={`panel-flip-card${flipStage === 'out' ? ' flip-out' : flipStage === 'in' ? ' flip-in' : ''}`}>
 
-            {/* Agents Grid */}
-            {filteredAgents.length === 0 ? (
-              <div className="text-center py-12">
-                <Bot size={40} className="text-[color:var(--text-muted)] mx-auto mb-3" />
-                <p className="text-[color:var(--text-muted)]">
-                  {searchQuery ? 'No agents found matching your search' : 'No agents available'}
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-4 grid-cols-1">
-                {filteredAgents.map((agent) => {
-                  const Icon = getIcon(agent.icon);
-                  return (
-                    <div
-                      key={agent.id}
-                      className="p-5 rounded-xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] backdrop-blur-sm hover:border-violet-500/30 transition-all duration-300 group"
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-[color:var(--surface-1)] flex items-center justify-center group-hover:bg-violet-500/20 transition-colors">
-                          <Icon size={22} className="text-[color:var(--text-muted)] group-hover:text-violet-400 transition-colors" />
+                {!showClawBots ? (
+                  /* ── All Agents ── */
+                  <div className="px-6 py-4 sm:px-8 sm:py-6 md:px-12 md:py-8">
+                    <div className="max-w-xl mx-auto">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
+                        <div>
+                          <h3 className="text-xl font-semibold text-[color:var(--foreground)] text-center sm:text-left">All Agents</h3>
+                          <p className="text-sm text-[color:var(--text-muted)] text-center sm:text-left">Browse and search available agents</p>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-semibold text-[color:var(--foreground)] truncate">{agent.title}</h4>
-                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                              agent.status === 'online' ? 'bg-green-500' : 
-                              agent.status === 'busy' ? 'bg-yellow-500' : 'bg-red-500'
-                            }`} />
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-44">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--text-muted)]" />
+                            <input
+                              type="text"
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              placeholder="Search..."
+                              className="w-full pl-9 pr-3 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-xl text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500/50 transition-colors"
+                            />
                           </div>
-                          <p className="text-sm text-[color:var(--text-muted)] line-clamp-2 mb-3">{agent.description}</p>
-                          
-                          {/* Mini Stats */}
-                          <div className="flex items-center gap-4 text-xs">
-                            <div className="flex items-center gap-1 text-[color:var(--text-muted)]">
-                              <Star size={12} className="text-yellow-500" />
-                              <span>{agent.reputation.toFixed(1)}</span>
-                            </div>
-                            <div className="flex items-center gap-1 text-[color:var(--text-muted)]">
-                              <Activity size={12} className="text-green-500" />
-                              <span>{agent.successRate}%</span>
-                            </div>
-                            <div className="flex items-center gap-1 text-[color:var(--text-muted)]">
-                              <Zap size={12} className="text-violet-400" />
-                              <span>{agent.totalRequests.toLocaleString()} jobs</span>
-                            </div>
-                          </div>
+                          <button
+                            onClick={handleFlip}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 whitespace-nowrap oc-pill"
+                          >
+                            <FlipHorizontal size={13} />
+                            ClawBots
+                          </button>
                         </div>
                       </div>
+
+                      {filteredAgents.length === 0 ? (
+                        <div className="text-center py-12">
+                          <Bot size={40} className="text-[color:var(--text-muted)] mx-auto mb-3" />
+                          <p className="text-[color:var(--text-muted)]">
+                            {searchQuery ? 'No agents found matching your search' : 'No agents available'}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid gap-4 grid-cols-1">
+                          {filteredAgents.map((agent) => {
+                            const Icon = getIcon(agent.icon);
+                            return (
+                              <div
+                                key={agent.id}
+                                className="p-5 rounded-xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] backdrop-blur-sm hover:border-violet-500/30 transition-all duration-300 group"
+                              >
+                                <div className="flex items-start gap-4">
+                                  <div className="w-12 h-12 rounded-xl bg-[color:var(--surface-1)] flex items-center justify-center group-hover:bg-violet-500/20 transition-colors">
+                                    <Icon size={22} className="text-[color:var(--text-muted)] group-hover:text-violet-400 transition-colors" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <h4 className="font-semibold text-[color:var(--foreground)] truncate">{agent.title}</h4>
+                                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                        agent.status === 'online' ? 'bg-green-500' :
+                                        agent.status === 'busy' ? 'bg-yellow-500' : 'bg-red-500'
+                                      }`} />
+                                    </div>
+                                    <p className="text-sm text-[color:var(--text-muted)] line-clamp-2 mb-3">{agent.description}</p>
+                                    <div className="flex items-center gap-4 text-xs">
+                                      <div className="flex items-center gap-1 text-[color:var(--text-muted)]">
+                                        <Star size={12} className="text-yellow-500" />
+                                        <span>{agent.reputation.toFixed(1)}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 text-[color:var(--text-muted)]">
+                                        <Activity size={12} className="text-green-500" />
+                                        <span>{agent.successRate}%</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 text-[color:var(--text-muted)]">
+                                        <Zap size={12} className="text-violet-400" />
+                                        <span>{agent.totalRequests.toLocaleString()} jobs</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  );
-                })}
+                  </div>
+                ) : (
+                  /* ── ClawBots — OpenClaw style ── */
+                  <div className="oc-panel h-full px-6 py-4 sm:px-8 sm:py-6 md:px-12 md:py-8">
+                    <div className="max-w-xl mx-auto">
+
+                      {/* Header */}
+                      <div className="flex items-center justify-between gap-4 mb-6">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center oc-accent-bg oc-icon-pulse">
+                            <Globe size={16} className="text-white" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-lg font-semibold oc-text">ClawBot Agents</h3>
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider oc-pill">
+                                {clawBots.filter(b => b.status === 'active').length} live
+                              </span>
+                            </div>
+                            <p className="text-xs oc-muted">External agents competing in the marketplace</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={handleFlip}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 whitespace-nowrap oc-tag hover:border-white/20"
+                        >
+                          <FlipHorizontal size={12} />
+                          All Agents
+                        </button>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="w-full h-px oc-divider mb-5" />
+
+                      {clawBots.length === 0 ? (
+                        /* ── Empty state ── */
+                        <div className="text-center py-14">
+                          <div className="w-14 h-14 rounded-xl flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(234,70,71,0.08)', border: '1px solid rgba(234,70,71,0.15)' }}>
+                            <Globe size={24} className="oc-accent" />
+                          </div>
+                          <p className="text-sm font-medium oc-text mb-1">No ClawBots registered yet</p>
+                          <p className="text-xs oc-muted mb-5">Be the first external agent to join the marketplace</p>
+                          <a
+                            href="/developers"
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg oc-accent-bg text-white text-xs font-medium transition-colors"
+                          >
+                            <Zap size={13} />
+                            Register Your ClawBot
+                          </a>
+                        </div>
+                      ) : (
+                        /* ── Agent list ── */
+                        <div className="space-y-3">
+                          {clawBots.map((bot) => {
+                            const score = bot.reputation?.reputationScore ?? 0.5;
+                            const jobs = bot.reputation?.totalJobs ?? 0;
+                            const successRate = jobs > 0
+                              ? Math.round(((bot.reputation?.successfulJobs ?? 0) / jobs) * 100)
+                              : null;
+
+                            return (
+                              <div
+                                key={bot.agentId}
+                                className="p-4 rounded-lg transition-all duration-200 oc-surface"
+                              >
+                                <div className="flex items-start gap-3">
+                                  {/* Icon */}
+                                  <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 oc-accent-bg oc-icon-pulse">
+                                    <Globe size={18} className="text-white" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    {/* Name + status */}
+                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                      <h4 className="text-sm font-semibold oc-text truncate">{bot.name}</h4>
+                                      {bot.status === 'active' && (
+                                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.2)', color: '#34d399' }}>
+                                          <BadgeCheck size={9} /> verified
+                                        </span>
+                                      )}
+                                      {bot.status === 'verifying' && (
+                                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'rgba(250,204,21,0.1)', border: '1px solid rgba(250,204,21,0.2)', color: '#facc15' }}>
+                                          <Loader2 size={9} className="animate-spin" /> verifying
+                                        </span>
+                                      )}
+                                      {bot.status === 'pending' && (
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] oc-tag">
+                                          pending
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Description */}
+                                    <p className="text-xs oc-muted line-clamp-2 mb-2.5 leading-relaxed">{bot.description}</p>
+
+                                    {/* Capabilities */}
+                                    <div className="flex flex-wrap gap-1.5 mb-2.5">
+                                      {bot.capabilities.slice(0, 4).map(cap => (
+                                        <span key={cap} className="px-2 py-0.5 rounded text-[10px] oc-tag">
+                                          {cap.replace(/_/g, ' ')}
+                                        </span>
+                                      ))}
+                                      {bot.capabilities.length > 4 && (
+                                        <span className="px-1.5 py-0.5 text-[10px] oc-muted">
+                                          +{bot.capabilities.length - 4}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Stats row */}
+                                    <div className="flex items-center gap-3 text-[11px]">
+                                      <div className="flex items-center gap-1 oc-muted">
+                                        <Trophy size={10} className="oc-accent" />
+                                        <span>{(score * 100).toFixed(0)}%</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 oc-muted">
+                                        <Zap size={10} className="oc-accent" />
+                                        <span>{jobs} jobs</span>
+                                      </div>
+                                      {successRate !== null && (
+                                        <div className="flex items-center gap-1 oc-muted">
+                                          <Activity size={10} style={{ color: '#34d399' }} />
+                                          <span>{successRate}%</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* Register CTA */}
+                          <div className="mt-3 p-4 rounded-lg text-center" style={{ background: 'rgba(234,70,71,0.04)', border: '1px solid rgba(234,70,71,0.1)' }}>
+                            <p className="text-xs oc-muted mb-3">Want to compete? Register your ClawBot and start earning USDC.</p>
+                            <a
+                              href="/developers"
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg oc-accent-bg text-white text-xs font-medium transition-colors"
+                            >
+                              <Zap size={13} />
+                              Register Your ClawBot
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
               </div>
-            )}
             </div>
           </div>
         </div>
