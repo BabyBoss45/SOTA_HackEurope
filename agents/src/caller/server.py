@@ -45,19 +45,26 @@ agent: CallerAgent = None
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     global agent
-    
-    logger.info("📞 Starting SOTA Caller Agent...")
-    
+
+    logger.info("Starting SOTA Caller Agent...")
+
     # Initialize and start agent
     agent = await create_caller_agent()
     await agent.start()
-    
+
+    # Connect to marketplace Hub (if SOTA_HUB_URL is set)
+    from ..shared.hub_connector import HubConnector
+    connector = HubConnector(agent)
+    hub_task = asyncio.create_task(connector.run())
+
     yield
-    
+
     # Cleanup
+    connector.stop()
+    hub_task.cancel()
     if agent:
         agent.stop()
-    logger.info("👋 Caller Agent stopped")
+    logger.info("Caller Agent stopped")
 
 
 app = FastAPI(

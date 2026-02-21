@@ -31,11 +31,16 @@ logger = logging.getLogger(__name__)
 # ── Tag Mapping ──────────────────────────────────────────────
 
 JOB_TYPE_TAGS: dict[JobType, str] = {
-    JobType.HOTEL_BOOKING:          "hotel_booking",
-    JobType.RESTAURANT_BOOKING:     "restaurant_booking",
-    JobType.HACKATHON_REGISTRATION: "hackathon_registration",
-    JobType.CALL_VERIFICATION:      "call_verification",
-    JobType.GENERIC:                "generic",
+    JobType.HOTEL_BOOKING:            "hotel_booking",
+    JobType.RESTAURANT_BOOKING:       "restaurant_booking",
+    JobType.HACKATHON_REGISTRATION:   "hackathon_registration",
+    JobType.CALL_VERIFICATION:        "call_verification",
+    JobType.GENERIC:                  "generic",
+    JobType.GIFT_SUGGESTION:          "gift_suggestion",
+    JobType.RESTAURANT_BOOKING_SMART: "restaurant_booking",
+    JobType.REFUND_CLAIM:             "refund_claim",
+    JobType.SMART_SHOPPING:           "smart_shopping",
+    JobType.TRIP_PLANNING:            "trip_planning",
 }
 
 

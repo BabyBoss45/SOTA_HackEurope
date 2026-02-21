@@ -1,6 +1,16 @@
 version: '3.8'
 
+# Shared env vars for all agent services
+x-shared-env: &shared-env
+  RPC_URL: ${RPC_URL}
+  PROGRAM_ID: ${PROGRAM_ID}
+  USDC_MINT: ${USDC_MINT}
+  SOLANA_CLUSTER: ${SOLANA_CLUSTER}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  SOTA_HUB_URL: ws://butler-api:3001/hub/ws/agent
+
 services:
+  # ── Core Services ──────────────────────────────────────────
   butler-api:
     build:
       context: .
@@ -10,13 +20,13 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - PORT=3001
-      - RPC_URL=${RPC_URL}
-      - PRIVATE_KEY=${PRIVATE_KEY}
-      - PROGRAM_ID=${PROGRAM_ID}
-      - USDC_MINT=${USDC_MINT}
-      - SOLANA_CLUSTER=${SOLANA_CLUSTER}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      PORT: 3001
+      RPC_URL: ${RPC_URL}
+      PRIVATE_KEY: ${PRIVATE_KEY}
+      PROGRAM_ID: ${PROGRAM_ID}
+      USDC_MINT: ${USDC_MINT}
+      SOLANA_CLUSTER: ${SOLANA_CLUSTER}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     networks:
       - sota-network
 
@@ -29,19 +39,17 @@ services:
     ports:
       - "3002:3002"
     environment:
-      - MANAGER_PORT=3002
-      - RPC_URL=${RPC_URL}
-      - MANAGER_PRIVATE_KEY=${MANAGER_PRIVATE_KEY}
-      - PROGRAM_ID=${PROGRAM_ID}
-      - USDC_MINT=${USDC_MINT}
-      - SOLANA_CLUSTER=${SOLANA_CLUSTER}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - CALLER_ENDPOINT=http://caller:3003
+      <<: *shared-env
+      MANAGER_PORT: 3002
+      MANAGER_PRIVATE_KEY: ${MANAGER_PRIVATE_KEY}
+      CALLER_ENDPOINT: http://caller:3003
     depends_on:
+      - butler-api
       - caller
     networks:
       - sota-network
 
+  # ── Agent Services ─────────────────────────────────────────
   caller:
     build:
       context: .
@@ -51,16 +59,121 @@ services:
     ports:
       - "3003:3003"
     environment:
-      - CALLER_PORT=3003
-      - RPC_URL=${RPC_URL}
-      - CALLER_PRIVATE_KEY=${CALLER_PRIVATE_KEY}
-      - PROGRAM_ID=${PROGRAM_ID}
-      - USDC_MINT=${USDC_MINT}
-      - SOLANA_CLUSTER=${SOLANA_CLUSTER}
-      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
-      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
-      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      <<: *shared-env
+      CALLER_PORT: 3003
+      CALLER_PRIVATE_KEY: ${CALLER_PRIVATE_KEY}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER}
+    depends_on:
+      - butler-api
+    networks:
+      - sota-network
+
+  hackathon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sota-hackathon
+    command: python -m agents hackathon
+    ports:
+      - "3005:3005"
+    environment:
+      <<: *shared-env
+      HACKATHON_AGENT_PORT: 3005
+      HACKATHON_PRIVATE_KEY: ${HACKATHON_PRIVATE_KEY:-}
+      SERPAPI_KEY: ${SERPAPI_KEY:-}
+    depends_on:
+      - butler-api
+    networks:
+      - sota-network
+
+  gift-suggestion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sota-gift-suggestion
+    command: python -m agents gift_suggestion
+    ports:
+      - "3007:3007"
+    environment:
+      <<: *shared-env
+      GIFT_AGENT_PORT: 3007
+      GIFT_PRIVATE_KEY: ${GIFT_PRIVATE_KEY:-}
+      SERPAPI_KEY: ${SERPAPI_KEY:-}
+    depends_on:
+      - butler-api
+    networks:
+      - sota-network
+
+  restaurant-booker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sota-restaurant-booker
+    command: python -m agents restaurant_booker
+    ports:
+      - "3008:3008"
+    environment:
+      <<: *shared-env
+      RESTAURANT_AGENT_PORT: 3008
+      RESTAURANT_PRIVATE_KEY: ${RESTAURANT_PRIVATE_KEY:-}
+      SERPAPI_KEY: ${SERPAPI_KEY:-}
+    depends_on:
+      - butler-api
+    networks:
+      - sota-network
+
+  refund-claim:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sota-refund-claim
+    command: python -m agents refund_claim
+    ports:
+      - "3009:3009"
+    environment:
+      <<: *shared-env
+      REFUND_AGENT_PORT: 3009
+      REFUND_PRIVATE_KEY: ${REFUND_PRIVATE_KEY:-}
+    depends_on:
+      - butler-api
+    networks:
+      - sota-network
+
+  smart-shopper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sota-smart-shopper
+    command: python -m agents smart_shopper
+    ports:
+      - "3010:3010"
+    environment:
+      <<: *shared-env
+      SHOPPER_AGENT_PORT: 3010
+      SHOPPER_PRIVATE_KEY: ${SHOPPER_PRIVATE_KEY:-}
+      SERPAPI_KEY: ${SERPAPI_KEY:-}
+    depends_on:
+      - butler-api
+    networks:
+      - sota-network
+
+  trip-planner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sota-trip-planner
+    command: python -m agents trip_planner
+    ports:
+      - "3011:3011"
+    environment:
+      <<: *shared-env
+      TRIP_AGENT_PORT: 3011
+      TRIP_PRIVATE_KEY: ${TRIP_PRIVATE_KEY:-}
+      SERPAPI_KEY: ${SERPAPI_KEY:-}
+    depends_on:
+      - butler-api
     networks:
       - sota-network
 

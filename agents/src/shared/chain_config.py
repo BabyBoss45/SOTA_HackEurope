@@ -208,6 +208,11 @@ class JobType(IntEnum):
     CALL_VERIFICATION = 5
     GENERIC = 6
     JOB_SCOURING = 7
+    GIFT_SUGGESTION = 8
+    RESTAURANT_BOOKING_SMART = 9
+    REFUND_CLAIM = 10
+    SMART_SHOPPING = 11
+    TRIP_PLANNING = 12
 
 
 JOB_TYPE_LABELS = {
@@ -218,6 +223,11 @@ JOB_TYPE_LABELS = {
     JobType.CALL_VERIFICATION: "Call Verification",
     JobType.GENERIC: "Generic Task",
     JobType.JOB_SCOURING: "Job Scouring",
+    JobType.GIFT_SUGGESTION: "Gift Suggestion",
+    JobType.RESTAURANT_BOOKING_SMART: "Smart Restaurant Booking",
+    JobType.REFUND_CLAIM: "Refund Claim",
+    JobType.SMART_SHOPPING: "Smart Shopping",
+    JobType.TRIP_PLANNING: "Trip Planning",
 }
 
 
@@ -225,4 +235,9 @@ AGENT_CAPABILITIES = {
     "BUTLER": ["job_planning", "agent_coordination", "user_interaction"],
     "CALLER": ["phone_call", "voice_verification", "reservation_booking"],
     "HACKATHON": ["hackathon_search", "web_scraping", "event_filtering"],
+    "GIFT_SUGGESTION": ["gift_recommendation", "personalized_suggestions"],
+    "RESTAURANT_BOOKER": ["restaurant_booking", "reservation_management"],
+    "REFUND_CLAIM": ["refund_processing", "claim_management"],
+    "SMART_SHOPPER": ["product_search", "price_comparison", "shopping"],
+    "TRIP_PLANNER": ["travel_planning", "itinerary_creation", "booking"],
 }

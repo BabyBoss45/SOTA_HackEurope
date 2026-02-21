@@ -6,6 +6,7 @@ FastAPI server exposing health, status, and direct claim endpoints.
 
 import os
 import json
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -44,7 +45,16 @@ async def lifespan(app: FastAPI):
     global agent
     logger.info("Starting SOTA Refund Claim Agent...")
     agent = await create_refund_claim_agent()
+
+    # Connect to marketplace Hub
+    from ..shared.hub_connector import HubConnector
+    connector = HubConnector(agent)
+    hub_task = asyncio.create_task(connector.run())
+
     yield
+
+    connector.stop()
+    hub_task.cancel()
     if agent:
         agent.stop()
     logger.info("Refund Claim Agent stopped")
