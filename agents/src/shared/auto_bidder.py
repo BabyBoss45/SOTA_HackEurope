@@ -31,12 +31,17 @@ logger = logging.getLogger(__name__)
 # ── Tag Mapping ──────────────────────────────────────────────
 
 JOB_TYPE_TAGS: dict[JobType, str] = {
-    JobType.HOTEL_BOOKING:          "hotel_booking",
-    JobType.RESTAURANT_BOOKING:     "restaurant_booking",
-    JobType.HACKATHON_REGISTRATION: "hackathon_registration",
-    JobType.CALL_VERIFICATION:      "call_verification",
-    JobType.GENERIC:                "generic",
-    JobType.FUN_ACTIVITY:           "fun_activity",
+    JobType.HOTEL_BOOKING:            "hotel_booking",
+    JobType.RESTAURANT_BOOKING:       "restaurant_booking",
+    JobType.HACKATHON_REGISTRATION:   "hackathon_registration",
+    JobType.GIFT_SUGGESTION:          "gift_suggestion",
+    JobType.CALL_VERIFICATION:        "call_verification",
+    JobType.GENERIC:                  "generic",
+    JobType.FUN_ACTIVITY:             "fun_activity",
+    JobType.REFUND_CLAIM:             "refund_claim",
+    JobType.RESTAURANT_BOOKING_SMART: "restaurant_booking_smart",
+    JobType.SMART_SHOPPING:           "smart_shopping",
+    JobType.TRIP_PLANNING:            "trip_planning",
 }
 
 
@@ -133,7 +138,8 @@ class AutoBidderMixin:
     async def _execute_job_for_board(self, job: JobListing, winning_bid: Bid) -> dict:
         """
         Called by JobBoard after this worker wins a bid.
-        Executes the job, persists the outcome, and returns results.
+        Executes the job inside a Paid.ai tracing context so all LLM costs
+        are attributed, then sends an outcome signal.
         """
         from .base_agent import ActiveJob
 
@@ -171,18 +177,75 @@ class AutoBidderMixin:
             except Exception:
                 logger.debug("Pre-exec analysis skipped", exc_info=True)
 
+        # ── Paid.ai cost-tracked execution ───────────────────────
+        # Try to wrap execution in paid_tracing context so LLM costs
+        # are attributed to this customer/agent pair in Paid.ai dashboard.
+        _paid_tracing = None
+        try:
+            from sota_sdk.cost import is_tracking_enabled
+            if is_tracking_enabled():
+                from paid.tracing import paid_tracing as _paid_tracing_cls
+                _paid_tracing = _paid_tracing_cls
+        except ImportError:
+            pass
+
+        poster_address = job.metadata.get("poster", job.job_id)
+
         start_ms = _time.time() * 1000
         result: dict = {}
+        success = False
         execute_fn = getattr(self, "execute_job", None)
-        if execute_fn:
+
+        if _paid_tracing:
+            # Execute inside Paid.ai tracing context
+            async with _paid_tracing(
+                external_customer_id=str(poster_address),
+                external_product_id=agent_type,
+            ):
+                if execute_fn:
+                    try:
+                        result = await execute_fn(active_job)
+                        success = result.get("success", True) if isinstance(result, dict) else True
+                        logger.info("%s completed job %s", agent_name, job.job_id)
+                    except Exception as e:
+                        logger.error("%s failed job %s: %s", agent_name, job.job_id, e)
+                        result = {"error": str(e), "success": False}
+                else:
+                    result = {"error": "No execute_job method found", "success": False}
+
+                # Send outcome signal to Paid.ai (links all auto-captured LLM costs)
+                try:
+                    from sota_sdk.cost import send_outcome
+                    send_outcome(
+                        job_id=str(job.job_id),
+                        agent_name=agent_type,
+                        revenue_usdc=winning_bid.amount_usdc,
+                        success=success,
+                        metadata={"elapsed_ms": int(_time.time() * 1000 - start_ms)},
+                    )
+                    logger.info("Paid.ai outcome sent: job=%s agent=%s revenue=%.2f success=%s",
+                                job.job_id, agent_type, winning_bid.amount_usdc, success)
+                except Exception as e:
+                    logger.warning("Paid.ai send_outcome failed: %s", e)
+
+            # Force-flush spans to ensure delivery to Paid.ai collector
             try:
-                result = await execute_fn(active_job)
-                logger.info("%s completed job %s", agent_name, job.job_id)
-            except Exception as e:
-                logger.error("%s failed job %s: %s", agent_name, job.job_id, e)
-                result = {"error": str(e), "success": False}
+                from sota_sdk.cost import flush_cost_tracking
+                flush_cost_tracking()
+            except Exception:
+                pass
         else:
-            result = {"error": "No execute_job method found", "success": False}
+            # No Paid.ai — execute without tracing
+            if execute_fn:
+                try:
+                    result = await execute_fn(active_job)
+                    success = result.get("success", True) if isinstance(result, dict) else True
+                    logger.info("%s completed job %s", agent_name, job.job_id)
+                except Exception as e:
+                    logger.error("%s failed job %s: %s", agent_name, job.job_id, e)
+                    result = {"error": str(e), "success": False}
+            else:
+                result = {"error": "No execute_job method found", "success": False}
 
         # Persist structured outcome
         elapsed_ms = int(_time.time() * 1000 - start_ms)

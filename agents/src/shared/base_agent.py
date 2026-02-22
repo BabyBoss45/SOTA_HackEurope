@@ -401,9 +401,8 @@ class BaseArchiveAgent(ABC):
 
         if self.event_listener:
             await self.event_listener.catch_up()
-
-        # Start event listener in background
-        asyncio.create_task(self.event_listener.start())
+            # Start event listener in background
+            asyncio.create_task(self.event_listener.start())
 
         logger.info(f"{self.agent_name} is running")
 

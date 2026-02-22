@@ -140,6 +140,13 @@ def get_keypair(agent_type: str = "butler") -> Optional[Keypair]:
         "worker": "WORKER_PRIVATE_KEY",
         "caller": "CALLER_PRIVATE_KEY",
         "hackathon": "HACKATHON_PRIVATE_KEY",
+        "gift_suggestion": "GIFT_PRIVATE_KEY",
+        "restaurant_booker": "RESTAURANT_PRIVATE_KEY",
+        "refund_claim": "REFUND_PRIVATE_KEY",
+        "smart_shopper": "SHOPPER_PRIVATE_KEY",
+        "trip_planner": "TRIP_PRIVATE_KEY",
+        "fun_activity": "FUN_PRIVATE_KEY",
+        "manager": "MANAGER_PRIVATE_KEY",
     }
     env_var = key_map.get(agent_type.lower(), "PRIVATE_KEY")
     raw = os.getenv(env_var)
@@ -183,6 +190,13 @@ def get_private_key(agent_type: str = "butler") -> Optional[str]:
         "worker": "WORKER_PRIVATE_KEY",
         "caller": "CALLER_PRIVATE_KEY",
         "hackathon": "HACKATHON_PRIVATE_KEY",
+        "gift_suggestion": "GIFT_PRIVATE_KEY",
+        "restaurant_booker": "RESTAURANT_PRIVATE_KEY",
+        "refund_claim": "REFUND_PRIVATE_KEY",
+        "smart_shopper": "SHOPPER_PRIVATE_KEY",
+        "trip_planner": "TRIP_PRIVATE_KEY",
+        "fun_activity": "FUN_PRIVATE_KEY",
+        "manager": "MANAGER_PRIVATE_KEY",
     }
     env_var = key_map.get(agent_type.lower(), "PRIVATE_KEY")
     return os.getenv(env_var)
@@ -205,10 +219,15 @@ class JobType(IntEnum):
     RESTAURANT_BOOKING = 1
     HACKATHON_REGISTRATION = 2
     COMPOSITE = 3
+    GIFT_SUGGESTION = 4
     CALL_VERIFICATION = 5
     GENERIC = 6
     JOB_SCOURING = 7
     FUN_ACTIVITY = 8
+    REFUND_CLAIM = 9
+    RESTAURANT_BOOKING_SMART = 10
+    SMART_SHOPPING = 11
+    TRIP_PLANNING = 12
 
 
 JOB_TYPE_LABELS = {
@@ -216,10 +235,15 @@ JOB_TYPE_LABELS = {
     JobType.RESTAURANT_BOOKING: "Restaurant Booking",
     JobType.HACKATHON_REGISTRATION: "Hackathon Registration",
     JobType.COMPOSITE: "Composite Task",
+    JobType.GIFT_SUGGESTION: "Gift Suggestion",
     JobType.CALL_VERIFICATION: "Call Verification",
     JobType.GENERIC: "Generic Task",
     JobType.JOB_SCOURING: "Job Scouring",
     JobType.FUN_ACTIVITY: "Fun Activity",
+    JobType.REFUND_CLAIM: "Refund Claim",
+    JobType.RESTAURANT_BOOKING_SMART: "Smart Restaurant Booking",
+    JobType.SMART_SHOPPING: "Smart Shopping",
+    JobType.TRIP_PLANNING: "Trip Planning",
 }
 
 

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from solana.rpc.api import Client
 from solana.rpc.commitment import Confirmed, Finalized
 from solana.rpc.types import TxOpts
-from solana.transaction import Transaction
+from solders.transaction import Transaction
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 from solders.system_program import ID as SYS_PROGRAM_ID
@@ -225,14 +225,15 @@ def _send_tx(
     for attempt in range(retries):
         try:
             recent_blockhash = prog.client.get_latest_blockhash(Confirmed).value.blockhash
-            tx = Transaction()
-            tx.recent_blockhash = recent_blockhash
-            tx.fee_payer = prog.keypair.pubkey()
-            tx.add(ix)
+            tx = Transaction.new_signed_with_payer(
+                [ix],
+                prog.keypair.pubkey(),
+                signers,
+                recent_blockhash,
+            )
 
             result = prog.client.send_transaction(
                 tx,
-                *signers,
                 opts=TxOpts(
                     skip_preflight=False,
                     preflight_commitment=Confirmed,

@@ -30,7 +30,11 @@
       "Bash(curl:*)",
       "Bash(cmd.exe:*)",
       "Bash(cd /d/SOTA_HackEurope/sota-sdk-repo && git remote add origin https://github.com/BabyBoss45/SOTA_SDK.git && git push -u origin main 2>&1)",
-      "Bash(echo === $agent ===:*)"
+      "Bash(echo === $agent ===:*)",
+      "Bash(npm i:*)",
+      "Bash(railway:*)",
+      "Bash(RAILWAY_TOKEN=6330c408-726f-4c4a-bae4-511c58919474 railway whoami:*)",
+      "Bash(export RAILWAY_TOKEN=\"6330c408-726f-4c4a-bae4-511c58919474\" && railway whoami 2>&12)"
     ]
   }
 }

@@ -310,7 +310,7 @@ class HubConnector:
                 )
         except Exception as e:
             logger.exception("Hub job %s execution failed", job_id)
-            await self._send_job_failed(job_id, f"{type(e).__name__}: {e}")
+            await self._send_job_failed(job_id, f"execution failed: {type(e).__name__}")
 
     def _on_bid_rejected(self, msg: dict) -> None:
         job_id = msg.get("job_id", "")

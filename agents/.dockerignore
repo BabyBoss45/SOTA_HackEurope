@@ -1,9 +1,3 @@
-# Node.js (not used in agents)
-package-lock.json
-pnpm-lock.yaml
-yarn.lock
-node_modules/
-
 # Secrets
 .env
 .env.*
@@ -18,3 +12,10 @@ last_results.json
 .claude/
 tests/
 test_*.py
+
+# Git
+.git/
+
+# Node.js (not used in agents)
+node_modules/
+package-lock.json

@@ -249,7 +249,7 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
         import httpx as _httpx
 
         params = job.params or {}
-        phone_number = params.get("phone_number", "") or "+447553293952"
+        phone_number = params.get("phone_number", "")
 
         tool_tag = (job.metadata_uri or "").lower() if hasattr(job, "metadata_uri") else ""
         desc_lower = (job.description or "").lower()
