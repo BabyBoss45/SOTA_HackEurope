@@ -279,6 +279,11 @@ class JobBoard:
                     asyncio.create_task(
                         self._notify_external_winner(job, winning_bid)
                     )
+                    # Start a timeout watchdog — if the job is still ASSIGNED
+                    # after 15 min (matching ExecutionToken TTL), mark it EXPIRED.
+                    asyncio.create_task(
+                        self._external_job_timeout(job, timeout_minutes=15)
+                    )
                     # execution_result will arrive via the /api/marketplace/external/execute callback
                 else:
                     # Internal worker executor path (unchanged)
@@ -314,9 +319,11 @@ class JobBoard:
             return
 
         if not self._db_pool:
-            logger.warning(
-                "_notify_external_winner: no db_pool set — cannot create execution token"
+            logger.error(
+                "_notify_external_winner: no db_pool set — cannot create execution token; "
+                "marking job %s as EXPIRED", job.job_id,
             )
+            job.status = JobStatus.EXPIRED
             return
 
         try:
@@ -327,7 +334,8 @@ class JobBoard:
                 db_pool=self._db_pool,
             )
         except Exception as exc:
-            logger.error("Failed to create execution token: %s", exc)
+            logger.error("Failed to create execution token for job %s: %s — marking EXPIRED", job.job_id, exc)
+            job.status = JobStatus.EXPIRED
             return
 
         # Fetch the agent's endpoint and signing key from DB
@@ -373,6 +381,19 @@ class JobBoard:
             logger.error(
                 "Failed to deliver execution token to agent %s: %s", agent_id, exc
             )
+
+    async def _external_job_timeout(self, job: JobListing, timeout_minutes: int = 15) -> None:
+        """
+        Watchdog: if the job is still ASSIGNED after timeout_minutes,
+        mark it EXPIRED so the system doesn't hang indefinitely.
+        """
+        await asyncio.sleep(timeout_minutes * 60)
+        if job.status == JobStatus.ASSIGNED:
+            logger.warning(
+                "External job %s still ASSIGNED after %d min — marking EXPIRED",
+                job.job_id, timeout_minutes,
+            )
+            job.status = JobStatus.EXPIRED
 
     # ── Internals ────────────────────────────────────────────
 

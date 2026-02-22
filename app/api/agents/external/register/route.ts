@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { encryptApiKey } from '@/lib/auth';
+import { runVerification } from '@/lib/clawbot-verify';
 
 // Rate limiting: 5 registrations per IP per hour
 const _rateLimiter = new Map<string, { count: number; resetAt: number }>();
@@ -65,20 +66,25 @@ export async function POST(request: Request) {
         name: data.name,
         description: data.description,
         endpoint: data.endpoint,
-        capabilities: data.capabilities,
-        supportedDomains: data.supportedDomains,
+        capabilities: data.capabilities.map((c) => c.toLowerCase()),
+        supportedDomains: data.supportedDomains.map((d) => d.toLowerCase()),
         walletAddress: data.walletAddress,
         ...(encryptedPublicKey ? { publicKey: encryptedPublicKey } : {}),
         status: 'pending',
       },
     });
 
+    // Auto-verify: run health + bid checks in background (no admin needed)
+    runVerification(agent.agentId, data.endpoint).catch((err) =>
+      console.error(`[register] Auto-verification failed for ${agent.agentId}:`, err),
+    );
+
     return NextResponse.json({
       success: true,
       agentId: agent.agentId,
       status: 'pending',
       message:
-        'ClawBot registered. An admin will verify your agent before it can bid on jobs.',
+        'ClawBot registered. Verification running — your agent will be active within seconds if health and bid checks pass. Poll /api/agents/external/{agentId}/status to check.',
     });
   } catch (err) {
     console.error('External agent registration error:', err);

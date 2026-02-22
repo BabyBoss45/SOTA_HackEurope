@@ -55,7 +55,7 @@ function validateProofDomains(proof: unknown, supportedDomains: string[]): boole
   const urlPattern = /https?:\/\/([^/\s"]+)/g;
   let match: RegExpExecArray | null;
   while ((match = urlPattern.exec(proofStr)) !== null) {
-    const host = match[1].toLowerCase();
+    const host = match[1].toLowerCase().replace(/:\d+$/, '');
     const allowed = supportedDomains.some(
       (d) => host === d.toLowerCase() || host.endsWith('.' + d.toLowerCase()),
     );
@@ -64,36 +64,57 @@ function validateProofDomains(proof: unknown, supportedDomains: string[]): boole
   return true;
 }
 
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  label: string,
+  maxAttempts = 3,
+): Promise<void> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const resp = await fetch(url, options);
+      if (resp.ok) return;
+      console.warn(`[external/execute] ${label} attempt ${attempt}/${maxAttempts} HTTP ${resp.status}`);
+    } catch (err) {
+      console.warn(`[external/execute] ${label} attempt ${attempt}/${maxAttempts} failed:`, err);
+    }
+    if (attempt < maxAttempts) {
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** (attempt - 1)));
+    }
+  }
+  console.error(`[external/execute] ${label} failed after ${maxAttempts} attempts`);
+}
+
 async function triggerEscrowRelease(jobId: string, walletAddress: string): Promise<void> {
   if (!INTERNAL_API_SECRET) return;
-  try {
-    await fetch(`${BUTLER_API_URL}/internal/release-payment`, {
+  await fetchWithRetry(
+    `${BUTLER_API_URL}/internal/release-payment`,
+    {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Internal-Secret': INTERNAL_API_SECRET,
       },
       body: JSON.stringify({ job_id: jobId, wallet_address: walletAddress }),
-    });
-  } catch (err) {
-    console.error('[external/execute] Escrow release failed:', err);
-  }
+    },
+    'Escrow release',
+  );
 }
 
 async function triggerEscrowRefund(jobId: string): Promise<void> {
   if (!INTERNAL_API_SECRET) return;
-  try {
-    await fetch(`${BUTLER_API_URL}/internal/refund-escrow`, {
+  await fetchWithRetry(
+    `${BUTLER_API_URL}/internal/refund-escrow`,
+    {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Internal-Secret': INTERNAL_API_SECRET,
       },
       body: JSON.stringify({ job_id: jobId }),
-    });
-  } catch (err) {
-    console.error('[external/execute] Escrow refund failed:', err);
-  }
+    },
+    'Escrow refund',
+  );
 }
 
 function updateReputationAsync(

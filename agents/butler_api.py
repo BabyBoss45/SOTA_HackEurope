@@ -284,7 +284,7 @@ async def startup_event():
             from agents.src.shared.hmac_signer import HMACSigner
             from agents.src.shared.external_agent_inviter import ExternalAgentInviter
             _signer = HMACSigner()
-            _inviter = ExternalAgentInviter(db_url=database_url, signer=_signer)
+            _inviter = ExternalAgentInviter(pool=_db_pool, signer=_signer)
             job_board.set_external_inviter(_inviter)
             job_board.set_db_pool(_db_pool)
             print("ClawBot ExternalAgentInviter attached to JobBoard")

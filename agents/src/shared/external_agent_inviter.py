@@ -54,15 +54,9 @@ class ExternalAgentInviter:
     endpoints added through SOTAAgent.register_routes().
     """
 
-    def __init__(self, db_url: str, signer: HMACSigner) -> None:
-        self._db_url = db_url
+    def __init__(self, pool: asyncpg.Pool, signer: HMACSigner) -> None:
+        self._pool = pool
         self._signer = signer
-        self._pool: Optional[asyncpg.Pool] = None
-
-    async def _get_pool(self) -> asyncpg.Pool:
-        if self._pool is None:
-            self._pool = await asyncpg.create_pool(self._db_url, min_size=1, max_size=3)
-        return self._pool
 
     async def invite_for_job(
         self,
@@ -109,7 +103,6 @@ class ExternalAgentInviter:
         with the job tags and whose supported domains overlap with job domains
         (or the job has no domain restriction).
         """
-        pool = await self._get_pool()
         job_tags = list({t.lower() for t in job.tags})
         job_domains = list({
             d.lower()
@@ -118,27 +111,27 @@ class ExternalAgentInviter:
         })
 
         if job_domains:
-            rows = await pool.fetch(
+            rows = await self._pool.fetch(
                 """
                 SELECT "agentId", name, endpoint, capabilities,
                        "supportedDomains", "walletAddress", "publicKey"
                 FROM "ExternalAgent"
                 WHERE status = 'active'
-                  AND capabilities && $1::text[]
-                  AND "supportedDomains" && $2::text[]
+                  AND (SELECT array_agg(LOWER(c)) FROM unnest(capabilities) c) && $1::text[]
+                  AND (SELECT array_agg(LOWER(d)) FROM unnest("supportedDomains") d) && $2::text[]
                 """,
                 job_tags,
                 job_domains,
             )
         else:
             # No domain restriction — match on capabilities only
-            rows = await pool.fetch(
+            rows = await self._pool.fetch(
                 """
                 SELECT "agentId", name, endpoint, capabilities,
                        "supportedDomains", "walletAddress", "publicKey"
                 FROM "ExternalAgent"
                 WHERE status = 'active'
-                  AND capabilities && $1::text[]
+                  AND (SELECT array_agg(LOWER(c)) FROM unnest(capabilities) c) && $1::text[]
                 """,
                 job_tags,
             )
@@ -243,7 +236,7 @@ class ExternalAgentInviter:
 
         # Persist as AgentJobUpdate (fire-and-forget, best-effort)
         asyncio.create_task(
-            _persist_bid_update(job.job_id, agent, bid_price, confidence, estimated_time)
+            _persist_bid_update(self._pool, job.job_id, agent, bid_price, confidence, estimated_time)
         )
 
 
@@ -272,39 +265,32 @@ def _decrypt_stored_key(encrypted: str) -> str:
 
 
 async def _persist_bid_update(
+    pool: asyncpg.Pool,
     job_id: str,
     agent: Dict[str, Any],
     bid_price: float,
     confidence: float,
     estimated_time: int,
 ) -> None:
-    """Fire-and-forget: save bid to AgentJobUpdate via the Next.js DB."""
+    """Fire-and-forget: save bid to AgentJobUpdate using the shared pool."""
     try:
-        import asyncpg as _asyncpg
-        import os, json as _json
+        import json as _json
 
-        db_url = os.getenv('DATABASE_URL', '')
-        if not db_url:
-            return
-        conn = await _asyncpg.connect(db_url)
-        try:
-            await conn.execute(
-                """
-                INSERT INTO "AgentJobUpdate" ("jobId", agent, status, message, data, "createdAt")
-                VALUES ($1, $2, 'bid_submitted', $3, $4::jsonb, NOW())
-                """,
-                job_id,
-                f"external:{agent['name']}",
-                f"Bid: {bid_price:.4f} USDC",
-                _json.dumps({
-                    'externalAgentId': agent['agentId'],
-                    'bidPrice': bid_price,
-                    'confidence': confidence,
-                    'estimatedTimeSec': estimated_time,
-                    'source': 'external',
-                }),
-            )
-        finally:
-            await conn.close()
+        await pool.execute(
+            """
+            INSERT INTO "AgentJobUpdate" ("jobId", agent, status, message, data, "createdAt")
+            VALUES ($1, $2, 'bid_submitted', $3, $4::jsonb, NOW())
+            """,
+            job_id,
+            f"external:{agent['name']}",
+            f"Bid: {bid_price:.4f} USDC",
+            _json.dumps({
+                'externalAgentId': agent['agentId'],
+                'bidPrice': bid_price,
+                'confidence': confidence,
+                'estimatedTimeSec': estimated_time,
+                'source': 'external',
+            }),
+        )
     except Exception as exc:
         logger.debug("_persist_bid_update failed: %s", exc)
