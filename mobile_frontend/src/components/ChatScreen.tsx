@@ -327,8 +327,8 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
         interceptJsonJob(msg.message);
       }
     },
-    onError: (err: unknown) => {
-      console.error("ElevenLabs error:", err);
+    onError: (err: unknown, details?: unknown) => {
+      console.error("ElevenLabs error:", err, "Details:", details);
       showToast("Voice connection error", "error");
       setOrbStatus("idle");
     },
