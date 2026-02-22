@@ -384,15 +384,6 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
         await conversation.startSession({
           conversationToken: token,
           connectionType: "webrtc",
-          overrides: {
-            agent: {
-              prompt: {
-                prompt: address
-                  ? `The user's wallet address is ${address}. Use this when they ask about their wallet or need to sign transactions.`
-                  : `The user has not connected a wallet yet. If they ask about wallet features or transfers, let them know they can connect a wallet from the Wallet tab.`,
-              },
-            },
-          },
           clientTools: {
             /* ── Post job to marketplace ── */
             post_job: async (params: Record<string, any>) => {
