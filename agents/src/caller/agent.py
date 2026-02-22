@@ -187,7 +187,7 @@ class CallerAgent(AutoBidderMixin, BaseArchiveAgent):
         all_tools.extend(create_wallet_tools(self.wallet))
         all_tools.extend(create_bidding_tools(self._contracts, self.agent_type))
 
-        model_name = os.getenv("LLM_MODEL", "claude-sonnet-4-5-20241022")
+        model_name = os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001")
 
         return AgentRunner(
             name="caller",

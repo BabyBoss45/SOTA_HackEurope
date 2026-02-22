@@ -17,7 +17,7 @@ from ..shared.tool_base import BaseTool
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_MODEL = "claude-sonnet-4-5-20241022"
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
 # In-memory event preference history (can be extended to DB/Mem0)
 _event_history: dict[str, list[dict]] = {}

@@ -161,7 +161,7 @@ class SearchRetailersTool(BaseTool):
         try:
             client = AsyncAnthropic(api_key=api_key)
             resp = await client.messages.create(
-                model=os.getenv("LLM_MODEL", "claude-sonnet-4-5-20241022"),
+                model=os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001"),
                 system="You are a price comparison expert. Return ONLY valid JSON arrays with realistic current prices from real retailers.",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,

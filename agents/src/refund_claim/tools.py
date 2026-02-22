@@ -84,7 +84,7 @@ class ParseTicketTool(BaseTool):
         try:
             client = AsyncAnthropic(api_key=api_key)
             resp = await client.messages.create(
-                model=os.getenv("LLM_MODEL", "claude-sonnet-4-5-20241022"),
+                model=os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001"),
                 system="You are a ticket parsing expert. Return ONLY valid JSON.",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
@@ -275,7 +275,7 @@ class GenerateClaimTool(BaseTool):
         try:
             client = AsyncAnthropic(api_key=api_key)
             resp = await client.messages.create(
-                model=os.getenv("LLM_MODEL", "claude-sonnet-4-5-20241022"),
+                model=os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001"),
                 system="You are a consumer rights expert drafting refund claims. Be effective and appropriate for the escalation level.",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,

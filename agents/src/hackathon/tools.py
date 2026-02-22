@@ -31,7 +31,7 @@ SEARCH_SOURCES = [
     "https://ethglobal.com",
 ]
 
-CLAUDE_MODEL = "claude-sonnet-4-5-20241022"
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
 
 # ─── Helpers ─────────────────────────────────────────────────

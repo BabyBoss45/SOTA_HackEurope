@@ -323,7 +323,7 @@ class SearchFlightsTool(BaseTool):
         try:
             client = AsyncAnthropic(api_key=api_key)
             resp = await client.messages.create(
-                model=os.getenv("LLM_MODEL", "claude-sonnet-4-5-20241022"),
+                model=os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001"),
                 system="You are a flight search assistant. Return ONLY valid JSON arrays with realistic flight options.",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.4,
@@ -439,7 +439,7 @@ class SearchAccommodationTool(BaseTool):
         try:
             client = AsyncAnthropic(api_key=api_key)
             resp = await client.messages.create(
-                model=os.getenv("LLM_MODEL", "claude-sonnet-4-5-20241022"),
+                model=os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001"),
                 system="You are an accommodation search assistant. Return ONLY valid JSON arrays.",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.4,
@@ -540,7 +540,7 @@ class BuildItineraryTool(BaseTool):
         try:
             client = AsyncAnthropic(api_key=api_key)
             resp = await client.messages.create(
-                model=os.getenv("LLM_MODEL", "claude-sonnet-4-5-20241022"),
+                model=os.getenv("LLM_MODEL", "claude-haiku-4-5-20251001"),
                 system="You are a travel itinerary expert. Return ONLY valid JSON.",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.6,
