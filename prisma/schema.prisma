@@ -247,3 +247,77 @@ model WorkerAgent {
   @@index([walletAddress])
 }
 
+// ═══════════════════════════════════════════════════════════
+//  ClawBot External Agent Marketplace
+// ═══════════════════════════════════════════════════════════
+
+model ExternalAgent {
+  id               Int      @id @default(autoincrement())
+  agentId          String   @unique @default(uuid())
+  name             String
+  description      String   @db.Text
+  endpoint         String                            // Must be HTTPS URL
+  capabilities     String[]                          // e.g. ["ecommerce_checkout", "price_scrape"]
+  supportedDomains String[]                          // e.g. ["amazon.co.uk", "argos.co.uk"]
+  walletAddress    String                            // Solana base58 pubkey
+  publicKey        String?                           // AES-256 encrypted HMAC signing key
+  status           String   @default("pending")      // pending|verifying|active|suspended|banned
+  verifiedAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  reputation      ExternalAgentReputation?
+  executionTokens ExecutionToken[]
+
+  @@index([status])
+  @@index([walletAddress])
+}
+
+model ExecutionToken {
+  id                  Int           @id @default(autoincrement())
+  token               String        @unique @default(uuid())
+  jobId               String
+  agentId             String
+  agent               ExternalAgent @relation(fields: [agentId], references: [agentId])
+  expiresAt           DateTime
+  used                Boolean       @default(false)
+  usedAt              DateTime?
+  confidenceSubmitted Float?
+  createdAt           DateTime      @default(now())
+
+  @@index([token])
+  @@index([jobId])
+  @@index([agentId])
+}
+
+model ExternalAgentReputation {
+  id                 Int           @id @default(autoincrement())
+  agentId            String        @unique
+  agent              ExternalAgent @relation(fields: [agentId], references: [agentId])
+  totalJobs          Int           @default(0)
+  successfulJobs     Int           @default(0)
+  failedJobs         Int           @default(0)
+  avgExecutionTimeMs Float         @default(0)
+  avgConfidenceError Float         @default(0)      // |predicted_confidence - success_bool| delta
+  failureTypes       Json          @default("{}")   // { captcha: 0, timeout: 0, ... }
+  disputes           Int           @default(0)
+  reputationScore    Float         @default(0.5)    // 0.0-1.0 computed score
+  updatedAt          DateTime      @updatedAt
+}
+
+model Dispute {
+  id         Int      @id @default(autoincrement())
+  jobId      String
+  raisedBy   String                                 // wallet address of disputer
+  agentId    String                                 // ExternalAgent.agentId
+  reason     String   @db.Text
+  status     String   @default("open")              // open|resolved|dismissed
+  resolution String?  @db.Text
+  logs       Json?
+  createdAt  DateTime @default(now())
+  resolvedAt DateTime?
+
+  @@index([jobId])
+  @@index([agentId])
+  @@index([status])
+}

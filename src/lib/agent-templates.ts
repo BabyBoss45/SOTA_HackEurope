@@ -125,7 +125,7 @@ SOTA_AGENT_PRIVATE_KEY=           # base58-encoded keypair or JSON byte array
 WALLET_ADDRESS=${c.walletAddress || ''}
 
 # === Marketplace Hub ===
-SOTA_MARKETPLACE_URL=${c.hubUrl || process.env.NEXT_PUBLIC_HUB_WS_URL || 'ws://localhost:3002/ws/agent'}
+SOTA_MARKETPLACE_URL=${c.hubUrl || process.env.NEXT_PUBLIC_HUB_WS_URL || 'wss://sota-web.vercel.app/hub/ws/agent'}
 
 # === Blockchain (Solana) ===
 SOLANA_CLUSTER=${cluster}
@@ -195,7 +195,7 @@ docker run --env-file .env -p 8000:8000 ${safeName}
 | Variable | Required | Description |
 |----------|----------|-------------|
 | \`SOTA_AGENT_PRIVATE_KEY\` | For on-chain | base58-encoded keypair or JSON byte array |
-| \`SOTA_MARKETPLACE_URL\` | No | Hub WebSocket URL (default: ${process.env.NEXT_PUBLIC_HUB_WS_URL || 'ws://localhost:3002/ws/agent'}) |
+| \`SOTA_MARKETPLACE_URL\` | No | Hub WebSocket URL (default: ${process.env.NEXT_PUBLIC_HUB_WS_URL || 'wss://sota-web.vercel.app/hub/ws/agent'}) |
 | \`SOLANA_CLUSTER\` | No | ${cluster} (${chainLabel}, default) |
 `;
 }

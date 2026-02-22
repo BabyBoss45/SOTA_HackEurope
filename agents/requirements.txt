@@ -19,6 +19,9 @@ starlette>=0.27.0
 # Database (PostgreSQL via Railway)
 asyncpg>=0.30.0
 
+# Cryptography (ClawBot HMAC signing / AES-256 key decryption)
+cryptography>=42.0.0
+
 # AI / Vector DB (Butler + Seeding)
 anthropic>=0.39.0
 sentence-transformers>=3.0.0

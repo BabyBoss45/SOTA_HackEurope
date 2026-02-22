@@ -22,7 +22,10 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Awaitable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Awaitable, Dict, List, Optional, Sequence, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agents.src.shared.external_agent_inviter import ExternalAgentInviter
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +134,8 @@ class JobBoard:
         self._bids: Dict[str, List[Bid]] = {}          # job_id → bids
         self._winning_bids: Dict[str, Bid] = {}        # job_id → winning bid (for later retrieval)
         self._listeners: List[Callable] = []
+        self._external_inviter: Optional["ExternalAgentInviter"] = None
+        self._db_pool: Optional[Any] = None            # asyncpg pool, injected at startup
 
     # ── Singleton ────────────────────────────────────────────
 
@@ -157,6 +162,15 @@ class JobBoard:
     def unregister_worker(self, worker_id: str):
         self._workers.pop(worker_id, None)
         logger.info("Worker unregistered: %s", worker_id)
+
+    def set_external_inviter(self, inviter: "ExternalAgentInviter") -> None:
+        """Inject the ExternalAgentInviter (called during butler_api.py startup)."""
+        self._external_inviter = inviter
+        logger.info("ExternalAgentInviter attached to JobBoard")
+
+    def set_db_pool(self, pool: Any) -> None:
+        """Inject the asyncpg pool (used for execution token creation)."""
+        self._db_pool = pool
 
     @property
     def workers(self) -> Dict[str, RegisteredWorker]:
@@ -206,6 +220,18 @@ class JobBoard:
             for worker in matching
         ]
 
+        # ── 1b. Invite external ClawBot agents concurrently ───
+        if self._external_inviter:
+            tasks.append(
+                asyncio.create_task(
+                    self._external_inviter.invite_for_job(
+                        job,
+                        self._bids[job.job_id],
+                        timeout_seconds=max(10, job.bid_window_seconds - 10),
+                    )
+                )
+            )
+
         # ── 2. Wait for the bid window ───────────────────────
         logger.info("  ⏳ Bid window open for %d seconds…", job.bid_window_seconds)
         await asyncio.sleep(job.bid_window_seconds)
@@ -239,24 +265,135 @@ class JobBoard:
                     await on_chain_accept(result.winning_bid)
                 except Exception as exc:
                     logger.error("On-chain accept failed: %s", exc)
-            
+
             # ── 4. Execute the job if requested ──────────────
             if execute_after_accept:
-                winning_worker = self._workers.get(result.winning_bid.bidder_id)
-                if winning_worker and winning_worker.executor:
-                    logger.info("🔄 Starting job execution for %s…", job.job_id)
-                    try:
-                        exec_result = await winning_worker.executor(job, result.winning_bid)
-                        result.execution_result = exec_result
-                        logger.info("✅ Job %s execution completed", job.job_id)
-                    except Exception as exc:
-                        logger.error("❌ Job execution failed: %s", exc)
-                        result.execution_result = {"error": str(exc)}
+                winning_bid = result.winning_bid
+
+                if winning_bid.bidder_id.startswith("external:"):
+                    # External ClawBot won — issue execution token and notify agent
+                    logger.info(
+                        "🌐 External agent won job %s, issuing execution token…",
+                        job.job_id,
+                    )
+                    asyncio.create_task(
+                        self._notify_external_winner(job, winning_bid)
+                    )
+                    # Start a timeout watchdog — if the job is still ASSIGNED
+                    # after 15 min (matching ExecutionToken TTL), mark it EXPIRED.
+                    asyncio.create_task(
+                        self._external_job_timeout(job, timeout_minutes=15)
+                    )
+                    # execution_result will arrive via the /api/marketplace/external/execute callback
+                else:
+                    # Internal worker executor path (unchanged)
+                    winning_worker = self._workers.get(winning_bid.bidder_id)
+                    if winning_worker and winning_worker.executor:
+                        logger.info("🔄 Starting job execution for %s…", job.job_id)
+                        try:
+                            exec_result = await winning_worker.executor(job, winning_bid)
+                            result.execution_result = exec_result
+                            logger.info("✅ Job %s execution completed", job.job_id)
+                        except Exception as exc:
+                            logger.error("❌ Job execution failed: %s", exc)
+                            result.execution_result = {"error": str(exc)}
         else:
             job.status = JobStatus.EXPIRED
             logger.warning("⚠️ No bids received for job %s", job.job_id)
 
         return result
+
+    async def _notify_external_winner(self, job: JobListing, winning_bid: Bid) -> None:
+        """
+        Create a single-use execution token and POST it to the winning
+        external agent's /execute endpoint.
+        """
+        from agents.src.shared.execution_token import create_execution_token
+
+        meta = winning_bid.metadata or {}
+        agent_id: str = meta.get('externalAgentId', '')
+        confidence: Optional[float] = meta.get('confidence')
+
+        if not agent_id:
+            logger.error("_notify_external_winner: missing externalAgentId in bid metadata")
+            return
+
+        if not self._db_pool:
+            logger.error(
+                "_notify_external_winner: no db_pool set — cannot create execution token; "
+                "marking job %s as EXPIRED", job.job_id,
+            )
+            job.status = JobStatus.EXPIRED
+            return
+
+        try:
+            token = await create_execution_token(
+                job_id=job.job_id,
+                agent_id=agent_id,
+                confidence=confidence,
+                db_pool=self._db_pool,
+            )
+        except Exception as exc:
+            logger.error("Failed to create execution token for job %s: %s — marking EXPIRED", job.job_id, exc)
+            job.status = JobStatus.EXPIRED
+            return
+
+        # Fetch the agent's endpoint and signing key from DB
+        try:
+            row = await self._db_pool.fetchrow(
+                'SELECT endpoint, "publicKey" FROM "ExternalAgent" WHERE "agentId" = $1',
+                agent_id,
+            )
+        except Exception as exc:
+            logger.error("DB lookup for external agent %s failed: %s", agent_id, exc)
+            return
+
+        if not row:
+            logger.error("External agent %s not found in DB", agent_id)
+            return
+
+        payload = {
+            'jobId': job.job_id,
+            'executionToken': token,
+            'metadata': job.metadata,
+        }
+
+        headers: Dict[str, str] = {'Content-Type': 'application/json'}
+        if row['publicKey'] and self._external_inviter:
+            try:
+                from agents.src.shared.external_agent_inviter import _decrypt_stored_key
+                key_hex = _decrypt_stored_key(row['publicKey'])
+                headers['X-SOTA-Signature'] = self._external_inviter._signer.sign(payload, key_hex)
+            except Exception as exc:
+                logger.warning("Could not sign execute payload for agent %s: %s", agent_id, exc)
+
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{row['endpoint']}/execute",
+                    json=payload,
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                logger.info("Execution token delivered to external agent %s", agent_id)
+        except Exception as exc:
+            logger.error(
+                "Failed to deliver execution token to agent %s: %s", agent_id, exc
+            )
+
+    async def _external_job_timeout(self, job: JobListing, timeout_minutes: int = 15) -> None:
+        """
+        Watchdog: if the job is still ASSIGNED after timeout_minutes,
+        mark it EXPIRED so the system doesn't hang indefinitely.
+        """
+        await asyncio.sleep(timeout_minutes * 60)
+        if job.status == JobStatus.ASSIGNED:
+            logger.warning(
+                "External job %s still ASSIGNED after %d min — marking EXPIRED",
+                job.job_id, timeout_minutes,
+            )
+            job.status = JobStatus.EXPIRED
 
     # ── Internals ────────────────────────────────────────────
 

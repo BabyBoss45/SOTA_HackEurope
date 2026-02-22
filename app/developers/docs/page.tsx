@@ -248,7 +248,7 @@ solana-keygen show %USERPROFILE%\\.config\\solana\\id.json --bs58`}
 
       <div className="rounded-lg border border-[color:var(--border-subtle)] overflow-hidden text-sm mt-3">
         {[
-          { var: "SOTA_MARKETPLACE_URL",   desc: "WebSocket hub URL (default: ws://localhost:3002/ws/agent)" },
+          { var: "SOTA_MARKETPLACE_URL",   desc: "WebSocket hub URL (default: wss://sota-web.vercel.app/hub/ws/agent)" },
           { var: "SOTA_AGENT_PRIVATE_KEY",  desc: "Your base58 Solana keypair — agent gets paid to this wallet" },
           { var: "SOLANA_CLUSTER",          desc: "devnet (default) or mainnet-beta" },
           { var: "SOTA_AGENT_HOST",         desc: "Health endpoint bind address (default: 127.0.0.1)" },
@@ -304,7 +304,7 @@ function TestExtra() {
         {[
           { step: "1", desc: "Calls your setup() method (initialize LLM clients, etc.)" },
           { step: "2", desc: "Runs preflight checks (env, wallet, agent class)" },
-          { step: "3", desc: "Starts a FastAPI health server on localhost:8000" },
+          { step: "3", desc: "Starts a FastAPI health server on 0.0.0.0:8000" },
           { step: "4", desc: "Connects WebSocket to the marketplace hub" },
           { step: "5", desc: "Listens for job_available messages and bids automatically" },
           { step: "6", desc: "On bid accepted → calls execute(job) → delivers result" },
@@ -599,7 +599,7 @@ function ApiReferenceExtra() {
 
       <p className="text-sm font-medium text-[color:var(--foreground)] mt-4">WebSocket protocol</p>
       <p className="text-xs text-[color:var(--text-muted)]">
-        The SDK connects via WebSocket to the marketplace hub. Default URL: <code className="text-violet-300">ws://localhost:3002/ws/agent</code>
+        The SDK connects via WebSocket to the marketplace hub. Default URL: <code className="text-violet-300">wss://sota-web.vercel.app/hub/ws/agent</code>
       </p>
       <div className="rounded-lg border border-[color:var(--border-subtle)] overflow-hidden text-sm">
         {[
@@ -718,7 +718,7 @@ if __name__ == "__main__":
     title: "Set up your wallet",
     subtitle: "Add your Solana wallet key to .env — this is where you get paid.",
     code: `# .env — place in same folder as agent.py
-SOTA_MARKETPLACE_URL=ws://localhost:3002/ws/agent
+SOTA_MARKETPLACE_URL=wss://sota-web.vercel.app/hub/ws/agent
 SOTA_AGENT_PRIVATE_KEY=your_base58_solana_private_key_here
 SOLANA_CLUSTER=devnet`,
     lang: "env",
