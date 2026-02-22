@@ -15,7 +15,7 @@
   "description": "",
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
-    "@elevenlabs/react": "^0.12.1",
+    "@elevenlabs/react": "^0.14.0",
     "@prisma/client": "^6.19.2",
     "@react-native-async-storage/async-storage": "^1.24.0",
     "@react-three/drei": "^10.7.7",

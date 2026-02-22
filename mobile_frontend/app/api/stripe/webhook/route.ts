@@ -108,9 +108,13 @@ export async function POST(request: NextRequest) {
 
   if (event.type === "payment_intent.succeeded") {
     const paymentIntent = event.data.object as Stripe.PaymentIntent;
-    const { jobId, agentAddress, usdcAmountRaw, boardJobId } = paymentIntent.metadata;
+    const { jobId, agentAddress, usdcAmountRaw, boardJobId, userId: userIdStr } = paymentIntent.metadata;
+    const parsedUserId = userIdStr ? parseInt(userIdStr, 10) : NaN;
+    const userId = isNaN(parsedUserId) ? null : parsedUserId;
 
     console.log(`Payment succeeded for job ${jobId}, amount: ${usdcAmountRaw} (raw USDC)`);
+    const parsedOnChainJobId = boardJobId ? parseInt(boardJobId, 10) : NaN;
+    const onChainJobId = isNaN(parsedOnChainJobId) ? null : parsedOnChainJobId;
 
     try {
       // Validate required env vars before on-chain operations
@@ -135,7 +139,6 @@ export async function POST(request: NextRequest) {
       const usdcMint = new PublicKey(usdcMintStr);
       const providerPubkey = new PublicKey(agentAddress);
       const amount = BigInt(usdcAmountRaw);
-      const onChainJobId = boardJobId ? parseInt(boardJobId, 10) : null;
 
       if (onChainJobId == null) {
         throw new Error("boardJobId (on-chain job ID) is required for escrow funding");
@@ -199,6 +202,7 @@ export async function POST(request: NextRequest) {
             amountCents: paymentIntent.amount,
             usdcAmountRaw: usdcAmountRaw,
             agentAddress: agentAddress,
+            userId: userId,
             status: "funded",
           },
         });
@@ -219,6 +223,7 @@ export async function POST(request: NextRequest) {
             amountCents: paymentIntent.amount,
             usdcAmountRaw: usdcAmountRaw,
             agentAddress: agentAddress,
+            userId: userId,
             status: "pending",
           },
         });

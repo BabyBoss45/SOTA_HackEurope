@@ -190,13 +190,22 @@ def get_contracts(private_key: Optional[str] = None) -> SolanaProgram:
     kp = None
     if private_key:
         private_key = private_key.strip()
+
+        # Reject Ethereum hex keys early (common misconfiguration)
+        if private_key.startswith("0x") or (len(private_key) == 64 and all(c in "0123456789abcdefABCDEF" for c in private_key)):
+            raise ValueError(
+                f"PRIVATE_KEY looks like an Ethereum hex key (starts with '{private_key[:6]}...'). "
+                "This is a Solana project — provide a base58-encoded keypair, "
+                "a base64-encoded keypair, or a JSON byte array from `solana-keygen`."
+            )
+
         if private_key.startswith("["):
             byte_list = json.loads(private_key)
             kp = Keypair.from_bytes(bytes(byte_list))
         else:
             try:
                 kp = Keypair.from_base58_string(private_key)
-            except Exception:
+            except BaseException:
                 import base64
                 kp = Keypair.from_bytes(base64.b64decode(private_key))
     return get_program(kp)

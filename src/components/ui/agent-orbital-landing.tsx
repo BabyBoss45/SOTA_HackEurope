@@ -71,33 +71,14 @@ const AgentOrbitalLanding = () => {
   useEffect(() => {
     const fetchAgents = async () => {
       try {
-        // Fetch both dashboard agents and all agents
-        const [dashboardRes, allAgentsRes] = await Promise.all([
-          fetch('/api/agents/dashboard'),
-          fetch('/api/agents')
-        ]);
-        
+        const dashboardRes = await fetch('/api/agents/dashboard');
         if (!dashboardRes.ok) throw new Error('Failed to fetch agents');
         const dashboardData = await dashboardRes.json();
-        
+
         setAgents(dashboardData.agents || []);
+        setAllAgents(dashboardData.agents || []);
         if (dashboardData.butler) {
           setButler(dashboardData.butler);
-        }
-        
-        // Set all agents for the list
-        if (allAgentsRes.ok) {
-          const allData = await allAgentsRes.json();
-          setAllAgents((allData.agents || []).map((a: Record<string, unknown>) => ({
-            id: a.id as number,
-            title: a.title as string,
-            description: a.description as string,
-            icon: (a.icon as string) || 'Bot',
-            status: (a.status === 'active' ? 'online' : a.status === 'busy' ? 'busy' : 'offline') as "online" | "busy" | "offline",
-            totalRequests: (a.totalRequests as number) || 0,
-            reputation: (a.reputation as number) || 5.0,
-            successRate: a.totalRequests ? Math.round(((a.successfulRequests as number) / (a.totalRequests as number)) * 100) : 100,
-          })));
         }
         
         setError(null);

@@ -21,6 +21,7 @@ import time
 import asyncio
 import logging
 import json
+from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, HTTPException
@@ -79,19 +80,7 @@ load_dotenv(_here / ".env")  # fallback: agents/.env
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="SOTA Butler API")
-app.mount("/hub", marketplace_hub_app)
-logger.info("Marketplace Hub mounted at /hub")
-
-_cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
-_cors_origins = [o.strip() for o in _cors_origins if o.strip()]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins or ["*"],
-    allow_credentials=bool(_cors_origins),  # credentials not allowed with wildcard "*"
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "*").split(",")
 
 # ─── Globals ──────────────────────────────────────────────────
 
@@ -180,22 +169,14 @@ class ReleaseRequest(BaseModel):
     job_id: int
 
 
-# ─── Startup ──────────────────────────────────────────────────
+# ─── Lifespan ─────────────────────────────────────────────────
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global contracts, butler_agent, job_board, hackathon_agent, caller_agent, db, task_memory
     cluster = get_cluster()
     print(f"Starting SOTA Butler API...")
     print(f"Cluster: {cluster.rpc_url} ({cluster.cluster_name})")
-
-    # ── Initialize Paid.ai cost tracking ──────────────────────
-    try:
-        from sota_sdk.cost import initialize_cost_tracking
-        initialize_cost_tracking()
-        print("Paid.ai cost tracking initialized")
-    except Exception as e:
-        print(f"Paid.ai init skipped (non-critical): {e}")
 
     # ── Connect to PostgreSQL ────────────────────────────────
     if Database is not None:
@@ -330,17 +311,24 @@ async def startup_event():
     except Exception as e:
         print(f"FunActivityAgent init failed (non-critical): {e}")
 
-    # Pre-warm embedding model so bid evaluations don't timeout
-    try:
-        from agents.src.shared.embedding import embed_text
-        await embed_text("warmup")
-        print("Embedding model pre-warmed")
-    except Exception as e:
-        print(f"Embedding warmup failed (non-critical): {e}")
-
     # Log registered workers
     workers = job_board.workers
     print(f"{len(workers)} worker(s) registered: {list(workers.keys())}")
+
+    yield
+
+
+app = FastAPI(title="SOTA Butler API", lifespan=lifespan)
+app.mount("/hub", marketplace_hub_app)
+logger.info("Marketplace Hub mounted at /hub")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")
@@ -946,7 +934,6 @@ async def create_and_fund_job(req: CreateJobRequest):
         provider_str = req.provider_address or (
             str(contracts.keypair.pubkey()) if contracts.keypair else ""
         )
-        provider_pk = None
         if provider_str:
             provider_pk = _Pubkey.from_string(provider_str)
             assign_provider(contracts, job_id, provider_pk)
@@ -955,7 +942,7 @@ async def create_and_fund_job(req: CreateJobRequest):
         tx = fund_job(
             contracts,
             job_id=job_id,
-            provider_pubkey=provider_pk if provider_pk else contracts.keypair.pubkey(),
+            provider_pubkey=provider_pk if provider_str else contracts.keypair.pubkey(),
             usdc_amount=req.budget_usdc,
         )
 

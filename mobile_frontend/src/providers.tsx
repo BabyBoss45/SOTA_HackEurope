@@ -13,6 +13,7 @@ import {
 } from "@solana/wallet-adapter-wallets";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SOLANA_RPC_URL } from "./solanaConfig";
+import { AuthProvider } from "./context/AuthContext";
 
 // Import default wallet adapter styles
 import "@solana/wallet-adapter-react-ui/styles.css";
@@ -38,14 +39,16 @@ export function Providers({ children }: { children: ReactNode }) {
   );
 
   return (
-    <ConnectionProvider endpoint={SOLANA_RPC_URL}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          <QueryClientProvider client={queryClient}>
-            {children}
-          </QueryClientProvider>
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+    <AuthProvider>
+      <ConnectionProvider endpoint={SOLANA_RPC_URL}>
+        <WalletProvider wallets={wallets} autoConnect>
+          <WalletModalProvider>
+            <QueryClientProvider client={queryClient}>
+              {children}
+            </QueryClientProvider>
+          </WalletModalProvider>
+        </WalletProvider>
+      </ConnectionProvider>
+    </AuthProvider>
   );
 }

@@ -1,21 +1,12 @@
-# Secrets
+.git
 .env
 .env.*
-
-# Build artifacts
-__pycache__/
-.pytest_cache/
+__pycache__
 *.pyc
-
-# Debug/dev
-last_results.json
-.claude/
+*.pyo
+*.egg-info
+.pytest_cache
+node_modules
+.venv
 tests/
-test_*.py
-
-# Git
-.git/
-
-# Node.js (not used in agents)
-node_modules/
-package-lock.json
+*.md

@@ -5,7 +5,7 @@ import { prisma } from '@/src/lib/prisma';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { sessionId, role, text, wallet } = body;
+    const { sessionId, role, text, wallet, userId } = body;
 
     if (!sessionId || !role || !text) {
       return NextResponse.json({ error: 'sessionId, role, and text are required' }, { status: 400 });
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     await prisma.chatSession.upsert({
       where: { id: sessionId },
       update: { updatedAt: new Date(), ...(candidateTitle ? { title: candidateTitle } : {}) },
-      create: { id: sessionId, wallet: wallet || null, title: candidateTitle ?? null },
+      create: { id: sessionId, wallet: wallet || null, userId: userId || null, title: candidateTitle ?? null },
     });
 
     // Create the message
@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const sessionId = searchParams.get('sessionId');
     const wallet = searchParams.get('wallet');
+    const userId = searchParams.get('userId');
 
     if (sessionId) {
       const messages = await prisma.chatMessage.findMany({
@@ -45,6 +46,19 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: 'asc' },
       });
       return NextResponse.json(messages);
+    }
+
+    if (userId) {
+      const parsed = parseInt(userId, 10);
+      if (isNaN(parsed)) {
+        return NextResponse.json({ error: 'userId must be an integer' }, { status: 400 });
+      }
+      const sessions = await prisma.chatSession.findMany({
+        where: { userId: parsed },
+        orderBy: { updatedAt: 'desc' },
+        take: 50,
+      });
+      return NextResponse.json(sessions);
     }
 
     if (wallet) {

@@ -102,7 +102,7 @@ class HubConnector:
         except ImportError:
             logger.error(
                 "websockets package not installed. "
-                "Add 'websockets>=12.0' to requirements.txt."
+                "Add 'websockets>=10.0,<12.0' to requirements.txt."
             )
             self._running = False
             return
