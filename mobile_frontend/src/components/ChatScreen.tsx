@@ -262,7 +262,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
     // Attach wallet address
     if (address) jobData.wallet_address = address;
     if (!jobData.budget_usd) {
-      jobData.budget_usd = 0.02;
+      jobData.budget_usd = 1.0;
     }
 
     // Show progress bar during bid collection (15 seconds)
@@ -286,6 +286,13 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
         jobResult = typeof data.message === "string" ? JSON.parse(data.message) : data.message;
       } catch {
         // message is not JSON
+      }
+
+      // ── Surface job failure to the user ──
+      if (jobResult && jobResult.success === false) {
+        const reason = jobResult.reason || "No specialists available";
+        showToast(reason, "warning");
+        return `Job failed: ${reason}`;
       }
 
       // ── Fund escrow via Stripe Apple Pay / card ──
