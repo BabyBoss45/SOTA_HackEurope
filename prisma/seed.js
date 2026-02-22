@@ -2,7 +2,7 @@
 // Simple seed script to create a demo user and sample agents
 require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
-const { createHash } = require("crypto");
+const bcrypt = require("bcryptjs");
 
 const prisma = new PrismaClient();
 
@@ -11,23 +11,80 @@ async function main() {
     where: { email: "demo@sota.ai" },
   });
 
-  const JWT_SECRET = process.env.JWT_SECRET || 'sota-dev-secret-change-in-production';
-  const passwordHash = createHash('sha256').update(`password123${JWT_SECRET}`).digest('hex');
+  const passwordHash = await bcrypt.hash("password123", 10);
 
-  const user = existing
-    ? await prisma.user.update({
-        where: { email: "demo@sota.ai" },
-        data: { passwordHash },
-      })
-    : await prisma.user.create({
-        data: {
-          email: "demo@sota.ai",
-          name: "Demo User",
-          passwordHash,
-          walletAddress: "11111111111111111111111111111111",
-        },
-      });
+  const user =
+    existing ??
+    (await prisma.user.create({
+      data: {
+        email: "demo@sota.ai",
+        name: "Demo User",
+        passwordHash,
+        walletAddress: "11111111111111111111111111111111",
+      },
+    }));
 
+  await prisma.agent.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      title: "Lead Gen Agent",
+      description:
+        "Automates outreach and captures qualified leads across email and LinkedIn.",
+      category: "Sales",
+      priceUsd: 49,
+      tags: "leadgen,outreach,crm",
+      network: "solana-devnet",
+      ownerId: user.id,
+    },
+  });
+
+  await prisma.agent.upsert({
+    where: { id: 2 },
+    update: {},
+    create: {
+      title: "Support Copilot",
+      description:
+        "Triage and respond to support tickets with human-in-the-loop approvals.",
+      category: "Support",
+      priceUsd: 29,
+      tags: "support,helpdesk",
+      network: "solana-devnet",
+      ownerId: user.id,
+    },
+  });
+
+  await prisma.agent.upsert({
+    where: { id: 3 },
+    update: {},
+    create: {
+      title: "Fun Activity",
+      description:
+        "Find something fun with zero friction. Uses your location, calendar, budget, and past events to recommend concerts, workshops, exhibitions, comedy, and more. Learns your preferences over time.",
+      category: "Events",
+      priceUsd: 3,
+      tags: "events,fun,recommendations",
+      network: "solana-devnet",
+      ownerId: user.id,
+      icon: "PartyPopper",
+    },
+  });
+
+  await prisma.agent.upsert({
+    where: { id: 4 },
+    update: {},
+    create: {
+      title: "Nightlife & Adventure",
+      description:
+        "GPT-4o powered nightlife scout. Finds clubs, rooftop bars, underground parties, secret cinema, escape rooms, and late-night food tours. Competes with Claude's Fun Activity Agent — edgier, bolder, more spontaneous.",
+      category: "Events",
+      priceUsd: 3,
+      tags: "nightlife,adventure,clubs,events",
+      network: "solana-devnet",
+      ownerId: user.id,
+      icon: "Zap",
+    },
+  });
 }
 
 main()

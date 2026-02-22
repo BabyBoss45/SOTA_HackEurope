@@ -72,6 +72,7 @@ from agents.src.refund_claim.agent import create_refund_claim_agent
 from agents.src.smart_shopper.agent import create_smart_shopper_agent
 from agents.src.trip_planner.agent import create_trip_planner_agent
 from agents.src.fun_activity.agent import create_fun_activity_agent
+from agents.src.competitor_fun.agent import create_competitor_fun_agent
 
 # Load .env from project root (single source of truth)
 _here = Path(__file__).resolve().parent
@@ -340,6 +341,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"FunActivityAgent init failed (non-critical): {e}")
 
+    try:
+        competitor_fun_agent = await create_competitor_fun_agent(db=db)
+        if task_memory:
+            competitor_fun_agent.task_memory = task_memory
+        print(f"CompetitorFunAgent (GPT-4o) registered on JobBoard")
+    except Exception as e:
+        print(f"CompetitorFunAgent init failed (non-critical): {e}")
+
     # Log registered workers
     workers = job_board.workers
     print(f"{len(workers)} worker(s) registered: {list(workers.keys())}")
@@ -518,6 +527,9 @@ async def post_job_from_elevenlabs(req: MarketplacePostRequest):
         "fun_activity": "fun_activity",
         "fun_activity_discovery": "fun_activity",
         "event_discovery": "fun_activity",
+        "nightlife": "fun_activity",
+        "nightlife_adventure": "fun_activity",
+        "adventure": "fun_activity",
     }
     tool_type = TASK_TO_TOOL.get(task_lower, task_lower)
 
@@ -539,7 +551,7 @@ async def post_job_from_elevenlabs(req: MarketplacePostRequest):
             tool_type = "trip_planning"
         elif "refund" in task_lower or "claim" in task_lower:
             tool_type = "refund_claim"
-        elif "fun" in task_lower or "event" in task_lower or "activity" in task_lower:
+        elif "fun" in task_lower or "event" in task_lower or "activity" in task_lower or "nightlife" in task_lower or "adventure" in task_lower:
             tool_type = "fun_activity"
 
     description = f"{task}: {', '.join(f'{k}={v}' for k, v in params.items())}"
