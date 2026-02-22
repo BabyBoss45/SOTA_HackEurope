@@ -11,9 +11,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id            Int       @id @default(autoincrement())
+  email         String    @unique
+  passwordHash  String    @default("")
+  name          String?
+  walletAddress String?
+  role          String    @default("user")
+  createdAt     DateTime  @default(now())
+  payments      Payment[]
+}
+
 model ChatSession {
   id        String        @id @default(uuid())
   wallet    String?
+  userId    Int?
   title     String?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
@@ -39,6 +51,8 @@ model Payment {
   amountCents        Int
   usdcAmountRaw      String
   agentAddress       String
+  userId             Int?
+  user               User?     @relation(fields: [userId], references: [id])
   status             String    @default("pending")
   stripeRefundId     String?
   escrowRefundTxHash String?

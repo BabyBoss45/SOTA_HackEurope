@@ -15,6 +15,7 @@ import AgentOrb from "./AgentOrb";
 import { useToast } from "./ToastProvider";
 import StripePayment from "./StripePayment";
 import { explorerLink } from "@/src/solanaConfig";
+import { useAuth } from "@/src/context/AuthContext";
 
 /* ── Config ── */
 const BUTLER_URL =
@@ -144,6 +145,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
   const [taskExecution, setTaskExecution] = useState<{ active: boolean; message: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const { user } = useAuth();
   const { publicKey, sendTransaction, connected } = useWallet();
   const { connection } = useConnection();
   const address = publicKey?.toBase58() ?? null;
@@ -154,13 +156,16 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
     amount: number;
     agentAddress: string;
     boardJobId?: string;
+    userId?: number;
   } | null>(null);
 
   // Refs to avoid stale closures in addLine callback
   const sessionIdRef = useRef(sessionId);
   const addressRef = useRef(address);
+  const userIdRef = useRef(user?.id ?? null);
   useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
   useEffect(() => { addressRef.current = address; }, [address]);
+  useEffect(() => { userIdRef.current = user?.id ?? null; }, [user?.id]);
   const [isSending, setIsSending] = useState(false);
 
   // Auto-scroll transcript to bottom on new messages or progress bar or task execution
@@ -170,18 +175,19 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
     }
   }, [transcript, bidProgress, taskExecution]);
 
-  // Load conversations when sidebar opens (filtered by wallet)
+  // Load conversations when sidebar opens (filtered by userId or wallet)
   useEffect(() => {
-    if (sidebarOpen && address) {
-      fetch(`/api/chat?wallet=${address}`)
-        .then((r) => r.json())
-        .then((sessions: any[]) => {
-          if (Array.isArray(sessions))
-            setConversations(sessions.map((s: any) => ({ id: s.id, title: s.title })));
-        })
-        .catch(() => {});
-    }
-  }, [sidebarOpen, address]);
+    if (!sidebarOpen) return;
+    const query = user?.id ? `userId=${user.id}` : address ? `wallet=${address}` : null;
+    if (!query) return;
+    fetch(`/api/chat?${query}`)
+      .then((r) => r.json())
+      .then((sessions: any[]) => {
+        if (Array.isArray(sessions))
+          setConversations(sessions.map((s: any) => ({ id: s.id, title: s.title })));
+      })
+      .catch(() => {});
+  }, [sidebarOpen, user?.id, address]);
 
   const addLine = useCallback((role: TranscriptLine["role"], content: string) => {
     setTranscript((p) => [
@@ -197,6 +203,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
         role,
         text: content,
         wallet: addressRef.current,
+        userId: userIdRef.current,
       }),
     }).catch(() => {});
   }, []);
@@ -225,8 +232,8 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
     }
 
     addLine("assistant", `Payment of ${budgetUsdc.toFixed(2)} USDC needed. Please complete payment below.`);
-    setStripePayment({ jobId, amount: budgetUsdc, agentAddress: winnerAddr, boardJobId });
-  }, [address, addLine]);
+    setStripePayment({ jobId, amount: budgetUsdc, agentAddress: winnerAddr, boardJobId, userId: user?.id });
+  }, [address, addLine, user?.id]);
 
   /* ── Post job JSON to backend marketplace ── */
   const postJobToMarketplace = useCallback(async (jobData: Record<string, any>) => {
@@ -283,7 +290,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
       showToast("Failed to post job", "error");
       return `Failed to post job: ${err.message}`;
     }
-  }, [address, showToast, addLine, triggerStripePayment]);
+  }, [address, showToast, triggerStripePayment]);
 
   /* ── Try to extract & auto-post JSON from assistant text ── */
   const interceptJsonJob = useCallback(async (text: string) => {
@@ -343,11 +350,6 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
       }
       setOrbStatus("idle");
     } else {
-      if (!connected || !publicKey) {
-        showToast("Connect your wallet first", "warning");
-        return;
-      }
-
       // Mic permission — separate catch so errors are reported accurately
       try {
         await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -371,7 +373,9 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
           overrides: {
             agent: {
               prompt: {
-                prompt: `The user's wallet address is ${address}. Use this when they ask about their wallet or need to sign transactions.`,
+                prompt: address
+                  ? `The user's wallet address is ${address}. Use this when they ask about their wallet or need to sign transactions.`
+                  : `The user has not connected a wallet yet. If they ask about wallet features or transfers, let them know they can connect a wallet from the Wallet tab.`,
               },
             },
           },
@@ -556,12 +560,10 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
                 transition={{ duration: 0.5 }}
               >
                 <p className="transcript-empty-title">
-                  Hello{address ? `, ${address.slice(0, 4)}...${address.slice(-4)}` : ""}
+                  Hello{user?.name ? `, ${user.name}` : ""}
                 </p>
                 <p className="transcript-empty-sub">
-                  {connected
-                    ? "Your AI concierge is ready. Tap the orb or type below."
-                    : "Type below to chat, or connect your wallet for voice and transfers."}
+                  Your AI concierge is ready. Tap the orb or type below.
                 </p>
               </motion.div>
             </AnimatePresence>
@@ -604,6 +606,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
                 amount={stripePayment.amount}
                 agentAddress={stripePayment.agentAddress}
                 boardJobId={stripePayment.boardJobId}
+                userId={stripePayment.userId}
                 onSuccess={() => {
                   const payment = stripePayment;
                   setStripePayment(null);

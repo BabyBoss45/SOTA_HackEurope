@@ -19,6 +19,7 @@ interface StripePaymentProps {
   amount: number;
   agentAddress: string;
   boardJobId?: string;
+  userId?: number;
   onSuccess: () => void;
   onError: (error: string) => void;
 }
@@ -114,6 +115,7 @@ export default function StripePayment({
   amount,
   agentAddress,
   boardJobId,
+  userId,
   onSuccess,
   onError,
 }: StripePaymentProps) {
@@ -132,7 +134,7 @@ export default function StripePayment({
     fetch("/api/stripe/create-payment-intent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobId, amount, agentAddress, boardJobId }),
+      body: JSON.stringify({ jobId, amount, agentAddress, boardJobId, userId }),
     })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);

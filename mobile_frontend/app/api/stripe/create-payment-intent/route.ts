@@ -18,7 +18,7 @@ function isValidSolanaAddress(address: string): boolean {
 
 export async function POST(request: NextRequest) {
   try {
-    const { jobId, amount, agentAddress, boardJobId } = await request.json();
+    const { jobId, amount, agentAddress, boardJobId, userId } = await request.json();
 
     if (!jobId || !agentAddress) {
       return NextResponse.json(
@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
         agentAddress,
         usdcAmountRaw: String(Math.round(amount * 1e6)), // 6 decimals for USDC
         boardJobId: boardJobId ? String(boardJobId) : "",
+        userId: userId ? String(userId) : "",
       },
     });
 
