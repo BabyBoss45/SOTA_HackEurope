@@ -5,8 +5,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
   BarChart3,
+  BrainCircuit,
   CheckCircle,
   Coins,
+  DollarSign,
   ExternalLink,
   Loader2,
   Lock,
@@ -81,6 +83,22 @@ interface AgentMetric {
   reputation: number | null;
 }
 
+interface AgentCostData {
+  name: string;
+  externalId: string;
+  revenue: number;
+  cost: number;
+  profit: number;
+  jobCount: number;
+}
+
+interface CostTotals {
+  revenue: number;
+  cost: number;
+  profit: number;
+  jobCount: number;
+}
+
 export default function PayoutPage(): React.JSX.Element {
   const { user, loading: authLoading, getIdToken } = useAuth();
 
@@ -97,6 +115,9 @@ export default function PayoutPage(): React.JSX.Element {
   const [loadingData, setLoadingData] = useState(false);
   const [taskStats, setTaskStats] = useState<TaskStats | null>(null);
   const [agentMetrics, setAgentMetrics] = useState<AgentMetric[]>([]);
+  const [costData, setCostData] = useState<AgentCostData[]>([]);
+  const [costTotals, setCostTotals] = useState<CostTotals | null>(null);
+  const [costLoading, setCostLoading] = useState(false);
 
   /** Build an Anchor Program instance for sending transactions (requires a connected wallet). */
   const getProgram = useCallback((): Program | null => {
@@ -239,6 +260,25 @@ export default function PayoutPage(): React.JSX.Element {
   useEffect(() => {
     if (user) fetchTaskStats();
   }, [user, fetchTaskStats]);
+
+  const fetchCostData = useCallback(async () => {
+    try {
+      setCostLoading(true);
+      const res = await fetch("/api/agents/costs");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.agents) setCostData(data.agents);
+      if (data.totals) setCostTotals(data.totals);
+    } catch (err) {
+      console.error("Failed to fetch cost data:", err);
+    } finally {
+      setCostLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) fetchCostData();
+  }, [user, fetchCostData]);
 
   const doRegisterOnChain = async () => {
     if (!selectedAgent || !account || !publicKey) return;
@@ -642,6 +682,100 @@ export default function PayoutPage(): React.JSX.Element {
                     )}
                   </motion.div>
                 )}
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.27 }}
+                  className="mb-8 p-6 rounded-2xl bg-[color:var(--surface-1)] backdrop-blur-sm border border-[color:var(--border-subtle)]"
+                >
+                  <h2 className="text-lg font-semibold text-[color:var(--foreground)] mb-6 flex items-center gap-2">
+                    <BrainCircuit size={18} className="text-cyan-400" />
+                    Cost Intelligence
+                  </h2>
+
+                  {costLoading ? (
+                    <div className="flex items-center justify-center py-8 gap-2 text-[color:var(--text-muted)]">
+                      <Loader2 size={16} className="animate-spin" />
+                      Loading cost data...
+                    </div>
+                  ) : costTotals ? (
+                    <>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+                          <p className="text-2xl font-bold text-emerald-400">${costTotals.revenue.toFixed(2)}</p>
+                          <p className="text-xs text-[color:var(--text-muted)] flex items-center justify-center gap-1">
+                            <DollarSign size={12} /> Revenue
+                          </p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
+                          <p className="text-2xl font-bold text-red-400">${costTotals.cost.toFixed(4)}</p>
+                          <p className="text-xs text-[color:var(--text-muted)] flex items-center justify-center gap-1">
+                            <BrainCircuit size={12} /> LLM Cost
+                          </p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-center">
+                          <p className="text-2xl font-bold text-cyan-400">${costTotals.profit.toFixed(2)}</p>
+                          <p className="text-xs text-[color:var(--text-muted)] flex items-center justify-center gap-1">
+                            <TrendingUp size={12} /> Profit
+                          </p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-violet-500/10 border border-violet-500/20 text-center">
+                          <p className="text-2xl font-bold text-violet-400">{costTotals.jobCount}</p>
+                          <p className="text-xs text-[color:var(--text-muted)] flex items-center justify-center gap-1">
+                            <BarChart3 size={12} /> Total Jobs
+                          </p>
+                        </div>
+                      </div>
+
+                      {costData.length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-medium text-[color:var(--text-muted)] mb-3">Per-Agent Breakdown</h3>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-[color:var(--border-subtle)]">
+                                  <th className="text-left py-2 text-[color:var(--text-muted)] font-medium">Agent</th>
+                                  <th className="text-right py-2 text-[color:var(--text-muted)] font-medium">Revenue</th>
+                                  <th className="text-right py-2 text-[color:var(--text-muted)] font-medium">LLM Cost</th>
+                                  <th className="text-right py-2 text-[color:var(--text-muted)] font-medium">Profit</th>
+                                  <th className="text-right py-2 text-[color:var(--text-muted)] font-medium">Margin</th>
+                                  <th className="text-right py-2 text-[color:var(--text-muted)] font-medium">Jobs</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {costData.map((agent, i) => {
+                                  const margin = agent.revenue > 0
+                                    ? Math.round(((agent.revenue - agent.cost) / agent.revenue) * 100)
+                                    : 0;
+                                  const marginColor = margin >= 80
+                                    ? "text-emerald-400"
+                                    : margin >= 50
+                                    ? "text-amber-400"
+                                    : "text-red-400";
+                                  return (
+                                    <tr key={i} className="border-b border-[color:var(--border-subtle)]/50">
+                                      <td className="py-2 text-[color:var(--foreground)]">{agent.name}</td>
+                                      <td className="py-2 text-right text-emerald-400 font-mono">${agent.revenue.toFixed(2)}</td>
+                                      <td className="py-2 text-right text-red-400 font-mono">${agent.cost.toFixed(4)}</td>
+                                      <td className="py-2 text-right text-cyan-400 font-mono">${agent.profit.toFixed(2)}</td>
+                                      <td className={`py-2 text-right font-mono ${marginColor}`}>{margin}%</td>
+                                      <td className="py-2 text-right text-[color:var(--foreground)] font-mono">{agent.jobCount}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-[color:var(--text-muted)] text-center py-4">
+                      No cost data available. Run agents to generate cost intelligence.
+                    </p>
+                  )}
+                </motion.div>
 
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}

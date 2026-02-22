@@ -56,6 +56,75 @@ hub_tasks: list = []         # background hub connector tasks
 connectors: list = []        # HubConnector instances (for shutdown)
 
 
+PRODUCT_NAMES: dict[str, str] = {
+    "hackathon": "Hackathon Registration Agent",
+    "caller": "Call Verification Agent",
+    "gift_suggestion": "Gift Suggestion Agent",
+    "refund_claim": "Refund Claim Agent",
+    "restaurant_booker": "Restaurant Booking Agent",
+    "smart_shopper": "Smart Shopping Agent",
+    "trip_planner": "Trip Planning Agent",
+}
+
+
+def _ensure_paid_products() -> None:
+    """Ensure all 7 agent products exist in Paid.ai (idempotent)."""
+    try:
+        import paid
+    except ImportError:
+        logger.debug("paid-python not installed — skipping product registration")
+        return
+
+    api_key = os.getenv("SOTA_PAID_API_KEY") or os.getenv("PAID_API_KEY")
+    if not api_key:
+        logger.debug("No Paid.ai API key — skipping product registration")
+        return
+
+    try:
+        client = paid.Paid(api_key=api_key)
+
+        # Fetch existing products
+        existing = client.products.list()
+        existing_ids: set[str] = set()
+        for prod in existing:
+            ext_id = getattr(prod, "external_id", None)
+            if ext_id:
+                existing_ids.add(ext_id)
+
+        # Migrate legacy "hackathon-agent" product to "hackathon"
+        if "hackathon-agent" in existing_ids and "hackathon" not in existing_ids:
+            try:
+                client.products.update_product_by_external_id(
+                    external_id="hackathon-agent",
+                    external_id_update="hackathon",
+                    name="Hackathon Registration Agent",
+                )
+                existing_ids.discard("hackathon-agent")
+                existing_ids.add("hackathon")
+                logger.info("  Migrated product 'hackathon-agent' → 'hackathon'")
+            except Exception as e:
+                logger.warning("  Failed to migrate hackathon-agent product: %s", e)
+
+        # Ensure each agent type has a product
+        for agent_type, display_name in PRODUCT_NAMES.items():
+            if agent_type in existing_ids:
+                logger.debug("  Product '%s' already exists", agent_type)
+                continue
+            try:
+                client.products.create_product(
+                    name=display_name,
+                    external_id=agent_type,
+                )
+                logger.info("  Created Paid.ai product: %s (%s)", display_name, agent_type)
+            except Exception as e:
+                # 409 / duplicate is fine — race condition or already exists
+                logger.debug("  Product create for '%s' skipped: %s", agent_type, e)
+
+        logger.info("Paid.ai products ensured: %d agent types", len(PRODUCT_NAMES))
+    except Exception as e:
+        logger.warning("Paid.ai product registration failed: %s", e)
+
+
 async def boot_agents():
     """Initialize all agents and connect each to the Hub."""
     from agents.src.shared.hub_connector import HubConnector
@@ -67,6 +136,9 @@ async def boot_agents():
         logger.info("Paid.ai cost tracking initialized")
     except Exception as e:
         logger.warning("Paid.ai init skipped: %s", e)
+
+    # Ensure all 7 agent products exist in Paid.ai
+    _ensure_paid_products()
 
     hub_url = os.getenv("SOTA_HUB_URL", "")
     if not hub_url:

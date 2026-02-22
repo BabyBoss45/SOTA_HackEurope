@@ -191,6 +191,14 @@ class AutoBidderMixin:
 
         poster_address = job.metadata.get("poster", job.job_id)
 
+        # Ensure customer exists in Paid.ai before opening tracing context
+        if _paid_tracing:
+            try:
+                from sota_sdk.cost import ensure_customer
+                ensure_customer(str(poster_address))
+            except Exception:
+                pass
+
         start_ms = _time.time() * 1000
         result: dict = {}
         success = False

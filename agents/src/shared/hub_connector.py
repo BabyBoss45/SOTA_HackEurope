@@ -275,11 +275,18 @@ class HubConnector:
         task.add_done_callback(_cleanup)
 
     async def _execute_hub_job(self, job_id: str, job_data: dict) -> None:
-        """Execute a job from the Hub and report the result."""
+        """Execute a job from the Hub and report the result.
+
+        Wraps execution in a Paid.ai tracing context (when available) so that
+        all LLM costs are attributed to the job's customer/agent pair.
+        """
+        import time as _time
         from .base_agent import ActiveJob
 
         description = job_data.get("description", "")
         budget = job_data.get("budget_usdc", 0)
+        agent_type = getattr(self._agent, "agent_type", "worker")
+        agent_name = getattr(self._agent, "agent_name", agent_type)
 
         active_job = ActiveJob(
             job_id=int(job_id) if job_id.isdigit() else 0,
@@ -297,9 +304,65 @@ class HubConnector:
             await self._send_job_failed(job_id, "Agent has no execute_job method")
             return
 
+        # Resolve Paid.ai tracing context (no-op if unavailable)
+        _paid_tracing = None
         try:
-            result = await execute_fn(active_job)
-            success = result.get("success", True) if isinstance(result, dict) else True
+            from sota_sdk.cost import is_tracking_enabled
+            if is_tracking_enabled():
+                from paid.tracing import paid_tracing as _paid_tracing_cls
+                _paid_tracing = _paid_tracing_cls
+        except ImportError:
+            pass
+
+        poster_address = job_data.get("poster", job_id)
+        bid_amount = job_data.get("bid_amount_usdc", budget)
+        start_ms = _time.time() * 1000
+        success = False
+
+        # Ensure customer exists in Paid.ai before opening tracing context
+        if _paid_tracing:
+            try:
+                from sota_sdk.cost import ensure_customer
+                ensure_customer(str(poster_address))
+            except Exception:
+                pass
+
+        try:
+            if _paid_tracing:
+                async with _paid_tracing(
+                    external_customer_id=str(poster_address),
+                    external_product_id=agent_type,
+                ):
+                    result = await execute_fn(active_job)
+                    success = result.get("success", True) if isinstance(result, dict) else True
+
+                    # Send outcome signal to Paid.ai
+                    try:
+                        from sota_sdk.cost import send_outcome
+                        send_outcome(
+                            job_id=str(job_id),
+                            agent_name=agent_type,
+                            revenue_usdc=float(bid_amount) if bid_amount else 0.0,
+                            success=success,
+                            metadata={"elapsed_ms": int(_time.time() * 1000 - start_ms)},
+                        )
+                        logger.info(
+                            "Paid.ai outcome sent: job=%s agent=%s revenue=%.2f success=%s",
+                            job_id, agent_type, bid_amount or 0, success,
+                        )
+                    except Exception as e:
+                        logger.warning("Paid.ai send_outcome failed: %s", e)
+
+                # Flush spans outside the tracing context
+                try:
+                    from sota_sdk.cost import flush_cost_tracking
+                    flush_cost_tracking()
+                except Exception:
+                    pass
+            else:
+                result = await execute_fn(active_job)
+                success = result.get("success", True) if isinstance(result, dict) else True
+
             result_data = result if isinstance(result, dict) else {"result": result}
 
             if success:
