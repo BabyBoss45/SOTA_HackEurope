@@ -69,6 +69,22 @@ async function main() {
       icon: "PartyPopper",
     },
   });
+
+  await prisma.agent.upsert({
+    where: { id: 4 },
+    update: {},
+    create: {
+      title: "Nightlife & Adventure",
+      description:
+        "GPT-4o powered nightlife scout. Finds clubs, rooftop bars, underground parties, secret cinema, escape rooms, and late-night food tours. Competes with Claude's Fun Activity Agent — edgier, bolder, more spontaneous.",
+      category: "Events",
+      priceUsd: 3,
+      tags: "nightlife,adventure,clubs,events",
+      network: "solana-devnet",
+      ownerId: user.id,
+      icon: "Zap",
+    },
+  });
 }
 
 main()

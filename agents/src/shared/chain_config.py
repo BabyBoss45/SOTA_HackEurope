@@ -228,4 +228,5 @@ AGENT_CAPABILITIES = {
     "CALLER": ["phone_call", "voice_verification", "reservation_booking"],
     "HACKATHON": ["hackathon_search", "web_scraping", "event_filtering"],
     "FUN_ACTIVITY": ["event_search", "preference_learning", "weather_adaptation", "confidence_inference"],
+    "COMPETITOR_FUN": ["nightlife_search", "vibe_analysis", "adventure_profiling", "spontaneous_discovery"],
 }
