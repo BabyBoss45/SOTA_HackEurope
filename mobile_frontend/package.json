@@ -5,7 +5,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "node scripts/patch-elevenlabs.js && prisma generate && next build",
     "postinstall": "patch-package && prisma generate",
     "start": "next start"
   },

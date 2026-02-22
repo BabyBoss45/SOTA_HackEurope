@@ -168,6 +168,20 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
   useEffect(() => { userIdRef.current = user?.id ?? null; }, [user?.id]);
   const [isSending, setIsSending] = useState(false);
 
+  // Safety net: catch unhandled ElevenLabs SDK errors that would crash the page
+  useEffect(() => {
+    const handler = (event: PromiseRejectionEvent) => {
+      const msg = String(event.reason?.message ?? event.reason ?? "");
+      if (msg.includes("error_event") || msg.includes("error_type")) {
+        event.preventDefault();
+        console.warn("[ElevenLabs safety net] Suppressed unhandled rejection:", event.reason);
+        setOrbStatus("idle");
+      }
+    };
+    window.addEventListener("unhandledrejection", handler);
+    return () => window.removeEventListener("unhandledrejection", handler);
+  }, []);
+
   // Auto-scroll transcript to bottom on new messages or progress bar or task execution
   useEffect(() => {
     if (scrollRef.current) {
