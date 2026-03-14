@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-03-14T12:30:29.926Z"
-last_activity: 2026-03-14 -- Phase 2 Plan 1 completed (bidding timer fix)
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-14T13:17:04.938Z"
+last_activity: 2026-03-14 -- Phase 3 Plan 1 completed (job status sync pipeline)
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
-  percent: 50
+  completed_phases: 3
+  total_plans: 6
+  completed_plans: 4
+  percent: 67
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-14)
 
 ## Current Position
 
-Phase: 2 of 5 (Bidding Timer)
+Phase: 3 of 5 (Job Status Sync)
 Plan: 1 of 1 in current phase
-Status: Phase 2 complete
-Last activity: 2026-03-14 -- Phase 2 Plan 1 completed (bidding timer fix)
+Status: Phase 3 complete
+Last activity: 2026-03-14 -- Phase 3 Plan 1 completed (job status sync pipeline)
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [█████░░░░░] 50%
 *Updated after each plan completion*
 | Phase 01-job-creation-pipeline P01 | 2min | 3 tasks | 3 files |
 | Phase 02-bidding-timer P02 | 1min | 1 tasks | 1 files |
+| Phase 03 P01 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,8 @@ Recent decisions affecting current work:
 - [Phase 01-01]: Removed demo data entirely instead of keeping as fallback -- marketplace shows reality
 - [Phase 01-01]: Awaited _persist_job instead of fire-and-forget to prevent silent empty marketplace
 - [Phase 02-02]: Reset bidActiveRef and cancel timer on early-return paths rather than letting timer run 15s with no purpose
+- [Phase 03]: 3-stage pipeline replaces 4-stage: Collecting Bids -> In Progress -> Completed
+- [Phase 03]: Failed/expired jobs hidden from marketplace, progress bars removed, agent name shown instead
 
 ### Pending Todos
 
@@ -81,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T12:30:29.923Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-03-14T13:17:04.935Z
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None

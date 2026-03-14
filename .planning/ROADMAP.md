@@ -56,10 +56,10 @@ Plans:
   1. A job transitions through visible statuses on the marketplace: Collecting Bids -> In Progress -> Completed
   2. Status changes appear on the marketplace within one polling cycle (5 seconds) of the backend state change
   3. Completed jobs show "Completed" status and remain visible on the marketplace
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md -- End-to-end status rename, 3-stage pipeline, sort/filter, traffic-light badges
 
 ### Phase 4: Dual Payment Rails
 **Goal**: Users can pay for completed work using either fiat (Stripe) or crypto (USDC) with equal ease
@@ -70,11 +70,11 @@ Plans:
   2. Selecting Stripe completes payment through the existing card flow
   3. Selecting crypto prompts wallet connection only at that moment -- no wallet popup on page load
   4. No wallet auto-connect occurs anywhere in the app until the user explicitly chooses crypto payment
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md -- Remove auto-connect, create PaymentMethodContext, build pre-chat gate screen
+- [ ] 04-02-PLAN.md -- Create UsdcPayment chat bubble, wire ChatScreen payment routing
 
 ### Phase 5: Login Screen Polish
 **Goal**: The login screen looks professional and works well on mobile devices
@@ -97,6 +97,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Job Creation Pipeline | 1/1 | Complete    | 2026-03-14 |
 | 2. Bidding Timer | 2/2 | Complete   | 2026-03-14 |
-| 3. Job Status Sync | 0/? | Not started | - |
-| 4. Dual Payment Rails | 0/? | Not started | - |
+| 3. Job Status Sync | 0/1 | Not started | - |
+| 4. Dual Payment Rails | 0/2 | Not started | - |
 | 5. Login Screen Polish | 0/? | Not started | - |
