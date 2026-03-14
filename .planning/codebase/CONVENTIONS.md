@@ -5,244 +5,204 @@
 ## Naming Patterns
 
 **Files:**
-- TypeScript/Next.js API routes: `route.ts` in `[feature]/route.ts` structure (e.g., `src/app/api/agents/route.ts`)
-- React components: PascalCase with `.tsx` extension (e.g., `VoiceAgent.tsx`, `ThemeProvider.tsx`)
-- Utility/library files: lowercase with hyphens for compound names (e.g., `validators.ts`, `auth.ts`)
-- Python modules: snake_case (e.g., `base_agent.py`, `task_memory.py`)
-- Python test files: `test_*.py` or `*_test.py` convention
+- TypeScript/React components: `kebab-case.tsx` for components, `camelCase.ts` for utilities
+- Examples: `src/components/auth-provider.tsx`, `src/components/theme-toggle.tsx`, `src/lib/utils.ts`
+- API routes: `route.ts` in directory structure matching endpoint path
+- Example: `src/app/api/agents/route.ts` for `/api/agents`
+- Python files: `snake_case.py` for all modules and functions
+- Example: `agents/src/butler/agent.py`, `agents/src/shared/base_agent.py`
 
 **Functions:**
-- TypeScript: camelCase for all functions (e.g., `getCurrentUser`, `validateApiKey`, `parseCapabilities`)
-- TypeScript: PascalCase for React component functions (e.g., `ThemeProvider`, `VoiceAgent`)
-- Python: snake_case for functions (e.g., `get_initial_theme`, `create_butler_tools`)
-- Python: PascalCase for classes (e.g., `ButlerAgent`, `BaseArchiveAgent`)
+- TypeScript/JavaScript: `camelCase`
+- Examples: `generateApiKey()`, `validateApiKey()`, `getCurrentUser()`, `encryptApiKey()`
+- React hooks: `camelCase` prefixed with `use`
+- Examples: `useAuth()`, `useTheme()`, `useConversation()`
+- Exported utility functions: `camelCase`
+- Example: `cn()` utility function combines clsx and tailwindMerge
+- Python functions: `snake_case`
+- Examples: `get_keypair()`, `place_bid()`, `create_wallet_from_env()`
 
 **Variables:**
-- TypeScript: camelCase for all variable names (e.g., `sessionId`, `pendingBid`, `lastBidKey`)
-- Constants: UPPERCASE_WITH_UNDERSCORES (e.g., `THEME_STORAGE_KEY`, `STABLECOIN_DECIMALS`, `JWT_SECRET`)
-- React state: camelCase with descriptive names reflecting state (e.g., `isStarting`, `hasStarted`, `isSendingBid`)
-- Python: snake_case (e.g., `session_id_ref`, `pending_bid`, `last_bid_key`)
+- TypeScript/JavaScript: `camelCase` for constants and mutable variables
+- Example: `const TOKEN_KEY = "sota_session_token"`
+- Python: `UPPER_SNAKE_CASE` for module-level constants
+- Example: `BUTLER_SYSTEM_PROMPT`, `SOLANA_CLUSTER = "devnet"`
 
 **Types:**
-- TypeScript: PascalCase interfaces and types (e.g., `ThemeContextValue`, `VoiceAgentProps`, `SessionPayload`)
-- Python: PascalCase for enums and dataclasses (e.g., `AgentCapability`, `BidDecision`, `ActiveJob`)
+- TypeScript interfaces: `PascalCase`
+- Examples: `AuthUser`, `AuthContextType`, `GeneratedApiKey`, `ValidatedApiKey`, `SessionPayload`
+- TypeScript type aliases: `PascalCase`
+- Example: `type Theme = "dark" | "light"`
+- Python enums: `PascalCase` class with `UPPER_SNAKE_CASE` members
+- Example: `AgentCapability(str, Enum)` with `PHONE_CALL = "phone_call"`
+- Zod schemas: `camelCase` with `Schema` suffix or no suffix based on type export
+- Examples: `authSchema`, `agentSchema`, `agentUpdateSchema`, `profileSchema`
 
 ## Code Style
 
 **Formatting:**
-- ESLint v9 with Next.js core-web-vitals and TypeScript support
-- Config: `eslint.config.mjs` at repository root
-- No Prettier config detected — code formatted via ESLint rules
+- No explicit prettier config found
+- Next.js eslint config is primary source of formatting rules
+- Code uses consistent 2-space indentation across TypeScript/React/CSS
+- Lines follow readability patterns without strict length enforcement
 
 **Linting:**
-- Tool: ESLint with `eslint-config-next` and `eslint-config-next/typescript`
-- Key ignores: `.next/**`, `contracts/**`, `next-env.d.ts`
-- Enforces Next.js best practices and TypeScript strict rules
+- ESLint configuration: `eslint.config.mjs` (flat config format)
+- Extends: `eslint-config-next/core-web-vitals` and `eslint-config-next/typescript`
+- Run: `npm run lint` or `pnpm lint`
+- Ignores: `.next/`, `out/`, `build/`, `contracts/`, Next.js generated files
 
-**TypeScript Settings:**
-- Target: ES2020
-- Strict mode: **Enabled** in main codebase (`tsconfig.json`), **Disabled** in mobile frontend (`mobile_frontend/tsconfig.json`)
-- Main codebase path alias: `@/*` → `./src/*`
-- Mobile frontend path alias: `@/*` → `./*`
+**TypeScript Strictness:**
+- Main tsconfig.json: `"strict": true`
+- Mobile frontend tsconfig.json: `"strict": false`
+- Both use ES2020 target with ESNext module
+- Path aliases configured: `@/*` maps to `./src/*` in main app, `./*` in mobile_frontend
 
 ## Import Organization
 
 **Order:**
-1. External dependencies (React, Next, libraries)
-2. Type imports and interfaces (marked with `import type` when appropriate)
-3. Internal library imports (`@/lib/*`)
-4. Internal component imports (`@/components/*`)
-5. Relative imports (when unavoidable)
+1. External React/Next.js imports
+   - `import React, { ... } from "react"`
+   - `import { ... } from "next/..."`
+2. External third-party library imports
+   - `import { ... } from "@solana/web3.js"`
+   - `import { ... } from "framer-motion"`
+3. Internal application imports using path aliases
+   - `import { cn } from "@/lib/utils"`
+   - `import { useAuth } from "@/components/auth-provider"`
 
 **Path Aliases:**
-- Main app: `@/` resolves to `src/`
-- Mobile frontend: `@/` resolves to root directory
-- Used consistently across all `.ts` and `.tsx` files
-
-**Example pattern from `src/app/api/agents/route.ts`:**
-```typescript
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { agentSchema } from "@/lib/validators";
-import { getCurrentUser } from "@/lib/auth";
-```
+- Main app: `@/*` → `./src/*`
+- Mobile frontend: `@/*` → `./*`
+- Examples in use: `@/lib/utils`, `@/components/button`, `@/lib/validators`
 
 ## Error Handling
 
 **Patterns:**
-- API routes: Wrap in try-catch, return `NextResponse.json()` with error object and HTTP status
-- Error format: `{ error: "Message" }` with appropriate status codes (400, 401, 403, 500)
-- Validation errors: `{ error: fieldErrors }` from Zod `safeParse().error.flatten()`
-- Logging: `console.error("Context:", error)` in catch blocks for debugging
-- No custom error classes except `AuthError` in auth layer
-
-**Example from `src/app/api/agents/route.ts`:**
-```typescript
-try {
-  // operation
-} catch (error) {
-  console.error("Error fetching agents:", error);
-  return NextResponse.json({ error: "Failed to fetch agents" }, { status: 500 });
-}
-```
-
-**Validation Error Handling:**
-```typescript
-const parsed = agentSchema.safeParse(body);
-if (!parsed.success) {
-  return NextResponse.json(
-    { error: parsed.error.flatten().fieldErrors },
-    { status: 400 }
-  );
-}
-```
-
-**Custom Error Classes:**
-- `AuthError` in `src/lib/auth.ts` extends Error with status code property
-- Thrown in auth middleware, caught and converted to HTTP responses in routes
+- Try-catch blocks wrap async operations and API calls
+- Example pattern in `src/components/auth-provider.tsx`:
+  ```typescript
+  fetch("/api/auth/login", {...})
+    .then((res) => (res.ok ? res.json() : null))
+    .catch(() => localStorage.removeItem(TOKEN_KEY))
+    .finally(() => setLoading(false));
+  ```
+- API routes return NextResponse with error objects containing `error` field
+  - Example: `return NextResponse.json({ error: "Unauthorized" }, { status: 401 })`
+- Custom error classes for domain-specific errors
+  - Example: `AuthError` in `src/lib/auth.ts` extends Error with status code property
+- Silent failures permitted for non-critical operations
+  - Example comment: `// Cookie-setting is best-effort; API Bearer auth still works`
+- Zod validation with `.safeParse()` returns error flattening
+  - Example: `parsed.error.flatten().fieldErrors` in validation routes
+- Promise.all() used for parallel async operations
+  - Example in `src/app/api/agents/route.ts` for fetching agent owners
 
 ## Logging
 
-**Framework:** `console.error()`, `console.log()`, `console.warn()`
-- No structured logging framework used
-- Console methods called directly throughout codebase
+**Framework:** `console.*` methods directly
 
 **Patterns:**
-- **Errors:** `console.error("Context:", error)` - always includes context label
-- **Info:** `console.log("Message:", value)` - used sparingly, mainly for debugging
-- **Warnings:** `console.warn("Issue")` - less common
-- Python agents: Use Python's `logging` module with `logger.getLogger(__name__)`
-
-**Examples from code:**
-```typescript
-// src/app/api/agents/route.ts
-console.error("Error fetching agents:", error);
-
-// mobile_frontend/src/context/AuthContext.tsx
-console.warn('Failed to load chat history:', err);
-
-// mobile_frontend/src/components/VoiceAgent.tsx
-console.log('📤 Sending to Butler:', query);
-console.log('✅ Butler Agent response:', data);
-console.error('❌ Butler Agent error:', error);
-```
-
-**Python logging:**
-```python
-# agents/src/butler/agent.py
-logger = logging.getLogger(__name__)
-```
+- `console.error()` for error logging with context
+- Example: `console.error("Error fetching agents:", error)`
+- No structured logging library detected in main codebase
+- Python agents use `logging.getLogger(__name__)` pattern
+- Example in `agents/src/butler/agent.py`: `logger = logging.getLogger(__name__)`
 
 ## Comments
 
 **When to Comment:**
-- Function headers: Docstrings for functions, especially public/exported ones
-- Complex logic: Explain *why*, not *what* (code shows what)
-- TODOs/FIXMEs: Not used systematically in codebase
-- Section headers: Use for organizing large blocks (e.g., `// ── API Key Generation & Validation ──`)
+- Document non-obvious logic or business logic
+- Examples in codebase: Section headers like `// ═══════════════════════════════════════════════════════════` separate logical units
+- Inline comments explain intent rather than "what" the code does
+- Example in `src/lib/auth.ts`: `// 7 days` next to expiration time
+- JSDoc-style comments over public APIs and complex functions (sparse usage)
 
 **JSDoc/TSDoc:**
-- Minimal use observed
-- Interfaces and types documented inline where they appear
-- Function comments: Brief descriptions of purpose
-
-**Example from `src/lib/validators.ts`:**
-```typescript
-/** Validate a base-58 Solana address (regex, no checksum). */
-export function isValidSolanaAddress(addr: string): boolean {
-
-/** Validate an HTTP(S) URL string. */
-export function isValidHttpUrl(s: string): boolean {
-
-/** Safely parse a JSON-encoded capabilities string. Returns string[] or fallback. */
-export function parseCapabilities(raw: string | null | undefined): string[] {
-```
+- Minimal JSDoc usage in TypeScript codebase
+- When used, documents complex functions and public APIs
+- Example: Python docstrings used liberally for agent classes
+  - `"""Base Archive Agent -- Solana Edition\n\nAbstract base class...`
 
 ## Function Design
 
-**Size:** No strict limits observed; functions range from 5-50 lines
-- Single-responsibility principle applied (each function does one thing)
-- Helper functions extracted for repeated logic
+**Size:** Functions kept to single responsibility; complex operations delegated
+- Example: `validateApiKey()` handles lookup, validation, and state update separately
+- Utility functions are small: `cn()` is 2 lines, `hashPassword()` is 1 line
 
 **Parameters:**
-- Named parameters preferred
-- Type annotations always used in TypeScript
-- Interface types for complex parameter objects
+- Destructuring used for object parameters
+- Example: `export function AuthProvider({ children }: { children: React.ReactNode })`
+- Type annotations required in TypeScript files
+- Python uses type hints via pydantic and native typing
 
 **Return Values:**
-- Explicit return types always specified in TypeScript
-- Null/undefined returned for not-found scenarios
-- Promise types for async functions
-- Objects for multiple return values
-
-**Example from `src/lib/auth.ts`:**
-```typescript
-export function generateApiKey(): GeneratedApiKey {
-  // Structured return type
-
-export async function validateApiKey(fullKey: string): Promise<ValidatedApiKey | null> {
-  // Explicit return type with union for null
-
-export async function getCurrentUser(request: Request): Promise<User | null> {
-  // Async with null return
-```
+- Functions explicitly return null for failure cases rather than throwing
+- Examples: `validateApiKey()` returns `null` on failure, not exception
+- React components return JSX or null
+- Async functions return Promise-wrapped types
+- Example: `async function GET(req: Request): Promise<NextResponse>`
 
 ## Module Design
 
 **Exports:**
 - Named exports preferred over default exports
-- Common pattern: `export function name() {}` and `export interface Name {}`
-- One responsibility per file
+- Example: `export function cn(...)` rather than `export default function`
+- Exception: React context providers occasionally use named exports
+- Barrel files used for component grouping (not heavily used)
 
 **Barrel Files:**
-- Not heavily used
-- Direct imports preferred (e.g., `import { getCurrentUser } from "@/lib/auth"`)
+- Not extensively used in this codebase
+- Direct imports preferred
+- Example: Import directly from `@/lib/auth` not from `@/lib` index
 
-**Examples of module structure:**
-- `src/lib/auth.ts` - Authentication utilities only
-- `src/lib/validators.ts` - Validation schemas and helpers
-- `src/lib/utils.ts` - Utility functions (e.g., `cn()` for class merging)
-- `src/components/theme-provider.tsx` - Theme context and hooks
+## Prisma Models
 
-## React/Next.js Conventions
+**Convention:**
+- PascalCase model names
+- camelCase field names
+- Relationships use `@relation()` with explicit field references
+- Example: `owner User @relation(fields: [ownerId], references: [id])`
+- Comments inline to document purpose of fields
+- Example: `// Agent's payment wallet address` for walletAddress field
+- Timestamps: `createdAt` with `@default(now())`, `updatedAt` with `@updatedAt`
 
-**Client Components:**
-- Marked with `"use client"` directive when needed (hooks, event handlers)
-- Example: `mobile_frontend/src/context/AuthContext.tsx`
+## Validation
 
-**Context Providers:**
-- createContext with TypeScript type
-- Provider component and custom hook for usage
-- Custom hook throws error if used outside provider
-- Pattern: `useContext()` guard with helpful error message
+**Primary Tool:** Zod schema validation library
+- Example: `agentSchema` in `src/lib/validators.ts`
+- Helper functions provide reusable validators
+- Examples: `isValidSolanaAddress()`, `isValidHttpUrl()`
+- Optional string transformation removes empty strings before validation
+- Example in validators: `.transform((v) => (v.trim() === "" ? undefined : v))`
 
-**Example from `src/components/theme-provider.tsx`:**
-```typescript
-export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error("useTheme must be used inside ThemeProvider");
-  }
-  return context;
-}
-```
+## Context and Providers
 
-## API Route Conventions
+**React Context Pattern:**
+- Context created with `createContext<Type | undefined>(undefined)`
+- Provider component handles initialization and state management
+- Custom hook (`useContext`) wraps access with error checking
+- Examples: `AuthProvider`, `ThemeProvider`
+- Error thrown if hook used outside provider
+- Example: `throw new Error("useAuth must be used within an AuthProvider")`
 
-**Structure:**
-- Exports named async functions: `GET`, `POST`, `PUT`, `DELETE`, etc.
-- Function signature: `async function METHOD(req: Request): Promise<NextResponse>`
-- Path-based routing: File location determines route
+## API Key Management
 
-**Request Handling:**
-- Extract search params: `new URL(req.url).searchParams`
-- Parse body: `await req.json()`
-- Return: `NextResponse.json(data)` or `NextResponse.json(error, { status })`
+**Convention:**
+- API keys never stored in plaintext
+- Encrypted with AES-256-CBC using `ENCRYPTION_KEY` from environment
+- Hash stored separately using SHA-256 for comparison without decryption
+- Example in `src/lib/auth.ts`: `generateApiKey()`, `encryptApiKey()`, `decryptApiKey()`
 
-**Authentication:**
-- Use `getCurrentUser(req)` or `requireAuth(req)` from `@/lib/auth`
-- Return 401 for unauthenticated requests
-- Return 403 for insufficient permissions
+## Session Management
+
+**Convention:**
+- Session tokens are base64-encoded JSON with SHA-256 signature
+- Token format: `Buffer.from("${data}.${signature}").toString('base64')`
+- Tokens include expiration (7 days default)
+- Custom implementation rather than reliance on JWT library
+- Validation checks signature and expiration time
+- Example in `src/lib/auth.ts`: `createSessionToken()`, `verifySessionToken()`
 
 ---
 
