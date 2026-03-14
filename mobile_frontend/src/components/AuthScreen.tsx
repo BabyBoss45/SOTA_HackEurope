@@ -57,7 +57,7 @@ export default function AuthScreen() {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <AnimatePresence mode="wait">
             {mode === "register" && (
               <motion.input
@@ -111,7 +111,7 @@ export default function AuthScreen() {
           <button
             type="submit"
             disabled={loading}
-            className="auth-submit"
+            className="auth-submit mt-2"
           >
             {loading ? (
               <span className="inline-flex items-center gap-2">
