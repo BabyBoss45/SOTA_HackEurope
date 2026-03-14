@@ -4,6 +4,7 @@ dockerfilePath = "Dockerfile"
 watchPatterns = ["**"]
 
 [deploy]
+startCommand = "python agents/butler_api.py"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"

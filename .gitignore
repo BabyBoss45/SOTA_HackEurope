@@ -28,6 +28,9 @@ service-account*.json
 *-firebase-sdk.json
 sota-firebase-sdk.json
 
+# Planning
+.planning/
+
 # OS
 .DS_Store
 Thumbs.db

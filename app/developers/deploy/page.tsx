@@ -20,6 +20,8 @@ import {
   Rocket,
 } from "lucide-react";
 import { FloatingPaths } from "@/components/ui/background-paths-wrapper";
+import { GlassCard } from "@/components/ui/glass-card";
+import { AnimateIn, StaggerContainer, StaggerItem } from "@/components/ui/animate-in";
 import { useAuth } from "@/components/auth-provider";
 import {
   generateAgentPy,
@@ -314,7 +316,7 @@ export default function DeployPage() {
       {/* Auth Guard Overlay */}
       {!authLoading && !user && (
         <div className="absolute inset-0 z-40 flex items-center justify-center">
-          <div className="absolute inset-0 backdrop-blur-md bg-[color:var(--overlay-strong)]" />
+          <div className="absolute inset-0 backdrop-blur-[16px] bg-[color:var(--overlay-strong)]" />
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -374,7 +376,7 @@ export default function DeployPage() {
                 <span className="text-[color:var(--text-muted)]">/</span>
                 <span className="text-sm text-violet-400">Deploy Agent</span>
               </div>
-              <h1 className="text-3xl font-bold text-[color:var(--foreground)] mb-2">Deploy Agent</h1>
+              <h1 className="text-3xl font-bold font-display text-[color:var(--foreground)] mb-2">Deploy Agent</h1>
               <p className="text-[color:var(--text-muted)]">Configure and deploy your agent to the SOTA marketplace</p>
             </div>
             <Link
@@ -398,14 +400,14 @@ export default function DeployPage() {
           </motion.div>
         )}
         {success && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center gap-3"
-          >
-            <Check size={20} />
-            {success}
-          </motion.div>
+          <AnimateIn preset="scale-up" duration={0.4}>
+            <AnimateIn preset="bounce" delay={0.2}>
+              <div className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center gap-3">
+                <Check size={20} />
+                {success}
+              </div>
+            </AnimateIn>
+          </AnimateIn>
         )}
 
         {/* Main Split Layout */}
@@ -416,10 +418,12 @@ export default function DeployPage() {
           className="grid grid-cols-1 lg:grid-cols-2 gap-6"
         >
           {/* ── LEFT PANEL: Form ── */}
-          <div className="space-y-6">
+          <StaggerContainer className="space-y-6" staggerDelay={0.12}>
             {/* Identity Section */}
-            <div className="p-6 rounded-xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] backdrop-blur-sm">
-              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4 flex items-center gap-2">
+            <StaggerItem preset="slide-left">
+            <GlassCard className="p-6" hoverGlow={false}>
+              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4 flex items-center gap-3">
+                <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-500/20 border border-violet-500/40 text-violet-400 text-xs font-bold shrink-0">1</span>
                 <Bot size={20} className="text-violet-400" />
                 Agent Identity
               </h3>
@@ -496,32 +500,45 @@ export default function DeployPage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </GlassCard>
+            </StaggerItem>
 
             {/* Capabilities Section */}
-            <div className="p-6 rounded-xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] backdrop-blur-sm">
-              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4">Capabilities</h3>
+            <StaggerItem preset="slide-left">
+            <GlassCard className="p-6" hoverGlow={false}>
+              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4 flex items-center gap-3">
+                <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-500/20 border border-violet-500/40 text-violet-400 text-xs font-bold shrink-0">2</span>
+                Capabilities
+              </h3>
               <div className="flex flex-wrap gap-2">
-                {CAPABILITIES.map((cap) => (
-                  <button
-                    key={cap}
-                    type="button"
-                    onClick={() => toggleCapability(cap)}
-                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                      formData.capabilities.includes(cap)
-                        ? "bg-violet-500/20 border-violet-500 text-violet-300"
-                        : "bg-[color:var(--surface-1)] border-[color:var(--border-subtle)] text-[color:var(--text-muted)] hover:border-violet-500/50"
-                    }`}
-                  >
-                    {cap.replace(/_/g, " ")}
-                  </button>
-                ))}
+                {CAPABILITIES.map((cap) => {
+                  const isActive = formData.capabilities.includes(cap);
+                  return (
+                    <button
+                      key={cap}
+                      type="button"
+                      onClick={() => toggleCapability(cap)}
+                      className={`px-3.5 py-1.5 text-sm rounded-full border transition-all duration-200 ${
+                        isActive
+                          ? "bg-violet-500/20 border-violet-500 text-violet-300 shadow-[0_0_12px_var(--glow-accent)]"
+                          : "bg-[color:var(--surface-1)] border-[color:var(--border-subtle)] text-[color:var(--text-muted)] hover:border-violet-500/50 hover:text-violet-300/70"
+                      }`}
+                    >
+                      {cap.replace(/_/g, " ")}
+                    </button>
+                  );
+                })}
               </div>
-            </div>
+            </GlassCard>
+            </StaggerItem>
 
             {/* Bid Strategy Section */}
-            <div className="p-6 rounded-xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] backdrop-blur-sm">
-              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4">Bid Strategy</h3>
+            <StaggerItem preset="slide-left">
+            <GlassCard className="p-6" hoverGlow={false}>
+              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4 flex items-center gap-3">
+                <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-500/20 border border-violet-500/40 text-violet-400 text-xs font-bold shrink-0">3</span>
+                Bid Strategy
+              </h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">
@@ -553,11 +570,14 @@ export default function DeployPage() {
                   />
                 </div>
               </div>
-            </div>
+            </GlassCard>
+            </StaggerItem>
 
             {/* API Connection Section */}
-            <div className="p-6 rounded-xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] backdrop-blur-sm">
-              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4 flex items-center gap-2">
+            <StaggerItem preset="slide-left">
+            <GlassCard className="p-6" hoverGlow={false}>
+              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4 flex items-center gap-3">
+                <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-500/20 border border-violet-500/40 text-violet-400 text-xs font-bold shrink-0">4</span>
                 <Globe size={20} className="text-violet-400" />
                 API Connection
               </h3>
@@ -595,11 +615,14 @@ export default function DeployPage() {
                   <p className="text-xs text-[color:var(--text-muted)] mt-1">Optional callback for status updates (job assigned, cancelled, etc.)</p>
                 </div>
               </div>
-            </div>
+            </GlassCard>
+            </StaggerItem>
 
             {/* Environment Section */}
-            <div className="p-6 rounded-xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] backdrop-blur-sm">
-              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4 flex items-center gap-2">
+            <StaggerItem preset="slide-left">
+            <GlassCard className="p-6" hoverGlow={false}>
+              <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4 flex items-center gap-3">
+                <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-500/20 border border-violet-500/40 text-violet-400 text-xs font-bold shrink-0">5</span>
                 <Wallet size={20} className="text-violet-400" />
                 Environment
               </h3>
@@ -649,32 +672,28 @@ export default function DeployPage() {
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </GlassCard>
+            </StaggerItem>
+          </StaggerContainer>
 
           {/* ── RIGHT PANEL: Code Preview ── */}
+          <AnimateIn preset="fade-up" delay={0.3}>
           <div className="lg:sticky lg:top-24 lg:self-start">
             <div className="rounded-xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] backdrop-blur-sm overflow-hidden">
-              {/* Tab bar */}
-              <div className="flex items-center border-b border-[color:var(--border-subtle)] bg-[color:var(--surface-2)] overflow-x-auto">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors border-b-2 ${
-                      activeTab === tab.id
-                        ? "text-violet-400 border-violet-400 bg-[color:var(--surface-1)]"
-                        : "text-[color:var(--text-muted)] border-transparent hover:text-[color:var(--foreground)]"
-                    }`}
-                  >
-                    {tab.icon}
-                    {tab.label}
-                  </button>
-                ))}
+              {/* IDE Title Bar */}
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-[color:var(--surface-2)] border-b border-[color:var(--border-subtle)]">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-full bg-[#FF5F57]" />
+                  <span className="w-3 h-3 rounded-full bg-[#FEBC2E]" />
+                  <span className="w-3 h-3 rounded-full bg-[#28C840]" />
+                </div>
+                <span className="ml-2 text-xs text-[color:var(--text-muted)] font-mono select-none">
+                  {sanitiseName(formData.name || "my-agent")}-agent
+                </span>
                 {/* Copy button */}
                 <button
                   onClick={handleCopy}
-                  className="ml-auto mr-2 p-2 hover:bg-[color:var(--surface-hover)] rounded-lg transition-colors"
+                  className="ml-auto p-1.5 hover:bg-[color:var(--surface-hover)] rounded-md transition-colors"
                   title="Copy to clipboard"
                 >
                   {copied ? (
@@ -683,6 +702,25 @@ export default function DeployPage() {
                     <Copy size={14} className="text-[color:var(--text-muted)]" />
                   )}
                 </button>
+              </div>
+              {/* Tab bar */}
+              <div className="flex items-center border-b border-[color:var(--border-subtle)] bg-[color:var(--surface-2)]/50 overflow-x-auto">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2 ${
+                      activeTab === tab.id
+                        ? "text-violet-400 border-violet-400 bg-[color:var(--surface-1)]"
+                        : "text-[color:var(--text-muted)] border-transparent hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface-1)]/50"
+                    }`}
+                  >
+                    <span className={`${activeTab === tab.id ? "text-violet-400" : "text-[color:var(--text-muted)]"}`}>
+                      {tab.icon}
+                    </span>
+                    {tab.label}
+                  </button>
+                ))}
               </div>
 
               {/* Code area */}
@@ -697,13 +735,25 @@ export default function DeployPage() {
             <div className="mt-6 flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => handleSubmit(false)}
-                disabled={submitting}
+                disabled={submitting || !!success}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-violet-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting && !downloadOnly ? (
                   <>
                     <Loader2 size={18} className="animate-spin" />
                     Registering...
+                  </>
+                ) : success && !downloadOnly ? (
+                  <>
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                      className="inline-flex"
+                    >
+                      <Check size={18} />
+                    </motion.span>
+                    Registered
                   </>
                 ) : (
                   <>
@@ -714,13 +764,25 @@ export default function DeployPage() {
               </button>
               <button
                 onClick={() => handleSubmit(true)}
-                disabled={submitting}
+                disabled={submitting || !!success}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[color:var(--surface-1)] hover:bg-[color:var(--surface-hover)] border border-[color:var(--border-subtle)] text-[color:var(--foreground)] font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting && downloadOnly ? (
                   <>
                     <Loader2 size={18} className="animate-spin" />
                     Generating...
+                  </>
+                ) : success && downloadOnly ? (
+                  <>
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                      className="inline-flex"
+                    >
+                      <Check size={18} />
+                    </motion.span>
+                    Downloaded
                   </>
                 ) : (
                   <>
@@ -731,6 +793,7 @@ export default function DeployPage() {
               </button>
             </div>
           </div>
+          </AnimateIn>
         </motion.div>
       </div>
     </div>

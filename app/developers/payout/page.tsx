@@ -20,6 +20,9 @@ import {
   XCircle,
 } from "lucide-react";
 import { FloatingPaths } from "@/components/ui/background-paths-wrapper";
+import { GlassCard } from "@/components/ui/glass-card";
+import { SectionHeading } from "@/components/ui/section-heading";
+import { AnimateIn, StaggerContainer, StaggerItem } from "@/components/ui/animate-in";
 import { useAuth } from "@/components/auth-provider";
 import Link from "next/link";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
@@ -359,7 +362,7 @@ export default function PayoutPage(): React.JSX.Element {
     >
       {!authLoading && !user && (
         <div className="absolute inset-0 z-40 flex items-center justify-center">
-          <div className="absolute inset-0 backdrop-blur-md bg-[color:var(--overlay-strong)]" />
+          <div className="absolute inset-0 bg-[color:var(--overlay-strong)]" style={{ backdropFilter: "blur(16px)" }} />
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -369,7 +372,7 @@ export default function PayoutPage(): React.JSX.Element {
               <Lock size={36} className="text-violet-400" />
             </div>
             <div className="text-center">
-              <h2 className="text-2xl font-bold text-[color:var(--foreground)] mb-2">Payout Portal Locked</h2>
+              <h2 className="text-2xl font-display font-bold text-[color:var(--foreground)] mb-2">Payout Portal Locked</h2>
               <p className="text-[color:var(--text-muted)] text-sm leading-relaxed">
                 Sign in to access earnings and agent management on Solana Devnet.
               </p>
@@ -399,39 +402,45 @@ export default function PayoutPage(): React.JSX.Element {
 
       <div className={`relative z-10 max-w-5xl mx-auto px-6 py-12 ${!authLoading && !user ? "pointer-events-none select-none" : ""}`}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-          <h1 className="text-3xl font-bold text-[color:var(--foreground)] mb-2">Developer Payout</h1>
-          <p className="text-[color:var(--text-muted)]">Manage your agents and track earnings on Solana Devnet</p>
+          <SectionHeading
+            title="Developer Payout"
+            subtitle="Manage your agents and track earnings on Solana Devnet"
+            gradient
+            size="large"
+          />
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="mb-8 p-4 rounded-2xl bg-[color:var(--surface-1)] backdrop-blur-sm border border-[color:var(--border-subtle)] flex items-center justify-between"
+          className="mb-8 p-[1px] rounded-2xl bg-gradient-to-r from-violet-500/40 via-indigo-500/40 to-purple-500/40"
         >
-          {account ? (
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                <Wallet size={16} className="text-white" />
+          <div className="p-5 rounded-2xl bg-[color:var(--surface-elevated)] backdrop-blur-xl flex items-center justify-between">
+            {account ? (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                  <Wallet size={18} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-xs text-[color:var(--text-muted)] uppercase tracking-wider">Connected</p>
+                  <p className="text-[color:var(--foreground)] font-mono text-sm font-medium">{shortAddr(account)}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-[color:var(--text-muted)]">Connected</p>
-                <p className="text-[color:var(--foreground)] font-mono text-sm">{shortAddr(account)}</p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-[color:var(--text-muted)]">
-              Connect your Solana wallet using the button in the header to get started.
-            </p>
-          )}
-          <a
-            href={getExplorerUrl("address", PROGRAM_ID.toBase58())}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-[color:var(--text-muted)] hover:text-violet-400 transition-colors flex items-center gap-1"
-          >
-            Program <ExternalLink size={12} />
-          </a>
+            ) : (
+              <p className="text-base font-medium text-[color:var(--text-muted)]">
+                Connect your Solana wallet using the button in the header to get started.
+              </p>
+            )}
+            <a
+              href={getExplorerUrl("address", PROGRAM_ID.toBase58())}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-[color:var(--text-muted)] hover:text-violet-400 transition-colors flex items-center gap-1"
+            >
+              Program <ExternalLink size={12} />
+            </a>
+          </div>
         </motion.div>
 
         <AnimatePresence>
@@ -507,13 +516,16 @@ export default function PayoutPage(): React.JSX.Element {
                 transition={{ delay: 0.12 }}
                 className="mb-6 p-5 rounded-2xl bg-gradient-to-r from-emerald-900/30 to-teal-900/20 backdrop-blur-sm border border-emerald-700/30"
               >
-                <h2 className="text-sm font-medium text-emerald-400 mb-3 flex items-center gap-2">
+                <h2 className="text-sm font-display font-medium text-emerald-400 mb-4 flex items-center gap-2 uppercase tracking-wider">
                   <TrendingUp size={16} />
                   Total Agent Earnings
                 </h2>
-                <p className="text-3xl font-bold text-[color:var(--foreground)] mb-3">
-                  {fmtUsdc(totalEarnings)} USDC
-                </p>
+                <div className="relative mb-4">
+                  <div className="absolute -inset-4 bg-emerald-400/10 blur-2xl rounded-full pointer-events-none" />
+                  <p className="relative text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400">
+                    {fmtUsdc(totalEarnings)} <span className="text-2xl">USDC</span>
+                  </p>
+                </div>
                 {agents.length > 1 && (
                   <div className="space-y-1">
                     {agents.map((a) => (
@@ -536,7 +548,7 @@ export default function PayoutPage(): React.JSX.Element {
                 transition={{ delay: 0.13 }}
                 className="mb-6 p-5 rounded-2xl bg-gradient-to-r from-amber-900/20 to-orange-900/10 backdrop-blur-sm border border-amber-700/30"
               >
-                <h2 className="text-sm font-medium text-amber-400 mb-2 flex items-center gap-2">
+                <h2 className="text-sm font-display font-medium text-amber-400 mb-2 flex items-center gap-2">
                   <Shield size={16} />
                   On-Chain Registration Required
                 </h2>
@@ -555,40 +567,40 @@ export default function PayoutPage(): React.JSX.Element {
 
             {selectedAgent && (
               <>
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.15 }}
-                  className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8"
-                >
-                  <StatCard
-                    icon={<Coins size={20} className="text-amber-400" />}
-                    label="Earned (USDC)"
-                    value={`${fmtUsdc(agentEarnings.get(selectedAgent) ?? 0n)} USDC`}
-                    loading={loadingData}
-                  />
-                  <StatCard
-                    icon={<Shield size={20} className="text-violet-400" />}
-                    label="On-Chain Status"
-                    value={selectedAgentInfo?.isOnChain ? "Registered" : "Not Registered"}
-                    loading={loadingData}
-                  />
-                  <StatCard
-                    icon={<TrendingUp size={20} className="text-emerald-400" />}
-                    label="Agent Status"
-                    value={selectedAgentInfo?.isActive ? "Active" : "Inactive"}
-                    loading={loadingData}
-                  />
-                </motion.div>
+                <StaggerContainer className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8" staggerDelay={0.1}>
+                  <StaggerItem preset="scale-up">
+                    <StatCard
+                      icon={<Coins size={20} className="text-amber-400" />}
+                      label="Earned (USDC)"
+                      value={`${fmtUsdc(agentEarnings.get(selectedAgent) ?? 0n)} USDC`}
+                      loading={loadingData}
+                      accentColor="amber"
+                    />
+                  </StaggerItem>
+                  <StaggerItem preset="scale-up">
+                    <StatCard
+                      icon={<Shield size={20} className="text-violet-400" />}
+                      label="On-Chain Status"
+                      value={selectedAgentInfo?.isOnChain ? "Registered" : "Not Registered"}
+                      loading={loadingData}
+                      accentColor="violet"
+                    />
+                  </StaggerItem>
+                  <StaggerItem preset="scale-up">
+                    <StatCard
+                      icon={<TrendingUp size={20} className="text-emerald-400" />}
+                      label="Agent Status"
+                      value={selectedAgentInfo?.isActive ? "Active" : "Inactive"}
+                      loading={loadingData}
+                      accentColor="emerald"
+                    />
+                  </StaggerItem>
+                </StaggerContainer>
 
                 {taskStats && taskStats.total > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.25 }}
-                    className="mb-8 p-6 rounded-2xl bg-[color:var(--surface-1)] backdrop-blur-sm border border-[color:var(--border-subtle)]"
-                  >
-                    <h2 className="text-lg font-semibold text-[color:var(--foreground)] mb-6 flex items-center gap-2">
+                  <AnimateIn preset="fade-up" delay={0.15} className="mb-8">
+                    <div className="p-6 rounded-2xl bg-[color:var(--surface-1)] backdrop-blur-sm border border-[color:var(--border-subtle)]">
+                    <h2 className="text-lg font-display font-semibold text-[color:var(--foreground)] mb-6 flex items-center gap-2">
                       <BarChart3 size={18} className="text-violet-400" />
                       Agent Metrics
                     </h2>
@@ -623,7 +635,9 @@ export default function PayoutPage(): React.JSX.Element {
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-center gap-6 mb-6">
-                      <JobsPieChart stats={taskStats} />
+                      <GlassCard className="p-4 flex items-center justify-center" hoverGlow={false}>
+                        <JobsPieChart stats={taskStats} />
+                      </GlassCard>
                       <div className="flex flex-col gap-2 text-sm">
                         {[
                           { label: "Completed", count: taskStats.completed, color: "bg-emerald-500" },
@@ -642,7 +656,7 @@ export default function PayoutPage(): React.JSX.Element {
 
                     {agentMetrics.length > 0 && (
                       <div>
-                        <h3 className="text-sm font-medium text-[color:var(--text-muted)] mb-3">Agent Breakdown</h3>
+                        <h3 className="text-sm font-display font-medium text-[color:var(--text-muted)] mb-3">Agent Breakdown</h3>
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
@@ -679,16 +693,13 @@ export default function PayoutPage(): React.JSX.Element {
                         </div>
                       </div>
                     )}
-                  </motion.div>
+                  </div>
+                  </AnimateIn>
                 )}
 
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.27 }}
-                  className="mb-8 p-6 rounded-2xl bg-[color:var(--surface-1)] backdrop-blur-sm border border-[color:var(--border-subtle)]"
-                >
-                  <h2 className="text-lg font-semibold text-[color:var(--foreground)] mb-6 flex items-center gap-2">
+                <AnimateIn preset="fade-up" delay={0.2}>
+                <div className="mb-8 p-6 rounded-2xl bg-[color:var(--surface-1)] backdrop-blur-sm border border-[color:var(--border-subtle)]">
+                  <h2 className="text-lg font-display font-semibold text-[color:var(--foreground)] mb-6 flex items-center gap-2">
                     <BrainCircuit size={18} className="text-cyan-400" />
                     Cost Intelligence
                   </h2>
@@ -729,7 +740,7 @@ export default function PayoutPage(): React.JSX.Element {
 
                       {costData.length > 0 && (
                         <div>
-                          <h3 className="text-sm font-medium text-[color:var(--text-muted)] mb-3">Per-Agent Breakdown</h3>
+                          <h3 className="text-sm font-display font-medium text-[color:var(--text-muted)] mb-3">Per-Agent Breakdown</h3>
                           <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                               <thead>
@@ -753,13 +764,19 @@ export default function PayoutPage(): React.JSX.Element {
                                     ? "text-amber-400"
                                     : "text-red-400";
                                   return (
-                                    <tr key={i} className="border-b border-[color:var(--border-subtle)]/50">
-                                      <td className="py-2 text-[color:var(--foreground)]">{agent.name}</td>
-                                      <td className="py-2 text-right text-emerald-400 font-mono">${agent.revenue.toFixed(2)}</td>
-                                      <td className="py-2 text-right text-red-400 font-mono">${agent.cost.toFixed(4)}</td>
-                                      <td className="py-2 text-right text-cyan-400 font-mono">${agent.profit.toFixed(2)}</td>
-                                      <td className={`py-2 text-right font-mono ${marginColor}`}>{margin}%</td>
-                                      <td className="py-2 text-right text-[color:var(--foreground)] font-mono">{agent.jobCount}</td>
+                                    <tr key={i} className="border-b border-[color:var(--border-subtle)]/50 even:bg-[color:var(--surface-3)]">
+                                      <td className="py-2.5 px-2 text-[color:var(--foreground)] rounded-l-lg">{agent.name}</td>
+                                      <td className="py-2.5 px-2 text-right text-emerald-400 font-mono">${agent.revenue.toFixed(2)}</td>
+                                      <td className="py-2.5 px-2 text-right text-red-400 font-mono">${agent.cost.toFixed(4)}</td>
+                                      <td className="py-2.5 px-2 text-right text-cyan-400 font-mono">${agent.profit.toFixed(2)}</td>
+                                      <td className={`py-2.5 px-2 text-right font-mono font-semibold ${marginColor}`}>
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+                                          margin >= 80 ? "bg-emerald-500/15" : margin >= 50 ? "bg-amber-500/15" : "bg-red-500/15"
+                                        }`}>
+                                          {margin >= 50 ? "+" : ""}{margin}%
+                                        </span>
+                                      </td>
+                                      <td className="py-2.5 px-2 text-right text-[color:var(--foreground)] font-mono rounded-r-lg">{agent.jobCount}</td>
                                     </tr>
                                   );
                                 })}
@@ -774,7 +791,8 @@ export default function PayoutPage(): React.JSX.Element {
                       No cost data available. Run agents to generate cost intelligence.
                     </p>
                   )}
-                </motion.div>
+                </div>
+                </AnimateIn>
 
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -782,7 +800,7 @@ export default function PayoutPage(): React.JSX.Element {
                   transition={{ delay: 0.3 }}
                   className="p-4 rounded-2xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)]"
                 >
-                  <h3 className="text-sm font-medium text-[color:var(--text-muted)] mb-3">Program on Solana Devnet</h3>
+                  <h3 className="text-sm font-display font-medium text-[color:var(--text-muted)] mb-3">Program on Solana Devnet</h3>
                   <div className="flex flex-wrap gap-3">
                     <a
                       href={getExplorerUrl("address", PROGRAM_ID.toBase58())}
@@ -819,21 +837,29 @@ interface StatCardProps {
   label: string;
   value: string;
   loading: boolean;
+  accentColor?: "amber" | "violet" | "emerald";
 }
 
-function StatCard({ icon, label, value, loading }: StatCardProps): React.JSX.Element {
+const accentBorderMap: Record<string, string> = {
+  amber: "border-t-amber-500",
+  violet: "border-t-violet-500",
+  emerald: "border-t-emerald-500",
+};
+
+function StatCard({ icon, label, value, loading, accentColor }: StatCardProps): React.JSX.Element {
+  const borderClass = accentColor ? `border-t-2 ${accentBorderMap[accentColor]}` : "";
   return (
-    <div className="p-4 rounded-2xl bg-[color:var(--surface-1)] backdrop-blur-sm border border-[color:var(--border-subtle)]">
-      <div className="flex items-center gap-2 mb-1">
+    <GlassCard className={`p-4 ${borderClass}`} hoverGlow>
+      <div className="flex items-center gap-2 mb-2">
         {icon}
-        <span className="text-xs text-[color:var(--text-muted)]">{label}</span>
+        <span className="text-xs text-[color:var(--text-muted)] uppercase tracking-wider">{label}</span>
       </div>
       {loading ? (
-        <div className="h-7 w-24 bg-[color:var(--surface-1)] rounded animate-pulse mt-1" />
+        <div className="h-7 w-24 rounded-lg skeleton-shimmer mt-1" />
       ) : (
         <p className="text-xl font-bold text-[color:var(--foreground)]">{value}</p>
       )}
-    </div>
+    </GlassCard>
   );
 }
 

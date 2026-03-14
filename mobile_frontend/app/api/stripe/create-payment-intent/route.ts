@@ -20,9 +20,10 @@ export async function POST(request: NextRequest) {
   try {
     const { jobId, amount, agentAddress, boardJobId, userId } = await request.json();
 
-    if (!jobId || !agentAddress) {
+    const effectiveJobId = jobId || boardJobId;
+    if (!effectiveJobId || !agentAddress) {
       return NextResponse.json(
-        { error: "Missing required fields: jobId, agentAddress" },
+        { error: "Missing required fields: jobId or boardJobId, agentAddress" },
         { status: 400 }
       );
     }
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
       currency: "usd",
       automatic_payment_methods: { enabled: true },
       metadata: {
-        jobId: String(jobId),
+        jobId: String(effectiveJobId),
         agentAddress,
         usdcAmountRaw: String(Math.round(amount * 1e6)), // 6 decimals for USDC
         boardJobId: boardJobId ? String(boardJobId) : "",

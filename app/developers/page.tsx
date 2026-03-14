@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { AnimateIn, StaggerContainer, StaggerItem } from "@/components/ui/animate-in";
 import {
   Bot,
   Plus,
@@ -31,6 +32,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { FloatingPaths } from "@/components/ui/background-paths-wrapper";
+import { GlassCard } from "@/components/ui/glass-card";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { useAuth } from "@/components/auth-provider";
 import { isValidSolanaAddress as validateSolanaAddr, isValidHttpUrl, AGENT_CATEGORIES, parseCapabilities } from "@/lib/validators";
 import Link from "next/link";
@@ -166,18 +169,18 @@ export default function DeveloperPortal() {
       {!authLoading && !user && (
         <div className="absolute inset-0 z-40 flex items-center justify-center">
           {/* Blur backdrop */}
-          <div className="absolute inset-0 backdrop-blur-md bg-[color:var(--overlay-strong)]" />
+          <div className="absolute inset-0 backdrop-blur-[16px] bg-[color:var(--overlay-strong)]" />
           {/* Locked card */}
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="relative z-50 flex flex-col items-center gap-6 bg-[color:var(--surface-2)] backdrop-blur-xl border border-[color:var(--border-subtle)] rounded-3xl px-10 py-12 shadow-2xl shadow-violet-500/10 max-w-md mx-4"
+            className="relative z-50 flex flex-col items-center gap-6 bg-[color:var(--surface-elevated)] backdrop-blur-xl border border-[color:var(--border-subtle)] rounded-3xl px-10 py-12 shadow-[var(--shadow-card-hover)] max-w-md mx-4"
           >
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-500/20 to-indigo-600/20 border border-violet-500/30 flex items-center justify-center">
               <Lock size={36} className="text-violet-400" />
             </div>
             <div className="text-center">
-              <h2 className="text-2xl font-bold text-[color:var(--foreground)] mb-2">Developer Portal Locked</h2>
+              <h2 className="text-2xl font-bold font-display text-[color:var(--foreground)] mb-2">Developer Portal Locked</h2>
               <p className="text-[color:var(--text-muted)] text-sm leading-relaxed">
                 Sign in to your SOTA account to access the Developer Portal,
                 register agents, and manage your marketplace presence.
@@ -217,7 +220,7 @@ export default function DeveloperPortal() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-[color:var(--foreground)] mb-2">Developer Portal</h1>
+              <h1 className="text-3xl font-bold font-display text-[color:var(--foreground)] mb-2">Developer Portal</h1>
               <p className="text-[color:var(--text-muted)]">Register and manage your AI agents on the SOTA marketplace</p>
             </div>
             <button
@@ -238,8 +241,28 @@ export default function DeveloperPortal() {
 
         {/* Content */}
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 size={32} className="text-violet-500 animate-spin" />
+          <div className="space-y-6">
+            {[1, 2, 3].map((i) => (
+              <GlassCard key={i} hoverGlow={false} className="border-l-2 border-l-slate-700">
+                <div className="p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl skeleton-shimmer" />
+                    <div className="h-5 w-40 rounded-lg skeleton-shimmer" />
+                    <div className="h-5 w-16 rounded-full skeleton-shimmer" />
+                  </div>
+                  <div className="h-4 w-full rounded skeleton-shimmer mb-2" />
+                  <div className="h-4 w-2/3 rounded skeleton-shimmer mb-4" />
+                  <div className="grid grid-cols-4 gap-3">
+                    {[1, 2, 3, 4].map((j) => (
+                      <div key={j} className="p-3 rounded-lg bg-[color:var(--surface-3)]">
+                        <div className="h-6 w-12 rounded skeleton-shimmer mb-1" />
+                        <div className="h-3 w-16 rounded skeleton-shimmer" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </GlassCard>
+            ))}
           </div>
         ) : (
           <>
@@ -250,122 +273,142 @@ export default function DeveloperPortal() {
               className="space-y-6"
             >
                 {agents.length === 0 ? (
-                  <div className="text-center py-20">
-                    <Bot size={48} className="text-[color:var(--text-muted)] mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-[color:var(--foreground)] mb-2">No agents registered yet</h3>
-                    <p className="text-[color:var(--text-muted)] mb-6">Register your first AI agent to get started on the SOTA marketplace</p>
-                    <button
-                      onClick={() => setShowNewAgentModal(true)}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-xl transition-all"
-                    >
-                      <Plus size={20} />
-                      Register Agent
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid gap-6">
-                    {agents.map((agent) => (
-                      <motion.div
-                        key={agent.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="p-6 rounded-xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] backdrop-blur-sm"
+                  <GlassCard className="mx-auto max-w-lg" hoverGlow={false}>
+                    <div className="text-center py-16 px-8">
+                      <div className="w-24 h-24 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-violet-500/20 to-indigo-600/20 border border-violet-500/20 flex items-center justify-center">
+                        <Bot size={40} className="text-violet-400" />
+                      </div>
+                      <h3 className="text-xl font-semibold font-display text-[color:var(--foreground)] mb-2">No agents registered yet</h3>
+                      <p className="text-[color:var(--text-muted)] mb-8 leading-relaxed">Register your first AI agent to get started on the SOTA marketplace</p>
+                      <button
+                        onClick={() => setShowNewAgentModal(true)}
+                        className="inline-flex items-center gap-2 px-8 py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-violet-500/20 hover:shadow-violet-500/30"
                       >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-violet-500/20 flex items-center justify-center">
-                              <Bot size={24} className="text-violet-400" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-3 mb-1">
+                        <Plus size={20} />
+                        Register Agent
+                      </button>
+                    </div>
+                  </GlassCard>
+                ) : (
+                  <StaggerContainer className="grid gap-6" staggerDelay={0.1}>
+                    {agents.map((agent) => {
+                      const caps = parseCapabilities(agent.capabilities);
+                      return (
+                        <StaggerItem key={agent.id} preset="fade-up">
+                        <GlassCard
+                          className={`border-l-2 ${agent.status === "active" ? "border-l-emerald-500" : "border-l-slate-600"}`}
+                          hoverGlow
+                        >
+                          <div
+                            className="p-6"
+                          >
+                            {/* Top row: title + category badge + status */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center">
+                                  <Bot size={20} className="text-violet-400" />
+                                </div>
                                 <h3 className="text-lg font-semibold text-[color:var(--foreground)]">{agent.title}</h3>
+                                {agent.category && (
+                                  <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/20">
+                                    {agent.category}
+                                  </span>
+                                )}
                                 {agent.isVerified && (
-                                  <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-500/20 text-emerald-400">
+                                  <span className="flex items-center gap-1 px-2.5 py-0.5 text-xs font-medium rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.15)]">
                                     <Shield size={12} />
                                     Verified
                                   </span>
                                 )}
-                                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                                  agent.status === "active"
-                                    ? "bg-emerald-500/20 text-emerald-400"
-                                    : "bg-amber-500/20 text-amber-400"
-                                }`}>
-                                  {agent.status}
-                                </span>
+                                <StatusBadge status={agent.status} />
                               </div>
-                              <p className="text-sm text-[color:var(--text-muted)] mb-3">{agent.description}</p>
-                              <div className="flex items-center gap-4 text-sm">
-                                <div className="flex items-center gap-1 text-[color:var(--text-muted)]">
-                                  <Activity size={14} />
-                                  <span>{agent.totalRequests} requests</span>
-                                </div>
-                                <div className="flex items-center gap-1 text-[color:var(--text-muted)]">
-                                  <TrendingUp size={14} />
-                                  <span>{successRate(agent)}% success</span>
-                                </div>
-                                <div className="flex items-center gap-1 text-[color:var(--text-muted)]">
-                                  <DollarSign size={14} />
-                                  <span>${agent.minFeeUsdc} min fee</span>
-                                </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => {
+                                    setSelectedAgent(agent);
+                                    setShowViewModal(true);
+                                  }}
+                                  className="p-2 hover:bg-[color:var(--surface-hover)] rounded-lg transition-colors"
+                                  title="View Details"
+                                  aria-label="View agent details"
+                                >
+                                  <Eye size={18} className="text-[color:var(--text-muted)]" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedAgent(agent);
+                                    setShowEditModal(true);
+                                  }}
+                                  className="p-2 hover:bg-[color:var(--surface-hover)] rounded-lg transition-colors"
+                                  title="Edit Agent"
+                                  aria-label="Edit agent"
+                                >
+                                  <Pencil size={18} className="text-[color:var(--text-muted)]" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedAgent(agent);
+                                    setShowDeleteConfirm(true);
+                                  }}
+                                  className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                                  title="Delete Agent"
+                                  aria-label="Delete agent"
+                                >
+                                  <Trash2 size={18} className="text-red-400" />
+                                </button>
                               </div>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => {
-                                setSelectedAgent(agent);
-                                setShowViewModal(true);
-                              }}
-                              className="p-2 hover:bg-[color:var(--surface-hover)] rounded-lg transition-colors"
-                              title="View Details"
-                            >
-                              <Eye size={18} className="text-[color:var(--text-muted)]" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedAgent(agent);
-                                setShowEditModal(true);
-                              }}
-                              className="p-2 hover:bg-[color:var(--surface-hover)] rounded-lg transition-colors"
-                              title="Edit Agent"
-                            >
-                              <Pencil size={18} className="text-[color:var(--text-muted)]" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedAgent(agent);
-                                setShowDeleteConfirm(true);
-                              }}
-                              className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
-                              title="Delete Agent"
-                            >
-                              <Trash2 size={18} className="text-red-400" />
-                            </button>
-                          </div>
-                        </div>
 
-                        {/* Stats Bar */}
-                        <div className="mt-6 grid grid-cols-4 gap-4">
-                          <div className="p-3 rounded-lg bg-[color:var(--surface-1)]">
-                            <div className="text-2xl font-bold text-[color:var(--foreground)]">{agent.reputation.toFixed(1)}</div>
-                            <div className="text-xs text-[color:var(--text-muted)]">Reputation</div>
+                            {/* Body: description */}
+                            <p className="text-sm text-[color:var(--text-muted)] mb-4 leading-relaxed">{agent.description}</p>
+
+                            {/* Stats row */}
+                            <StaggerContainer className="grid grid-cols-4 gap-3 mb-4" staggerDelay={0.1}>
+                              <StaggerItem preset="scale-up">
+                              <div className="p-3 rounded-lg bg-[color:var(--surface-3)]">
+                                <div className="text-xl font-bold text-[color:var(--foreground)]">{agent.reputation.toFixed(1)}</div>
+                                <div className="text-xs text-[color:var(--text-muted)]">Reputation</div>
+                              </div>
+                              </StaggerItem>
+                              <StaggerItem preset="scale-up">
+                              <div className="p-3 rounded-lg bg-[color:var(--surface-3)]">
+                                <div className="text-xl font-bold text-[color:var(--foreground)]">{agent.totalRequests}</div>
+                                <div className="text-xs text-[color:var(--text-muted)]">Requests</div>
+                              </div>
+                              </StaggerItem>
+                              <StaggerItem preset="scale-up">
+                              <div className="p-3 rounded-lg bg-[color:var(--surface-3)]">
+                                <div className="text-xl font-bold text-emerald-400">{successRate(agent)}%</div>
+                                <div className="text-xs text-[color:var(--text-muted)]">Success</div>
+                              </div>
+                              </StaggerItem>
+                              <StaggerItem preset="scale-up">
+                              <div className="p-3 rounded-lg bg-[color:var(--surface-3)]">
+                                <div className="text-xl font-bold text-violet-400">${agent.minFeeUsdc}</div>
+                                <div className="text-xs text-[color:var(--text-muted)]">Min Fee</div>
+                              </div>
+                              </StaggerItem>
+                            </StaggerContainer>
+
+                            {/* Capability tags */}
+                            {caps.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {caps.map((cap: string) => (
+                                  <span
+                                    key={cap}
+                                    className="px-2.5 py-1 text-xs font-medium bg-violet-500/10 text-violet-300 rounded-lg border border-violet-500/20 transition-colors hover:bg-violet-500/20"
+                                  >
+                                    {cap.replace(/_/g, " ")}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <div className="p-3 rounded-lg bg-[color:var(--surface-1)]">
-                            <div className="text-2xl font-bold text-[color:var(--foreground)]">{agent.totalRequests}</div>
-                            <div className="text-xs text-[color:var(--text-muted)]">Total Jobs</div>
-                          </div>
-                          <div className="p-3 rounded-lg bg-[color:var(--surface-1)]">
-                            <div className="text-2xl font-bold text-emerald-400">{successRate(agent)}%</div>
-                            <div className="text-xs text-[color:var(--text-muted)]">Success Rate</div>
-                          </div>
-                          <div className="p-3 rounded-lg bg-[color:var(--surface-1)]">
-                            <div className="text-2xl font-bold text-violet-400">${agent.minFeeUsdc}</div>
-                            <div className="text-xs text-[color:var(--text-muted)]">Min Fee</div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
+                        </GlassCard>
+                        </StaggerItem>
+                      );
+                    })}
+                  </StaggerContainer>
                 )}
               </motion.div>
           </>
@@ -409,18 +452,19 @@ export default function DeveloperPortal() {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && selectedAgent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-[color:var(--overlay-strong)] backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)} />
+          <div className="absolute inset-0 bg-[color:var(--overlay-strong)] backdrop-blur-[16px]" onClick={() => setShowDeleteConfirm(false)} />
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="relative w-full max-w-md bg-[color:var(--surface-2)] border border-[color:var(--border-subtle)] rounded-2xl p-6 shadow-2xl"
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            className="relative w-full max-w-md bg-[color:var(--surface-elevated)] backdrop-blur-xl border border-[color:var(--border-subtle)] rounded-2xl p-6 shadow-[var(--shadow-card-hover)]"
           >
             <div className="flex items-center gap-4 mb-4">
               <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
                 <Trash2 size={24} className="text-red-400" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-[color:var(--foreground)]">Delete Agent</h3>
+                <h3 className="text-lg font-semibold font-display text-[color:var(--foreground)]">Delete Agent</h3>
                 <p className="text-sm text-[color:var(--text-muted)]">This action cannot be undone</p>
               </div>
             </div>
@@ -586,11 +630,12 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[color:var(--overlay-strong)] backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-[color:var(--overlay-strong)] backdrop-blur-[16px]" onClick={onClose} />
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative w-full max-w-2xl bg-[color:var(--surface-2)] border border-[color:var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden"
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+        className="relative w-full max-w-2xl bg-[color:var(--surface-elevated)] backdrop-blur-xl border border-[color:var(--border-subtle)] rounded-2xl shadow-[var(--shadow-card-hover)] overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[color:var(--border-subtle)]">
@@ -599,7 +644,7 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
               <StepIcon size={20} className="text-violet-400" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-[color:var(--foreground)]">Register New Agent</h2>
+              <h2 className="text-xl font-bold font-display text-[color:var(--foreground)]">Register New Agent</h2>
               <p className="text-sm text-[color:var(--text-muted)]">Step {step} of 6 &mdash; {currentStep.title}</p>
             </div>
           </div>
@@ -630,7 +675,7 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
                   value={formData.title}
                   onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                   placeholder="My Awesome Agent"
-                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500"
+                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
                 />
                 <Tip>This name appears on the marketplace. Make it descriptive so users know what your agent does.</Tip>
               </div>
@@ -650,7 +695,7 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
                 <select
                   value={formData.category}
                   onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
+                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
                 >
                   <option value="">Select category</option>
                   {AGENT_CATEGORIES.map((c) => (
@@ -740,7 +785,7 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
                   min="0"
                   value={formData.minFeeUsdc}
                   onChange={(e) => setFormData(prev => ({ ...prev, minFeeUsdc: parseFloat(e.target.value) || 0 }))}
-                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
+                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
                 />
                 <Tip>The lowest price your agent will accept per job. You can still bid higher on individual jobs.</Tip>
               </div>
@@ -768,7 +813,7 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
                 <select
                   value={formData.network}
                   onChange={(e) => setFormData(prev => ({ ...prev, network: e.target.value }))}
-                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
+                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
                 >
                   <option value="solana-devnet">Solana Devnet</option>
                   <option value="solana-mainnet">Solana Mainnet</option>
@@ -788,7 +833,7 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
                   value={formData.apiEndpoint}
                   onChange={(e) => setFormData(prev => ({ ...prev, apiEndpoint: e.target.value }))}
                   placeholder="https://your-agent.com/api/execute"
-                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500"
+                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
                 />
                 {formData.apiEndpoint && !isValidHttpUrl(formData.apiEndpoint) && (
                   <p className="text-xs text-red-400 mt-1">Please enter a valid HTTP/HTTPS URL</p>
@@ -802,7 +847,7 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
                   value={formData.webhookUrl}
                   onChange={(e) => setFormData(prev => ({ ...prev, webhookUrl: e.target.value }))}
                   placeholder="https://your-agent.com/webhook"
-                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500"
+                  className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
                 />
                 <Tip>Optional callback for status updates (job assigned, cancelled, etc.). If blank, you can poll the marketplace API instead.</Tip>
               </div>
@@ -832,10 +877,10 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
                           : [...formData.capabilities, key];
                         setFormData(prev => ({ ...prev, capabilities: caps }));
                       }}
-                      className={`text-left p-3 rounded-lg border transition-all ${
+                      className={`text-left p-3 rounded-lg border transition-all duration-200 ${
                         selected
-                          ? "bg-violet-500/15 border-violet-500 ring-1 ring-violet-500/50"
-                          : "bg-[color:var(--surface-1)] border-[color:var(--border-subtle)] hover:border-violet-500/40"
+                          ? "bg-violet-500/15 border-violet-500 ring-1 ring-violet-500/50 shadow-[0_0_12px_rgba(139,92,246,0.15)]"
+                          : "bg-[color:var(--surface-1)] border-[color:var(--border-subtle)] hover:border-violet-500/40 hover:bg-violet-500/5"
                       }`}
                     >
                       <div className={`text-sm font-medium mb-0.5 ${selected ? "text-violet-300" : "text-[color:var(--foreground)]"}`}>
@@ -899,7 +944,7 @@ function NewAgentModal({ onClose, onSuccess, getAuthHeaders }: { onClose: () => 
                   { label: "Webhook",       value: formData.webhookUrl || "Not set", mono: !!formData.webhookUrl },
                   { label: "Capabilities",  value: formData.capabilities.map(c => CAPABILITY_DETAILS[c]?.label ?? c).join(", ") },
                 ].map(({ label, value, mono }, i) => (
-                  <div key={label} className={`flex items-start gap-4 px-4 py-3 ${i % 2 === 0 ? "bg-[color:var(--surface-1)]" : ""}`}>
+                  <div key={label} className={`flex items-start gap-4 px-4 py-3 ${i % 2 === 0 ? "bg-[color:var(--surface-3)]" : ""}`}>
                     <span className="text-sm text-[color:var(--text-muted)] w-32 shrink-0">{label}</span>
                     <span className={`text-sm text-[color:var(--foreground)] break-all ${mono ? "font-mono" : ""}`}>{value}</span>
                   </div>
@@ -1071,11 +1116,12 @@ function ViewAgentModal({ agent, onClose, getAuthHeaders }: { agent: Agent; onCl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[color:var(--overlay-strong)] backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-[color:var(--overlay-strong)] backdrop-blur-[16px]" onClick={onClose} />
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative w-full max-w-2xl bg-[color:var(--surface-2)] border border-[color:var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden"
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+        className="relative w-full max-w-2xl bg-[color:var(--surface-elevated)] backdrop-blur-xl border border-[color:var(--border-subtle)] rounded-2xl shadow-[var(--shadow-card-hover)] overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[color:var(--border-subtle)]">
@@ -1145,24 +1191,32 @@ function ViewAgentModal({ agent, onClose, getAuthHeaders }: { agent: Agent; onCl
                 </code>
               </div>
 
-              <div className="grid grid-cols-4 gap-4">
+              <StaggerContainer className="grid grid-cols-4 gap-4" staggerDelay={0.1}>
+                <StaggerItem preset="scale-up">
                 <div className="p-3 rounded-lg bg-[color:var(--surface-1)]">
                   <div className="text-2xl font-bold text-[color:var(--foreground)]">{agent.reputation.toFixed(1)}</div>
                   <div className="text-xs text-[color:var(--text-muted)]">Reputation</div>
                 </div>
+                </StaggerItem>
+                <StaggerItem preset="scale-up">
                 <div className="p-3 rounded-lg bg-[color:var(--surface-1)]">
                   <div className="text-2xl font-bold text-[color:var(--foreground)]">{agent.totalRequests}</div>
                   <div className="text-xs text-[color:var(--text-muted)]">Total Jobs</div>
                 </div>
+                </StaggerItem>
+                <StaggerItem preset="scale-up">
                 <div className="p-3 rounded-lg bg-[color:var(--surface-1)]">
                   <div className="text-2xl font-bold text-emerald-400">{successRate}%</div>
                   <div className="text-xs text-[color:var(--text-muted)]">Success Rate</div>
                 </div>
+                </StaggerItem>
+                <StaggerItem preset="scale-up">
                 <div className="p-3 rounded-lg bg-[color:var(--surface-1)]">
                   <div className="text-2xl font-bold text-violet-400">${agent.minFeeUsdc}</div>
                   <div className="text-xs text-[color:var(--text-muted)]">Min Fee</div>
                 </div>
-              </div>
+                </StaggerItem>
+              </StaggerContainer>
 
               {capabilities.length > 0 && (
                 <div>
@@ -1245,8 +1299,19 @@ function ViewAgentModal({ agent, onClose, getAuthHeaders }: { agent: Agent; onCl
 
               {/* API Keys List */}
               {loadingKeys ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 size={24} className="text-violet-500 animate-spin" />
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--surface-3)]">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg skeleton-shimmer" />
+                        <div>
+                          <div className="h-4 w-32 rounded skeleton-shimmer mb-1.5" />
+                          <div className="h-3 w-48 rounded skeleton-shimmer" />
+                        </div>
+                      </div>
+                      <div className="h-7 w-16 rounded-lg skeleton-shimmer" />
+                    </div>
+                  ))}
                 </div>
               ) : apiKeys.length === 0 ? (
                 <div className="text-center py-8">
@@ -1254,11 +1319,11 @@ function ViewAgentModal({ agent, onClose, getAuthHeaders }: { agent: Agent; onCl
                   <p className="text-sm text-[color:var(--text-muted)]">No API keys generated yet</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {apiKeys.filter(k => k.isActive).map((key) => (
+                <div className="rounded-xl border border-[color:var(--border-subtle)] overflow-hidden">
+                  {apiKeys.filter(k => k.isActive).map((key, idx) => (
                     <div
                       key={key.id}
-                      className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)]"
+                      className={`flex items-center justify-between p-4 ${idx % 2 === 0 ? "bg-[color:var(--surface-3)]" : ""} ${idx > 0 ? "border-t border-[color:var(--border-subtle)]" : ""}`}
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
@@ -1304,14 +1369,15 @@ function ViewAgentModal({ agent, onClose, getAuthHeaders }: { agent: Agent; onCl
                     exit={{ opacity: 0 }}
                     className="fixed inset-0 z-[60] flex items-center justify-center p-4"
                   >
-                    <div className="absolute inset-0 bg-[color:var(--overlay-soft)]" onClick={() => setShowNewKeyModal(false)} />
+                    <div className="absolute inset-0 bg-[color:var(--overlay-soft)] backdrop-blur-[16px]" onClick={() => setShowNewKeyModal(false)} />
                     <motion.div
                       initial={{ scale: 0.95 }}
                       animate={{ scale: 1 }}
                       exit={{ scale: 0.95 }}
-                      className="relative w-full max-w-md bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-xl p-6 shadow-xl"
+                      transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                      className="relative w-full max-w-md bg-[color:var(--surface-elevated)] backdrop-blur-xl border border-[color:var(--border-subtle)] rounded-xl p-6 shadow-[var(--shadow-card-hover)]"
                     >
-                      <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-4">Generate API Key</h3>
+                      <h3 className="text-lg font-semibold font-display text-[color:var(--foreground)] mb-4">Generate API Key</h3>
                       <div className="mb-4">
                         <label className="block text-sm font-medium text-[color:var(--text-muted)] mb-2">Key Name</label>
                         <input
@@ -1319,7 +1385,7 @@ function ViewAgentModal({ agent, onClose, getAuthHeaders }: { agent: Agent; onCl
                           value={newKeyName}
                           onChange={(e) => setNewKeyName(e.target.value)}
                           placeholder="e.g., Production, Development"
-                          className="w-full px-4 py-2 bg-[color:var(--surface-hover)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500"
+                          className="w-full px-4 py-2 bg-[color:var(--surface-hover)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
                         />
                       </div>
                       <div className="flex gap-3">
@@ -1441,16 +1507,17 @@ function EditAgentModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[color:var(--overlay-strong)] backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-[color:var(--overlay-strong)] backdrop-blur-[16px]" onClick={onClose} />
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative w-full max-w-2xl bg-[color:var(--surface-2)] border border-[color:var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden"
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+        className="relative w-full max-w-2xl bg-[color:var(--surface-elevated)] backdrop-blur-xl border border-[color:var(--border-subtle)] rounded-2xl shadow-[var(--shadow-card-hover)] overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[color:var(--border-subtle)]">
           <div>
-            <h2 className="text-xl font-bold text-[color:var(--foreground)]">Edit Agent</h2>
+            <h2 className="text-xl font-bold font-display text-[color:var(--foreground)]">Edit Agent</h2>
             <p className="text-sm text-[color:var(--text-muted)]">Update your agent configuration</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-[color:var(--surface-1)] rounded-lg">
@@ -1466,7 +1533,7 @@ function EditAgentModal({
               type="text"
               value={formData.title}
               onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
+              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
             />
           </div>
 
@@ -1485,7 +1552,7 @@ function EditAgentModal({
             <select
               value={formData.category}
               onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
+              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
             >
               <option value="">Select category</option>
               {AGENT_CATEGORIES.map((c) => (
@@ -1506,7 +1573,7 @@ function EditAgentModal({
               value={formData.apiEndpoint}
               onChange={(e) => setFormData(prev => ({ ...prev, apiEndpoint: e.target.value }))}
               placeholder="https://your-agent.com/api/execute"
-              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] font-mono focus:outline-none focus:border-violet-500"
+              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] font-mono focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
             />
           </div>
 
@@ -1517,7 +1584,7 @@ function EditAgentModal({
               value={formData.webhookUrl}
               onChange={(e) => setFormData(prev => ({ ...prev, webhookUrl: e.target.value }))}
               placeholder="https://your-agent.com/webhook"
-              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] font-mono focus:outline-none focus:border-violet-500"
+              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] placeholder:text-[color:var(--text-muted)] font-mono focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
             />
           </div>
 
@@ -1532,7 +1599,7 @@ function EditAgentModal({
               type="text"
               value={formData.walletAddress}
               onChange={(e) => setFormData(prev => ({ ...prev, walletAddress: e.target.value }))}
-              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] font-mono focus:outline-none focus:border-violet-500"
+              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] font-mono focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
             />
           </div>
 
@@ -1543,7 +1610,7 @@ function EditAgentModal({
               step="0.01"
               value={formData.minFeeUsdc}
               onChange={(e) => setFormData(prev => ({ ...prev, minFeeUsdc: parseFloat(e.target.value) || 0 }))}
-              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500"
+              className="w-full px-4 py-2 bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] rounded-lg text-[color:var(--foreground)] focus:outline-none focus:border-violet-500 focus:shadow-[0_0_0_2px_var(--glow-accent)]"
             />
           </div>
 
@@ -1562,10 +1629,10 @@ function EditAgentModal({
                         : [...prev.capabilities, cap],
                     }));
                   }}
-                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                  className={`px-3 py-1.5 text-sm rounded-lg border transition-all duration-200 ${
                     formData.capabilities.includes(cap)
-                      ? "bg-violet-500/20 border-violet-500 text-violet-300"
-                      : "bg-[color:var(--surface-1)] border-[color:var(--border-subtle)] text-[color:var(--text-muted)] hover:border-[color:var(--border-subtle)]"
+                      ? "bg-violet-500/20 border-violet-500 text-violet-300 shadow-[0_0_8px_rgba(139,92,246,0.15)]"
+                      : "bg-[color:var(--surface-1)] border-[color:var(--border-subtle)] text-[color:var(--text-muted)] hover:border-violet-500/40 hover:text-violet-300"
                   }`}
                 >
                   {label}

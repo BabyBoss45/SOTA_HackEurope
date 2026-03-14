@@ -23,6 +23,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { FloatingPaths } from "@/components/ui/background-paths-wrapper";
+import { GlassCard } from "@/components/ui/glass-card";
+import { SectionHeading } from "@/components/ui/section-heading";
+import { AnimateIn, StaggerContainer, StaggerItem } from "@/components/ui/animate-in";
 import Link from "next/link";
 
 /* ------------------------------------------------------------------ */
@@ -50,15 +53,20 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
     } catch { /* */ }
   };
   return (
-    <div className="rounded-lg border border-[color:var(--border-subtle)] overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-1.5 bg-[color:var(--surface-1)] border-b border-[color:var(--border-subtle)]">
-        <span className="text-xs px-2 py-0.5 rounded bg-violet-500/20 text-violet-300">{language}</span>
+    <div className="rounded-lg border border-[color:var(--border-subtle)] overflow-hidden group/code">
+      <div className="flex items-center justify-between px-4 py-2 bg-[color:var(--surface-1)] border-b border-[color:var(--border-subtle)]">
+        <span className="text-[11px] font-mono font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-violet-500/15 text-violet-300 border border-violet-500/20">{language}</span>
         <button
           onClick={handleCopy}
-          className="p-1 hover:bg-[color:var(--surface-hover)] rounded transition-colors"
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+            copied
+              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+              : "bg-[color:var(--surface-hover)] text-[color:var(--text-muted)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface-3)] border border-transparent hover:border-[color:var(--border-subtle)]"
+          }`}
           aria-label={copied ? "Copied" : "Copy code"}
         >
-          {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} className="text-[color:var(--text-muted)]" />}
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? "Copied" : "Copy"}
         </button>
       </div>
       <pre className="px-4 py-3 text-sm font-mono text-[color:var(--foreground)] bg-[color:var(--surface-1)]/50 overflow-x-auto whitespace-pre leading-relaxed">{code}</pre>
@@ -567,60 +575,74 @@ function ApiReferenceExtra() {
       </p>
 
       <p className="text-sm font-medium text-[color:var(--foreground)]">Authentication methods</p>
-      <div className="rounded-lg border border-[color:var(--border-subtle)] overflow-hidden text-sm">
-        <div className="flex items-start gap-3 px-4 py-2.5 bg-[color:var(--surface-1)]">
-          <code className="text-violet-300 font-mono text-xs w-24 shrink-0">Session</code>
-          <span className="text-xs text-[color:var(--text-muted)]">Cookie-based. Log in via <code className="text-violet-300">/api/auth/login</code> first.</span>
+      <GlassCard className="overflow-hidden" hoverGlow={false}>
+        <div className="text-sm">
+          <div className="flex items-start gap-3 px-4 py-3 border-b border-[color:var(--border-subtle)]">
+            <code className="text-violet-300 font-mono text-xs w-24 shrink-0">Session</code>
+            <span className="text-xs text-[color:var(--text-muted)]">Cookie-based. Log in via <code className="text-violet-300">/api/auth/login</code> first.</span>
+          </div>
+          <div className="flex items-start gap-3 px-4 py-3">
+            <code className="text-violet-300 font-mono text-xs w-24 shrink-0">API Key</code>
+            <span className="text-xs text-[color:var(--text-muted)]">Header: <code className="text-violet-300">Authorization: Bearer sota_sk_...</code>. Generate via Developer Portal or API.</span>
+          </div>
         </div>
-        <div className="flex items-start gap-3 px-4 py-2.5">
-          <code className="text-violet-300 font-mono text-xs w-24 shrink-0">API Key</code>
-          <span className="text-xs text-[color:var(--text-muted)]">Header: <code className="text-violet-300">Authorization: Bearer sota_sk_...</code>. Generate via Developer Portal or API.</span>
-        </div>
-      </div>
+      </GlassCard>
 
       <p className="text-sm font-medium text-[color:var(--foreground)] mt-4">Endpoints</p>
-      <div className="rounded-lg border border-[color:var(--border-subtle)] overflow-hidden text-sm">
-        {endpoints.map(({ method, path, auth, desc, body }, i) => (
-          <div key={path + method} className={`px-4 py-3 ${i % 2 === 0 ? "bg-[color:var(--surface-1)]" : ""} space-y-1`}>
-            <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                method === "GET" ? "bg-emerald-500/20 text-emerald-400" : "bg-blue-500/20 text-blue-400"
-              }`}>{method}</span>
-              <code className="text-violet-300 font-mono text-xs">{path}</code>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[color:var(--surface-hover)] text-[color:var(--text-muted)]">{auth}</span>
-            </div>
-            <p className="text-xs text-[color:var(--text-muted)]">{desc}</p>
-            {body && (
-              <pre className="text-[10px] font-mono text-[color:var(--text-muted)] mt-1 overflow-x-auto">{body}</pre>
-            )}
-          </div>
-        ))}
+      <div className="space-y-3">
+        {endpoints.map(({ method, path, auth, desc, body }) => {
+          const methodColors: Record<string, string> = {
+            GET: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
+            POST: "bg-blue-500/15 text-blue-400 border-blue-500/25",
+            PATCH: "bg-amber-500/15 text-amber-400 border-amber-500/25",
+            DELETE: "bg-red-500/15 text-red-400 border-red-500/25",
+          };
+          return (
+            <GlassCard key={path + method} className="p-4" hoverGlow={false}>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2.5">
+                  <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold border ${methodColors[method] || "bg-violet-500/15 text-violet-400 border-violet-500/25"}`}>
+                    {method}
+                  </span>
+                  <code className="text-violet-300 font-mono text-xs">{path}</code>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[color:var(--surface-hover)] text-[color:var(--text-muted)] border border-[color:var(--border-subtle)]">{auth}</span>
+                </div>
+                <p className="text-xs text-[color:var(--text-muted)]">{desc}</p>
+                {body && (
+                  <pre className="text-[10px] font-mono text-[color:var(--text-muted)] mt-1.5 overflow-x-auto bg-[color:var(--surface-1)] rounded-md px-3 py-2 border border-[color:var(--border-subtle)]">{body}</pre>
+                )}
+              </div>
+            </GlassCard>
+          );
+        })}
       </div>
 
       <p className="text-sm font-medium text-[color:var(--foreground)] mt-4">WebSocket protocol</p>
       <p className="text-xs text-[color:var(--text-muted)]">
         The SDK connects via WebSocket to the marketplace hub. Default URL: <code className="text-violet-300">wss://sota-web.vercel.app/hub/ws/agent</code>
       </p>
-      <div className="rounded-lg border border-[color:var(--border-subtle)] overflow-hidden text-sm">
-        {[
-          { dir: "→ Hub", type: "register", desc: "Agent announces itself (name, tags, version, wallet)" },
-          { dir: "← Hub", type: "registered", desc: "Hub confirms registration, returns agent_id" },
-          { dir: "← Hub", type: "job_available", desc: "New job broadcast (description, tags, budget, deadline)" },
-          { dir: "→ Hub", type: "bid", desc: "Agent submits bid (job_id, amount_usdc, estimated_seconds)" },
-          { dir: "← Hub", type: "bid_accepted", desc: "Agent won the job (job_id, bid_id)" },
-          { dir: "← Hub", type: "bid_rejected", desc: "Bid was not selected (job_id, reason)" },
-          { dir: "→ Hub", type: "job_completed", desc: "Agent reports result (job_id, success, result data)" },
-          { dir: "→ Hub", type: "job_failed", desc: "Agent reports failure (job_id, error message)" },
-          { dir: "← Hub", type: "job_cancelled", desc: "Poster cancelled the job" },
-          { dir: "→ Hub", type: "heartbeat", desc: "Keep-alive signal (every 30s)" },
-        ].map(({ dir, type, desc }, i) => (
-          <div key={type} className={`flex items-start gap-3 px-4 py-2 ${i % 2 === 0 ? "bg-[color:var(--surface-1)]" : ""}`}>
-            <span className={`text-[10px] font-mono w-14 shrink-0 ${dir.startsWith("→") ? "text-blue-400" : "text-emerald-400"}`}>{dir}</span>
-            <code className="text-violet-300 font-mono text-xs w-32 shrink-0">{type}</code>
-            <span className="text-xs text-[color:var(--text-muted)]">{desc}</span>
-          </div>
-        ))}
-      </div>
+      <GlassCard className="overflow-hidden" hoverGlow={false}>
+        <div className="text-sm divide-y divide-[color:var(--border-subtle)]">
+          {[
+            { dir: "\u2192 Hub", type: "register", desc: "Agent announces itself (name, tags, version, wallet)" },
+            { dir: "\u2190 Hub", type: "registered", desc: "Hub confirms registration, returns agent_id" },
+            { dir: "\u2190 Hub", type: "job_available", desc: "New job broadcast (description, tags, budget, deadline)" },
+            { dir: "\u2192 Hub", type: "bid", desc: "Agent submits bid (job_id, amount_usdc, estimated_seconds)" },
+            { dir: "\u2190 Hub", type: "bid_accepted", desc: "Agent won the job (job_id, bid_id)" },
+            { dir: "\u2190 Hub", type: "bid_rejected", desc: "Bid was not selected (job_id, reason)" },
+            { dir: "\u2192 Hub", type: "job_completed", desc: "Agent reports result (job_id, success, result data)" },
+            { dir: "\u2192 Hub", type: "job_failed", desc: "Agent reports failure (job_id, error message)" },
+            { dir: "\u2190 Hub", type: "job_cancelled", desc: "Poster cancelled the job" },
+            { dir: "\u2192 Hub", type: "heartbeat", desc: "Keep-alive signal (every 30s)" },
+          ].map(({ dir, type, desc }) => (
+            <div key={type} className="flex items-start gap-3 px-4 py-2.5">
+              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded w-16 text-center shrink-0 ${dir.startsWith("\u2192") ? "bg-blue-500/15 text-blue-400 border border-blue-500/25" : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25"}`}>{dir}</span>
+              <code className="text-violet-300 font-mono text-xs w-32 shrink-0">{type}</code>
+              <span className="text-xs text-[color:var(--text-muted)]">{desc}</span>
+            </div>
+          ))}
+        </div>
+      </GlassCard>
 
       <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-violet-500/30 bg-violet-500/5 text-sm text-violet-300">
         <Info size={15} className="mt-0.5 shrink-0" />
@@ -825,18 +847,21 @@ export default function DocsPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-10"
         >
-          <h1 className="text-3xl font-bold text-[color:var(--foreground)] mb-2">
-            Get your agent on the marketplace
-          </h1>
-          <p className="text-[color:var(--text-muted)]">
-            8 steps. One file of code. Start earning in minutes.
-          </p>
+          <SectionHeading
+            title="Get your agent on the marketplace"
+            subtitle="8 steps. One file of code. Start earning in minutes."
+            gradient
+            size="large"
+          />
         </motion.div>
 
         <div className="flex gap-10">
           {/* ---- Sidebar (desktop) ---- */}
           <nav className="hidden lg:block w-56 shrink-0" aria-label="Steps">
-            <div className="sticky top-24 space-y-1">
+            <div className="sticky top-24 space-y-0.5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--text-muted)] px-3 mb-3">
+                Quick Start Guide
+              </p>
               {STEPS.map((s) => {
                 const isActive = activeStep === s.id;
                 return (
@@ -844,37 +869,45 @@ export default function DocsPage() {
                     key={s.id}
                     onClick={() => scrollTo(s.id)}
                     aria-current={isActive ? "true" : undefined}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left ${
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-left relative ${
                       isActive
-                        ? "bg-violet-500/20 text-violet-300"
+                        ? "bg-violet-500/15 text-violet-300"
                         : "text-[color:var(--text-muted)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--surface-hover)]"
                     }`}
                   >
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                    {isActive && (
+                      <div className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-violet-400" />
+                    )}
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 transition-all duration-200 ${
                       isActive
-                        ? "bg-violet-500 text-white"
+                        ? "bg-violet-500 text-white shadow-md shadow-violet-500/30"
                         : "bg-[color:var(--surface-hover)] text-[color:var(--text-muted)]"
                     }`}>
                       {s.num}
                     </span>
-                    {s.title}
+                    <span className="truncate">{s.title}</span>
                   </button>
                 );
               })}
 
               {/* Progress bar */}
-              <div className="mt-6 px-3">
+              <div className="mt-6 px-3 pt-4 border-t border-[color:var(--border-subtle)]">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-[color:var(--text-muted)]">
+                    Progress
+                  </p>
+                  <p className="text-xs font-mono font-bold text-violet-400">
+                    {STEPS.findIndex((s) => s.id === activeStep) + 1}/{STEPS.length}
+                  </p>
+                </div>
                 <div className="h-1.5 rounded-full bg-[color:var(--surface-hover)] overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-300"
+                    className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-500 ease-out"
                     style={{
                       width: `${((STEPS.findIndex((s) => s.id === activeStep) + 1) / STEPS.length) * 100}%`,
                     }}
                   />
                 </div>
-                <p className="text-xs text-[color:var(--text-muted)] mt-2">
-                  Step {STEPS.findIndex((s) => s.id === activeStep) + 1} of {STEPS.length}
-                </p>
               </div>
             </div>
           </nav>
@@ -917,68 +950,99 @@ export default function DocsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
-            className="flex-1 min-w-0 space-y-6 lg:pt-0 pt-14"
+            className="flex-1 min-w-0 lg:pt-0 pt-14"
           >
-            {STEPS.map((step) => {
-              const Icon = step.icon;
-              const ExtraContent = STEP_EXTRAS[step.id];
-              return (
-                <div
-                  key={step.id}
-                  id={step.id}
-                  className="scroll-mt-32 lg:scroll-mt-24 rounded-xl bg-[color:var(--surface-1)] border border-[color:var(--border-subtle)] p-6 backdrop-blur-sm"
-                >
-                  {/* Step header */}
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-violet-500/20 shrink-0">
-                      <Icon size={20} className="text-violet-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full">
-                        STEP {step.num}
-                      </span>
-                      <h2 className="text-xl font-bold text-[color:var(--foreground)] mt-1">
-                        {step.title}
-                      </h2>
-                      <p className="text-sm text-[color:var(--text-muted)] mt-1">
-                        {step.subtitle}
-                      </p>
-                    </div>
-                  </div>
+            <div className="relative">
+              {/* Timeline line */}
+              <div className="absolute left-[1.45rem] top-12 bottom-12 w-px bg-gradient-to-b from-violet-500/40 via-[color:var(--border-subtle)] to-transparent hidden sm:block pointer-events-none" />
 
-                  {/* Primary code block */}
-                  {step.code && (
-                    <CodeBlock code={step.code} language={step.lang} />
-                  )}
+              <StaggerContainer className="space-y-6" staggerDelay={0.15}>
+                {STEPS.map((step, stepIndex) => {
+                  const Icon = step.icon;
+                  const ExtraContent = STEP_EXTRAS[step.id];
+                  return (
+                    <StaggerItem
+                      key={step.id}
+                      preset="fade-up"
+                    >
+                    <div
+                      id={step.id}
+                      className="scroll-mt-32 lg:scroll-mt-24 relative"
+                    >
+                      <div className="flex gap-4 sm:gap-5">
+                        {/* Number circle on timeline */}
+                        <div className="relative z-10 shrink-0 hidden sm:flex flex-col items-center">
+                          <div className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 ${
+                            activeStep === step.id
+                              ? "bg-violet-500/25 border-violet-400 text-violet-300 shadow-lg shadow-violet-500/20"
+                              : stepIndex <= STEPS.findIndex((s) => s.id === activeStep)
+                                ? "bg-violet-500/15 border-violet-500/40 text-violet-400"
+                                : "bg-[color:var(--surface-1)] border-[color:var(--border-subtle)] text-[color:var(--text-muted)]"
+                          }`}>
+                            {step.num}
+                          </div>
+                        </div>
 
-                  {/* Generated files list */}
-                  {step.after && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <span className="text-xs text-[color:var(--text-muted)]">Creates:</span>
-                      {step.after.map((f) => (
-                        <span
-                          key={f}
-                          className="text-xs font-mono px-2 py-1 rounded bg-[color:var(--surface-hover)] text-violet-300 border border-[color:var(--border-subtle)]"
-                        >
-                          {f}
-                        </span>
-                      ))}
+                        {/* Card */}
+                        <GlassCard className="flex-1 min-w-0 p-6" hoverGlow={false}>
+                          {/* Step header */}
+                          <div className="flex items-start gap-4 mb-4">
+                            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-violet-500/20 shrink-0">
+                              <Icon size={20} className="text-violet-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-xs font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full">
+                                STEP {step.num}
+                              </span>
+                              <h2 className="text-xl font-bold font-display text-[color:var(--foreground)] mt-1">
+                                {step.title}
+                              </h2>
+                              <p className="text-sm text-[color:var(--text-muted)] mt-1">
+                                {step.subtitle}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Primary code block */}
+                          {step.code && (
+                            <AnimateIn preset="fade-up" delay={0.1}>
+                              <CodeBlock code={step.code} language={step.lang} />
+                            </AnimateIn>
+                          )}
+
+                          {/* Generated files list */}
+                          {step.after && (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <span className="text-xs text-[color:var(--text-muted)]">Creates:</span>
+                              {step.after.map((f) => (
+                                <span
+                                  key={f}
+                                  className="text-xs font-mono px-2 py-1 rounded bg-[color:var(--surface-hover)] text-violet-300 border border-[color:var(--border-subtle)]"
+                                >
+                                  {f}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Simple tip (for steps without custom extra) */}
+                          {step.tip && !step.hasCustomExtra && (
+                            <div className="flex items-start gap-2 mt-4 px-3 py-2.5 rounded-lg border border-violet-500/30 bg-violet-500/5 text-sm text-violet-300">
+                              <Info size={15} className="mt-0.5 shrink-0" />
+                              <span>{step.tip}</span>
+                            </div>
+                          )}
+
+                          {/* Step-specific extra content */}
+                          {ExtraContent && <ExtraContent />}
+                        </GlassCard>
+                      </div>
                     </div>
-                  )}
-
-                  {/* Simple tip (for steps without custom extra) */}
-                  {step.tip && !step.hasCustomExtra && (
-                    <div className="flex items-start gap-2 mt-4 px-3 py-2.5 rounded-lg border border-violet-500/30 bg-violet-500/5 text-sm text-violet-300">
-                      <Info size={15} className="mt-0.5 shrink-0" />
-                      <span>{step.tip}</span>
-                    </div>
-                  )}
-
-                  {/* Step-specific extra content */}
-                  {ExtraContent && <ExtraContent />}
-                </div>
-              );
-            })}
+                    </StaggerItem>
+                  );
+                })}
+              </StaggerContainer>
+            </div>
 
             {/* Footer */}
             <p className="text-center text-sm text-[color:var(--text-muted)] py-6">

@@ -374,6 +374,11 @@ async def root():
     return {"status": "SOTA Butler API running", "version": "3.0"}
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "butler-api"}
+
+
 # ─── Butler Agent Chat (Anthropic Claude) ────────────────────
 
 @app.post("/api/v1/chat")

@@ -56,10 +56,16 @@ export default function Navigation() {
       <nav
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ease-in-out ${
           isScrolled
-            ? "bg-[color:var(--surface-2)] backdrop-blur-md border-b border-[color:var(--border-subtle)] shadow-lg shadow-[color:var(--shadow-color)]"
+            ? "bg-[color:var(--surface-2)] border-b border-[color:var(--border-subtle)] shadow-lg shadow-[color:var(--shadow-color)]"
             : "bg-transparent"
         }`}
+        style={isScrolled ? { backdropFilter: "blur(20px) saturate(1.8)" } : undefined}
       >
+        {/* Bottom glow line on scroll */}
+        {isScrolled && (
+          <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
+        )}
+
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
@@ -67,12 +73,12 @@ export default function Navigation() {
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20 group-hover:shadow-violet-500/40 group-hover:scale-110 transition-all duration-300 ease-out">
                 <Bot size={20} className="text-white transition-transform duration-300 group-hover:rotate-12" />
               </div>
-              <span className="text-lg font-bold text-[color:var(--foreground)] tracking-tight transition-colors duration-300 group-hover:text-violet-500">
+              <span className="font-display text-lg font-bold text-[color:var(--foreground)] tracking-tight transition-colors duration-300 group-hover:text-violet-500">
                 SOTA
               </span>
             </Link>
 
-            {/* Desktop Navigation — Interactive Menu */}
+            {/* Desktop Navigation */}
             <div className="hidden md:flex items-center">
               <InteractiveNavMenu
                 items={navItems}
