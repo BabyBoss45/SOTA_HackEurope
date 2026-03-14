@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-14T13:17:04.938Z"
-last_activity: 2026-03-14 -- Phase 3 Plan 1 completed (job status sync pipeline)
+status: in-progress
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-14T13:24:00Z"
+last_activity: 2026-03-14 -- Phase 4 Plan 1 completed (payment gate screen + payment method context)
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 6
-  completed_plans: 4
-  percent: 67
+  completed_plans: 5
+  percent: 83
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** Весь user flow от описания задачи до оплаты работает без багов при live demo
-**Current focus:** Phase 2: Bidding Timer
+**Current focus:** Phase 4: Dual Payment Rails
 
 ## Current Position
 
-Phase: 3 of 5 (Job Status Sync)
+Phase: 4 of 5 (Dual Payment Rails)
 Plan: 1 of 1 in current phase
-Status: Phase 3 complete
-Last activity: 2026-03-14 -- Phase 3 Plan 1 completed (job status sync pipeline)
+Status: Phase 4 Plan 1 complete
+Last activity: 2026-03-14 -- Phase 4 Plan 1 completed (payment gate screen + payment method context)
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [███████░░░] 67%
 | Phase 01-job-creation-pipeline P01 | 2min | 3 tasks | 3 files |
 | Phase 02-bidding-timer P02 | 1min | 1 tasks | 1 files |
 | Phase 03 P01 | 2min | 2 tasks | 4 files |
+| Phase 04 P01 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,9 @@ Recent decisions affecting current work:
 - [Phase 02-02]: Reset bidActiveRef and cancel timer on early-return paths rather than letting timer run 15s with no purpose
 - [Phase 03]: 3-stage pipeline replaces 4-stage: Collecting Bids -> In Progress -> Completed
 - [Phase 03]: Failed/expired jobs hidden from marketplace, progress bars removed, agent name shown instead
+- [Phase 04-01]: Removed HardcodedWalletAdapter entirely rather than disabling -- no demo wallet needed with real payment rails
+- [Phase 04-01]: PaymentMethodProvider placed inside WalletModalProvider but outside QueryClientProvider
+- [Phase 04-01]: Device detection for wallet connection: mobile deeplinks vs desktop WalletConnect QR
 
 ### Pending Todos
 
@@ -84,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T13:17:04.935Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-03-14T13:24:00Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None

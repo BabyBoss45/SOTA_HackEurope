@@ -17,8 +17,8 @@
 
 ### Payment
 
-- [ ] **PAY-01**: При оплате пользователь видит два равных варианта: Stripe (USD) и крипто-кошелёк (USDC)
-- [ ] **PAY-02**: Убрать auto-connect кошелька при загрузке страницы -- подключение кошелька только при выборе крипто-оплаты
+- [x] **PAY-01**: При оплате пользователь видит два равных варианта: Stripe (USD) и крипто-кошелёк (USDC)
+- [x] **PAY-02**: Убрать auto-connect кошелька при загрузке страницы -- подключение кошелька только при выборе крипто-оплаты
 
 ### UI Polish
 
@@ -54,8 +54,8 @@
 | JOB-02 | Phase 3 | Complete |
 | JOB-03 | Phase 1 | Complete |
 | BID-01 | Phase 2 | Complete |
-| PAY-01 | Phase 4 | Pending |
-| PAY-02 | Phase 4 | Pending |
+| PAY-01 | Phase 4 | Complete |
+| PAY-02 | Phase 4 | Complete |
 | UI-01 | Phase 5 | Pending |
 
 **Coverage:**
