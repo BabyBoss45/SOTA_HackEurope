@@ -304,6 +304,8 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
       if (jobResult && jobResult.success === false) {
         const reason = jobResult.reason || "No specialists available";
         showToast(reason, "warning");
+        setBidProgress(null);
+        bidActiveRef.current = false;
         return `Job failed: ${reason}`;
       }
 
@@ -311,6 +313,8 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
       if (jobResult?.escrow?.needs_user_funding) {
         triggerStripePayment(jobResult);
         const budgetUsdc = jobResult.escrow.budget_usdc || jobResult.escrow.budget_usd || 0.02;
+        setBidProgress(null);
+        bidActiveRef.current = false;
         return `Job posted — awaiting payment of ${budgetUsdc.toFixed(2)} USDC`;
       }
 
