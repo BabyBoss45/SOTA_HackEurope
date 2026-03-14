@@ -104,11 +104,21 @@ class Database:
     def __init__(self, pool: asyncpg.Pool | None = None):
         self._pool: asyncpg.Pool | None = pool
 
+    @staticmethod
+    async def _init_connection(conn):
+        """Register JSON codec on each connection so asyncpg can handle dicts for jsonb columns."""
+        await conn.set_type_codec(
+            'jsonb', encoder=json.dumps, decoder=json.loads, schema='pg_catalog'
+        )
+        await conn.set_type_codec(
+            'json', encoder=json.dumps, decoder=json.loads, schema='pg_catalog'
+        )
+
     async def initialize(self) -> None:
         """Initialize connection pool. No-op if already connected."""
         if self._pool is not None:
             return
-        self._pool = await asyncpg.create_pool(_get_database_url())
+        self._pool = await asyncpg.create_pool(_get_database_url(), init=self._init_connection)
         logger.info("Connected to PostgreSQL")
 
     @classmethod
@@ -116,7 +126,7 @@ class Database:
         """Create (or return cached) Database instance with a connection pool."""
         if cls._instance is not None:
             return cls._instance
-        pool = await asyncpg.create_pool(_get_database_url())
+        pool = await asyncpg.create_pool(_get_database_url(), init=cls._init_connection)
         cls._instance = cls(pool)
         logger.info("Connected to PostgreSQL")
         return cls._instance
