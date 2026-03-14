@@ -457,11 +457,14 @@ class PostJobTool(BaseTool):
             return None
 
     async def _persist_job(self, db, job_id, description, tags, budget_usd, poster, metadata):
-        """Fire-and-forget: persist job to database."""
+        """Persist job to database. Awaited -- errors are logged visibly."""
         try:
             await db.create_job(job_id, description, tags, budget_usd, poster, metadata)
+            print(f"DB: job {job_id} persisted successfully")
         except Exception as e:
-            print(f"DB create_job failed: {e}")
+            print(f"ERROR: DB create_job FAILED for job {job_id}: {e}")
+            import traceback
+            traceback.print_exc()
 
     async def _persist_bid_selection(self, db, job_id, result):
         """Fire-and-forget: persist bid selection to database."""
@@ -590,12 +593,12 @@ class PostJobTool(BaseTool):
 
             print(f"Job {job_id_str} posted -- collecting bids for {listing.bid_window_seconds}s...")
 
-            # ── Persist job to database (fire-and-forget) ────────
+            # ── Persist job to database (awaited for reliability) ────────
             db = await self._get_db()
             if db:
-                asyncio.ensure_future(self._persist_job(
+                await self._persist_job(
                     db, job_id_str, description, [tool], budget_usd, poster, listing.metadata,
-                ))
+                )
 
             # On-chain accept callback: assigns provider on-chain
             async def _accept_on_chain(winning_bid):
