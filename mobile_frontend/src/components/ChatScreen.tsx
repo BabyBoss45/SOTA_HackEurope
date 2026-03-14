@@ -49,22 +49,33 @@ function newSessionId(): string {
 function BidProgressBar({ duration, onComplete }: { duration: number; onComplete?: () => void }) {
   const [progress, setProgress] = useState(0);
   const [timeLeft, setTimeLeft] = useState(duration);
+  const startTimeRef = useRef(Date.now());
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const completedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
-    const startTime = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = (Date.now() - startTime) / 1000;
+    startTimeRef.current = Date.now();
+    completedRef.current = false;
+
+    intervalRef.current = setInterval(() => {
+      const elapsed = (Date.now() - startTimeRef.current) / 1000;
       const pct = Math.min((elapsed / duration) * 100, 100);
       setProgress(pct);
       setTimeLeft(Math.max(duration - elapsed, 0));
 
-      if (pct >= 100) {
-        clearInterval(interval);
-        onComplete?.();
+      if (pct >= 100 && !completedRef.current) {
+        completedRef.current = true;
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        onCompleteRef.current?.();
       }
     }, 100);
-    return () => clearInterval(interval);
-  }, [duration, onComplete]);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []); // Empty deps -- mount once only, immune to parent re-renders
 
   return (
     <motion.div
@@ -144,6 +155,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
   const [bidProgress, setBidProgress] = useState<{ active: boolean; duration: number } | null>(null);
   const [taskExecution, setTaskExecution] = useState<{ active: boolean; message: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const bidActiveRef = useRef(false);
 
   const { user } = useAuth();
   const { publicKey, sendTransaction, connected } = useWallet();
@@ -228,7 +240,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
     if (!escrowInfo?.needs_user_funding) return;
 
     const budgetUsdc = escrowInfo.budget_usdc || escrowInfo.budget_usd || 0.02;
-    const jobId = jobResult.on_chain_job_id;
+    const jobId = jobResult.on_chain_job_id || jobResult.job_id;
     const boardJobId = jobResult.job_id;
     const rawWinnerAddr = jobResult.winning_bid?.address;
 
@@ -251,6 +263,8 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
 
   /* ── Post job JSON to backend marketplace ── */
   const postJobToMarketplace = useCallback(async (jobData: Record<string, any>) => {
+    if (bidActiveRef.current) return "Bid already in progress";
+    bidActiveRef.current = true;
     console.log("Posting job to marketplace:", jobData);
     // Normalize: if theme_technology_focus is a string, split to array
     if (typeof jobData.theme_technology_focus === "string") {
@@ -274,8 +288,6 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(jobData),
       });
-
-      setBidProgress(null);
 
       if (!res.ok) throw new Error(`Post failed: ${res.statusText}`);
       const data = await res.json();
@@ -306,6 +318,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
       return data.message || "Job posted successfully";
     } catch (err: any) {
       setBidProgress(null);
+      bidActiveRef.current = false;
       setTaskExecution(null);
       console.error("Marketplace post error:", err);
       showToast("Failed to post job", "error");
@@ -605,7 +618,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
               {bidProgress?.active && (
                 <BidProgressBar
                   duration={bidProgress.duration}
-                  onComplete={() => setBidProgress(null)}
+                  onComplete={() => { setBidProgress(null); bidActiveRef.current = false; }}
                 />
               )}
             </AnimatePresence>
