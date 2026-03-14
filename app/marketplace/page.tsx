@@ -36,6 +36,10 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FloatingPaths } from "@/components/ui/background-paths-wrapper";
+import { GlassCard } from "@/components/ui/glass-card";
+import { SectionHeading } from "@/components/ui/section-heading";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { AnimateIn, StaggerContainer, StaggerItem } from "@/components/ui/animate-in";
 
 // Icon mapping
 const iconMap: Record<string, LucideIcon> = {
@@ -191,12 +195,15 @@ export default function Marketplace() {
   const [recentExecutions, setRecentExecutions] = useState<Task[]>([]);
   const isInitialLoad = useRef(true);
 
+  const errorRef = useRef(false);
+
   // Fetch tasks from API
   const fetchTasks = useCallback(async () => {
     try {
       const res = await fetch("/api/tasks");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
+
       setData(json);
 
       // Update recent executions feed
@@ -204,19 +211,22 @@ export default function Marketplace() {
       setRecentExecutions(completed.slice(0, 10));
 
       setError(null);
+      errorRef.current = false;
     } catch (err) {
-      // Only log on first failure or when error state changes to avoid spamming console
-      if (!error) {
+      if (!errorRef.current) {
         console.error("Failed to fetch tasks:", err);
+        errorRef.current = true;
       }
-      setError("Failed to load tasks");
+      if (isInitialLoad.current) {
+        setError("Failed to connect to marketplace");
+      }
     } finally {
       if (isInitialLoad.current) {
         setLoading(false);
         isInitialLoad.current = false;
       }
     }
-  }, [error]);
+  }, []);
 
   useEffect(() => {
     fetchTasks();
@@ -275,7 +285,7 @@ export default function Marketplace() {
           bg: "bg-cyan-400/10",
           border: "border-cyan-400/30",
           glow: "shadow-cyan-500/20",
-          label: "OPEN BID",
+          label: "COLLECTING BIDS",
           icon: <Gavel size={12} />,
         };
       case "completed":
@@ -331,9 +341,7 @@ export default function Marketplace() {
               <div className={`w-2.5 h-2.5 rounded-full ${config.bg} ${config.color}`} />
               <span className="text-sm font-mono text-[color:var(--text-muted)]">{task.jobId.slice(0, 8)}...</span>
             </div>
-            <span className={`text-xs font-medium ${config.color} mt-0.5 inline-block`}>
-              {config.label}
-            </span>
+            <StatusBadge status={task.status} size="sm" className="mt-0.5" />
           </div>
 
           {/* Task Title */}
@@ -484,7 +492,7 @@ export default function Marketplace() {
     icon: LucideIcon;
     color: string;
   }) => (
-    <div className="bg-[color:var(--surface-1)] backdrop-blur-sm rounded-xl border border-[color:var(--border-subtle)] p-4">
+    <GlassCard className="p-4" hoverGlow={true}>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-[color:var(--text-muted)] uppercase tracking-wide">{label}</span>
         <Icon size={16} className={color} />
@@ -500,7 +508,7 @@ export default function Marketplace() {
           </span>
         )}
       </div>
-    </div>
+    </GlassCard>
   );
 
   // Execution Feed Item
@@ -556,10 +564,59 @@ export default function Marketplace() {
     return (
       <>
         <style>{pageStyles}</style>
-        <div className="min-h-[calc(100vh-4rem)] home-shell flex items-center justify-center">
-          <div className="text-center">
-            <Loader2 size={32} className="text-violet-500 animate-spin mx-auto mb-4" />
-            <p className="text-[color:var(--text-muted)]">Connecting to marketplace...</p>
+        <div className="min-h-[calc(100vh-4rem)] home-shell text-[color:var(--foreground)] overflow-hidden relative">
+          <div className="relative z-10 max-w-7xl mx-auto px-6 pt-6">
+            {/* Skeleton header */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl skeleton-shimmer" />
+                <div>
+                  <div className="h-6 w-32 rounded-lg skeleton-shimmer mb-2" />
+                  <div className="h-4 w-56 rounded-lg skeleton-shimmer" />
+                </div>
+              </div>
+              <div className="h-10 w-64 rounded-lg skeleton-shimmer" />
+            </div>
+
+            {/* Skeleton stat cards */}
+            <div className="grid grid-cols-4 gap-4 mb-6">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-2xl border border-[color:var(--border-subtle)] p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="h-3 w-20 rounded skeleton-shimmer" />
+                    <div className="h-4 w-4 rounded skeleton-shimmer" />
+                  </div>
+                  <div className="h-8 w-16 rounded skeleton-shimmer" />
+                </div>
+              ))}
+            </div>
+
+            {/* Skeleton order rows */}
+            <div className="rounded-xl border border-[color:var(--border-subtle)] overflow-hidden">
+              <div className="px-4 py-3 skeleton-shimmer h-12" />
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="grid grid-cols-12 gap-4 px-4 py-4 border-t border-[color:var(--border-subtle)]">
+                  <div className="col-span-2">
+                    <div className="h-4 w-24 rounded skeleton-shimmer mb-1" />
+                    <div className="h-3 w-16 rounded skeleton-shimmer" />
+                  </div>
+                  <div className="col-span-3">
+                    <div className="h-4 w-40 rounded skeleton-shimmer mb-1" />
+                    <div className="h-3 w-20 rounded skeleton-shimmer" />
+                  </div>
+                  <div className="col-span-2">
+                    <div className="h-7 w-7 rounded-full skeleton-shimmer" />
+                  </div>
+                  <div className="col-span-2">
+                    <div className="h-4 w-24 rounded skeleton-shimmer" />
+                  </div>
+                  <div className="col-span-2">
+                    <div className="h-4 w-20 rounded skeleton-shimmer" />
+                  </div>
+                  <div className="col-span-1" />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </>
@@ -620,11 +677,20 @@ export default function Marketplace() {
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-[color:var(--border-subtle)] animate-pulse" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-[color:var(--foreground)] flex items-center gap-2">
-                  Order Book
-                  <span className="text-xs font-normal px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">LIVE</span>
-                </h1>
-                <p className="text-sm text-[color:var(--text-muted)]">Real-time AI agent task marketplace</p>
+                <div className="flex items-center gap-3">
+                  <SectionHeading
+                    title="Order Book"
+                    size="default"
+                  />
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-emerald-500/15 text-emerald-400 rounded-full border border-emerald-500/25">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                    </span>
+                    LIVE
+                  </span>
+                </div>
+                <p className="text-sm text-[color:var(--text-muted)] mt-1">Real-time AI agent task marketplace</p>
               </div>
             </div>
 
@@ -660,40 +726,48 @@ export default function Marketplace() {
         {/* Main Content */}
         <main className="relative z-10 max-w-7xl mx-auto px-6 pb-8">
           {/* Stats Row */}
-          <div className="grid grid-cols-4 gap-4 mb-6">
-            <StatCard
-              label="Open Orders"
-              value={stats?.queued || 0}
-              icon={Gavel}
-              color="text-cyan-400"
-            />
-            <StatCard
-              label="Executing"
-              value={stats?.executing || 0}
-              icon={Activity}
-              color="text-amber-400"
-            />
-            <StatCard
-              label="Settled Today"
-              value={stats?.completed || 0}
-              change="+12%"
-              icon={CheckCircle}
-              color="text-emerald-400"
-            />
-            <StatCard
-              label="Success Rate"
-              value={`${successRate}%`}
-              change={successRate >= 80 ? "+5%" : "-2%"}
-              icon={BarChart3}
-              color="text-violet-400"
-            />
-          </div>
+          <StaggerContainer className="grid grid-cols-4 gap-4 mb-6" staggerDelay={0.08}>
+            <StaggerItem preset="scale-up">
+              <StatCard
+                label="Open Orders"
+                value={stats?.queued || 0}
+                icon={Gavel}
+                color="text-cyan-400"
+              />
+            </StaggerItem>
+            <StaggerItem preset="scale-up">
+              <StatCard
+                label="Executing"
+                value={stats?.executing || 0}
+                icon={Activity}
+                color="text-amber-400"
+              />
+            </StaggerItem>
+            <StaggerItem preset="scale-up">
+              <StatCard
+                label="Settled Today"
+                value={stats?.completed || 0}
+                change="+12%"
+                icon={CheckCircle}
+                color="text-emerald-400"
+              />
+            </StaggerItem>
+            <StaggerItem preset="scale-up">
+              <StatCard
+                label="Success Rate"
+                value={`${successRate}%`}
+                change={successRate >= 80 ? "+5%" : "-2%"}
+                icon={BarChart3}
+                color="text-violet-400"
+              />
+            </StaggerItem>
+          </StaggerContainer>
 
           <div className="flex gap-6 items-stretch">
             {/* Order Book Panel */}
             <div className="flex-1 flex flex-col">
               {/* Filter Tabs */}
-              <div className="bg-[color:var(--surface-1)] backdrop-blur-sm rounded-t-xl border border-[color:var(--border-subtle)] border-b-0 px-4 py-3">
+              <div className="sticky top-0 z-20 bg-[color:var(--surface-elevated)]/80 backdrop-blur-xl rounded-t-xl border border-[color:var(--border-subtle)] border-b-0 px-4 py-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1">
                     {[
@@ -745,7 +819,7 @@ export default function Marketplace() {
               </div>
 
               {/* Order Book Table Header */}
-              <div className="bg-[color:var(--surface-hover)] border-x border-[color:var(--border-subtle)] px-4 py-2">
+              <div className="bg-[color:var(--surface-3)]/60 backdrop-blur-sm border-x border-[color:var(--border-subtle)] px-4 py-2">
                 <div className="grid grid-cols-12 gap-4 text-xs text-[color:var(--text-muted)] uppercase tracking-wide">
                   <div className="col-span-2">Order ID</div>
                   <div className="col-span-3">Task</div>
@@ -760,14 +834,16 @@ export default function Marketplace() {
               <div className="bg-[color:var(--surface-1)] backdrop-blur-sm rounded-b-xl border border-[color:var(--border-subtle)] border-t-0 divide-y divide-[color:var(--border-subtle)] flex-1 min-h-0 overflow-y-auto">
                 {filteredTasks.length > 0 ? (
                   filteredTasks.map((task, index) => (
-                    <OrderBookRow key={task.id} task={task} index={index} />
+                    <AnimateIn key={task.id} preset="fade-up" delay={index * 0.08} duration={0.4}>
+                      <OrderBookRow task={task} index={index} />
+                    </AnimateIn>
                   ))
                 ) : (
                   <div className="py-12 text-center">
                     <div className="w-16 h-16 rounded-2xl bg-[color:var(--surface-1)] flex items-center justify-center mx-auto mb-4">
                       <Gavel size={28} className="text-[color:var(--text-muted)]" />
                     </div>
-                    <h3 className="text-lg font-medium text-[color:var(--text-muted)] mb-2">No orders found</h3>
+                    <h3 className="font-display text-lg font-medium text-[color:var(--text-muted)] mb-2">No orders found</h3>
                     <p className="text-sm text-[color:var(--text-muted)]">Orders will appear here when tasks are created</p>
                   </div>
                 )}
@@ -778,11 +854,7 @@ export default function Marketplace() {
             <div className="w-80 flex-shrink-0 space-y-4">
               {/* Selected Order Detail */}
               {selectedTask && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="bg-[color:var(--surface-1)] backdrop-blur-sm rounded-xl border border-[color:var(--border-subtle)] p-4"
-                >
+                <GlassCard className="p-4" hoverGlow={false}>
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <h4 className="text-sm font-semibold text-[color:var(--foreground)]">{selectedTask.title}</h4>
@@ -910,29 +982,53 @@ export default function Marketplace() {
                         Bids ({selectedTask.bids.length})
                       </h5>
                       <div className="space-y-1.5 max-h-[150px] overflow-y-auto">
-                        {selectedTask.bids.map((bid) => {
-                          const BidIcon = getIcon(bid.agentIcon);
-                          return (
-                            <div key={bid.id} className="flex items-center gap-2 p-2 bg-[color:var(--surface-hover)] rounded-lg">
-                              <div className="w-6 h-6 rounded-md bg-cyan-500/10 flex items-center justify-center flex-shrink-0">
-                                <BidIcon size={11} className="text-cyan-400" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <span className="text-[11px] font-medium text-[color:var(--foreground)] truncate block">{bid.agent}</span>
-                                <div className="flex items-center gap-2 text-[10px] text-[color:var(--text-muted)]">
-                                  <span className="flex items-center gap-0.5">
-                                    <Star size={8} />
-                                    {bid.reputation}
-                                  </span>
-                                  <span>{bid.eta}</span>
+                        <AnimatePresence mode="popLayout">
+                          {selectedTask.bids.map((bid, bidIndex) => {
+                            const BidIcon = getIcon(bid.agentIcon);
+                            const isWinningBid = bidIndex === 0;
+                            return (
+                              <motion.div
+                                key={bid.id}
+                                layout
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                transition={{ type: "spring", stiffness: 300, damping: 24, delay: bidIndex * 0.05 }}
+                                className={`flex items-center gap-2 p-2 rounded-lg ${
+                                  isWinningBid
+                                    ? "bg-amber-500/10 ring-1 ring-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
+                                    : "bg-[color:var(--surface-hover)]"
+                                }`}
+                              >
+                                <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${
+                                  isWinningBid ? "bg-amber-500/20" : "bg-cyan-500/10"
+                                }`}>
+                                  <BidIcon size={11} className={isWinningBid ? "text-amber-400" : "text-cyan-400"} />
                                 </div>
-                              </div>
-                              <span className="text-[11px] font-medium text-cyan-400 flex-shrink-0">
-                                {bid.price}
-                              </span>
-                            </div>
-                          );
-                        })}
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-[11px] font-medium text-[color:var(--foreground)] truncate block">
+                                    {bid.agent}
+                                    {isWinningBid && (
+                                      <span className="ml-1.5 text-[9px] font-semibold text-amber-400 uppercase">Best</span>
+                                    )}
+                                  </span>
+                                  <div className="flex items-center gap-2 text-[10px] text-[color:var(--text-muted)]">
+                                    <span className="flex items-center gap-0.5">
+                                      <Star size={8} />
+                                      {bid.reputation}
+                                    </span>
+                                    <span>{bid.eta}</span>
+                                  </div>
+                                </div>
+                                <span className={`text-[11px] font-medium flex-shrink-0 ${
+                                  isWinningBid ? "text-amber-400" : "text-cyan-400"
+                                }`}>
+                                  {bid.price}
+                                </span>
+                              </motion.div>
+                            );
+                          })}
+                        </AnimatePresence>
                       </div>
                     </div>
                   )}
@@ -969,13 +1065,13 @@ export default function Marketplace() {
                       );
                     })}
                   </div>
-                </motion.div>
+                </GlassCard>
               )}
 
               {/* Execution Feed */}
-              <div className="bg-[color:var(--surface-1)] backdrop-blur-sm rounded-xl border border-[color:var(--border-subtle)] p-4">
+              <GlassCard className="p-4" hoverGlow={false}>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-[color:var(--foreground)] flex items-center gap-2">
+                  <h3 className="font-display text-sm font-semibold text-[color:var(--foreground)] flex items-center gap-2">
                     <Activity size={14} className="text-violet-400" />
                     Recent Executions
                   </h3>
@@ -991,11 +1087,11 @@ export default function Marketplace() {
                     <p className="text-xs text-[color:var(--text-muted)] text-center py-4">No recent executions</p>
                   )}
                 </div>
-              </div>
+              </GlassCard>
 
               {/* Active Agents */}
-              <div className="bg-[color:var(--surface-1)] backdrop-blur-sm rounded-xl border border-[color:var(--border-subtle)] p-4">
-                <h3 className="text-sm font-semibold text-[color:var(--foreground)] flex items-center gap-2 mb-4">
+              <GlassCard className="p-4" hoverGlow={false}>
+                <h3 className="font-display text-sm font-semibold text-[color:var(--foreground)] flex items-center gap-2 mb-4">
                   <Shield size={14} className="text-emerald-400" />
                   Active Agents
                 </h3>
@@ -1038,7 +1134,7 @@ export default function Marketplace() {
                     );
                   })}
                 </div>
-              </div>
+              </GlassCard>
             </div>
           </div>
         </main>
