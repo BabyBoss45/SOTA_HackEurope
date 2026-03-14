@@ -252,7 +252,7 @@ class Database:
             description,
             tags,
             budget_usdc,
-            "open",
+            "selecting",
             poster,
             None,
             None,

@@ -36,7 +36,7 @@ export interface DashboardTask {
   jobId: string;
   title: string;
   description: string;
-  status: "executing" | "queued" | "completed" | "failed";
+  status: "in_progress" | "collecting_bids" | "completed" | "failed";
   progress: number;
   agent: string;
   agentIcon: string;
@@ -86,39 +86,34 @@ export async function GET() {
       const metadata = job.metadata as Record<string, unknown> || {};
 
       // Map job status to dashboard status
-      let status: DashboardTask["status"] = "queued";
-      let progress = typeof metadata.progress === "number" ? metadata.progress : 0;
+      let status: DashboardTask["status"] = "collecting_bids";
 
       switch (job.status) {
         case "open":
         case "selecting":
-          status = "queued";
+          status = "collecting_bids";
           break;
         case "assigned":
-          status = "executing";
-          if (progress === 0) progress = 25;
+          status = "in_progress";
           break;
         case "completed":
           status = "completed";
-          progress = 100;
           break;
         case "expired":
         case "cancelled":
           status = "failed";
           break;
         default:
-          status = "queued";
+          status = "collecting_bids";
       }
 
       // Get latest non-bid update for progress tracking
       const latestUpdate = job.updates?.find(u => u.status !== "bid_submitted");
       if (latestUpdate) {
         if (latestUpdate.status === "in_progress") {
-          status = "executing";
-          if (progress === 0) progress = 50;
+          status = "in_progress";
         } else if (latestUpdate.status === "completed") {
           status = "completed";
-          progress = 100;
         } else if (latestUpdate.status === "error") {
           status = "failed";
         }
@@ -140,7 +135,7 @@ export async function GET() {
       });
 
       // Generate stages based on task status
-      const stages = generateStages(status, progress, job.winner || "Agent");
+      const stages = generateStages(status, job.winner || "Agent", bids.length);
 
       // Parse adaptation update from task memory system
       let adaptation: AdaptationInfo | undefined;
@@ -163,7 +158,7 @@ export async function GET() {
         title: generateTitle(job.description, job.tags),
         description: job.description,
         status,
-        progress,
+        progress: 0,
         agent: job.winner || "Pending",
         agentIcon: getAgentIcon(job.winner),
         tags: job.tags || [],
@@ -174,9 +169,21 @@ export async function GET() {
       };
     });
 
+    // Sort tasks: active first (collecting_bids, in_progress), then completed, then failed
+    const priority: Record<string, number> = { collecting_bids: 0, in_progress: 1, completed: 2, failed: 3 };
+    tasks.sort((a, b) => {
+      const pa = priority[a.status] ?? 3;
+      const pb = priority[b.status] ?? 3;
+      if (pa !== pb) return pa - pb;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    // Filter out failed/expired from visible task list
+    const visibleTasks = tasks.filter(t => t.status !== "failed");
+
     // Group by status
-    const executing = tasks.filter((t) => t.status === "executing");
-    const queued = tasks.filter((t) => t.status === "queued");
+    const in_progress = tasks.filter((t) => t.status === "in_progress");
+    const collecting_bids = tasks.filter((t) => t.status === "collecting_bids");
     const completed = tasks.filter((t) => t.status === "completed");
     const failed = tasks.filter((t) => t.status === "failed");
 
@@ -186,17 +193,17 @@ export async function GET() {
     );
 
     return NextResponse.json({
-      tasks,
+      tasks: visibleTasks,
       grouped: {
-        executing,
-        queued,
+        in_progress,
+        collecting_bids,
         completed,
         failed,
       },
       stats: {
-        total: tasks.length,
-        executing: executing.length,
-        queued: queued.length,
+        total: visibleTasks.length,
+        in_progress: in_progress.length,
+        collecting_bids: collecting_bids.length,
         completed: completed.length,
         failed: failed.length,
         pendingRequests: dataRequests.length,
@@ -229,8 +236,8 @@ export async function GET() {
       const programId = process.env.NEXT_PUBLIC_PROGRAM_ID || "F6dYHixw4PB4qCEERCYP19BxzKpuLV6JbbWRMUYrRZLY";
       return NextResponse.json({
         tasks: [],
-        grouped: { executing: [], queued: [], completed: [], failed: [] },
-        stats: { total: 0, executing: 0, queued: 0, completed: 0, failed: 0, pendingRequests: 0 },
+        grouped: { in_progress: [], collecting_bids: [], completed: [], failed: [] },
+        stats: { total: 0, in_progress: 0, collecting_bids: 0, completed: 0, failed: 0, pendingRequests: 0 },
         agents: [],
         contractLinks: { program: getExplorerUrl("address", programId) },
         db_offline: true,
@@ -268,80 +275,51 @@ function getAgentIcon(agentName: string | null): string {
 }
 
 function generateStages(
-  taskStatus: "executing" | "queued" | "completed" | "failed",
-  progress: number,
-  agentName: string
+  taskStatus: "in_progress" | "collecting_bids" | "completed" | "failed",
+  agentName: string,
+  bidCount: number,
 ): Stage[] {
   const stages: Stage[] = [
     {
-      id: "planning",
-      name: "Planning",
-      description: "Defining scope and requirements for the task.",
+      id: "collecting_bids",
+      name: "Collecting Bids",
+      description: bidCount > 0 ? `${bidCount} bid${bidCount !== 1 ? "s" : ""} received` : "Awaiting agent bids",
       status: "pending",
     },
     {
-      id: "bidding",
-      name: "Bidding",
-      description: `Selected ${agentName} for task execution.`,
+      id: "in_progress",
+      name: "In Progress",
+      description: agentName !== "Agent" ? `${agentName} executing` : "Agent executing task",
       status: "pending",
     },
     {
-      id: "executing",
-      name: "Executing",
-      description: `${agentName} is processing the task...`,
-      status: "pending",
-    },
-    {
-      id: "review",
-      name: "Review",
-      description: "Human review of findings and recommendations.",
+      id: "completed",
+      name: "Completed",
+      description: "Task finished",
       status: "pending",
     },
   ];
 
-  if (taskStatus === "queued") {
+  if (taskStatus === "collecting_bids") {
     stages[0].status = "in_progress";
-    stages[0].description =
-      "Analyzing task requirements and preparing execution plan.";
-  } else if (taskStatus === "executing") {
+  } else if (taskStatus === "in_progress") {
     stages[0].status = "complete";
-    stages[0].description = "Defined scope and task requirements.";
-
-    if (progress < 30) {
-      stages[1].status = "in_progress";
-      stages[1].description = `Selecting best agent for the task...`;
-    } else if (progress < 80) {
-      stages[1].status = "complete";
-      stages[2].status = "in_progress";
-      stages[2].description = `${agentName} gathering data and processing task...`;
-    } else {
-      stages[1].status = "complete";
-      stages[2].status = "complete";
-      stages[2].description = `${agentName} completed data processing.`;
-      stages[3].status = "in_progress";
-      stages[3].description = "Reviewing results and preparing final output.";
-    }
+    stages[0].description = bidCount > 0 ? `${bidCount} bid${bidCount !== 1 ? "s" : ""} received` : "Bids collected";
+    stages[1].status = "in_progress";
   } else if (taskStatus === "completed") {
     stages[0].status = "complete";
-    stages[0].description = "Scope and requirements defined successfully.";
+    stages[0].description = bidCount > 0 ? `${bidCount} bid${bidCount !== 1 ? "s" : ""} received` : "Bids collected";
     stages[1].status = "complete";
-    stages[1].description = `${agentName} was selected and assigned.`;
+    stages[1].description = agentName !== "Agent" ? `${agentName} completed execution` : "Agent completed execution";
     stages[2].status = "complete";
-    stages[2].description = `${agentName} completed all task operations.`;
-    stages[3].status = "complete";
-    stages[3].description = "Review complete. Task finished successfully.";
+    stages[2].description = "Task finished successfully";
   } else if (taskStatus === "failed") {
     stages[0].status = "complete";
-    stages[0].description = "Task requirements were defined.";
-    stages[1].status = "complete";
-    stages[1].description =
-      agentName !== "Agent"
-        ? `${agentName} was assigned.`
-        : "Agent selection attempted.";
-    stages[2].status = "complete";
-    stages[2].description = "Execution encountered an error.";
-    stages[3].status = "pending";
-    stages[3].description = "Task failed before review stage.";
+    stages[0].description = "Bids collected";
+    stages[1].status = agentName !== "Agent" ? "complete" : "pending";
+    stages[1].description = agentName !== "Agent" ? `${agentName} was assigned` : "Agent selection attempted";
+    stages[2].status = "pending";
+    stages[2].description = "Task did not complete";
   }
 
   return stages;
