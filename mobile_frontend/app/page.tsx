@@ -6,9 +6,11 @@ import { motion, AnimatePresence } from "motion/react";
 import { MessageCircle, Wallet, History, LogOut } from "lucide-react";
 import { Providers } from "@/src/providers";
 import { useAuth } from "@/src/context/AuthContext";
+import { usePaymentMethod } from "@/src/context/PaymentMethodContext";
 import ChatScreen from "@/src/components/ChatScreen";
 import WalletScreen from "@/src/components/WalletScreen";
 import AuthScreen from "@/src/components/AuthScreen";
+import PaymentGateScreen from "@/src/components/PaymentGateScreen";
 
 const Waves = dynamic(
   () => import("@/components/ui/wave-background").then((mod) => mod.Waves),
@@ -19,6 +21,7 @@ type View = "chat" | "wallet";
 
 function AppContent() {
   const { user, loading, logout } = useAuth();
+  const { paymentMethod } = usePaymentMethod();
   const [activeView, setActiveView] = useState<View>("chat");
   const [historySidebarOpen, setHistorySidebarOpen] = useState(false);
 
@@ -118,10 +121,14 @@ function AppContent() {
             exit={{ opacity: 0, scale: 0.97 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
           >
-            <ChatScreen
-              sidebarOpen={historySidebarOpen}
-              onSidebarOpenChange={setHistorySidebarOpen}
-            />
+            {!paymentMethod ? (
+              <PaymentGateScreen />
+            ) : (
+              <ChatScreen
+                sidebarOpen={historySidebarOpen}
+                onSidebarOpenChange={setHistorySidebarOpen}
+              />
+            )}
           </motion.div>
         )}
         {activeView === "wallet" && (

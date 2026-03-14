@@ -3,22 +3,37 @@
 import { useState, useEffect, useCallback } from "react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
+import { PublicKey } from "@solana/web3.js";
 import { USDC_MINT, BUTLER_ADDRESS } from "@/src/solanaConfig";
 
-export default function UsdcBalance() {
+interface UsdcBalanceProps {
+  publicKey?: PublicKey | null;
+}
+
+export default function UsdcBalance({ publicKey }: UsdcBalanceProps = {}) {
   const { connection } = useConnection();
   const [balance, setBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  // Use provided publicKey, fall back to BUTLER_ADDRESS
+  const targetKey = publicKey ?? BUTLER_ADDRESS;
+  const label = publicKey ? "Your USDC" : "Butler USDC";
+
   const fetchBalance = useCallback(async () => {
+    if (!targetKey) {
+      setBalance("0");
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(false);
 
       const ata = await getAssociatedTokenAddress(
         USDC_MINT,
-        BUTLER_ADDRESS
+        targetKey
       );
 
       const tokenAccountInfo = await connection.getTokenAccountBalance(ata);
@@ -38,7 +53,7 @@ export default function UsdcBalance() {
     } finally {
       setLoading(false);
     }
-  }, [connection]);
+  }, [connection, targetKey]);
 
   useEffect(() => {
     fetchBalance();
@@ -57,7 +72,7 @@ export default function UsdcBalance() {
 
   return (
     <div className="flex items-center gap-2 rounded-xl bg-slate-900/70 border border-slate-700 px-3 py-2 text-xs text-gray-100">
-      <span className="font-semibold">Butler USDC</span>
+      <span className="font-semibold">{label}</span>
       <span className="text-gray-300">{content}</span>
     </div>
   );
