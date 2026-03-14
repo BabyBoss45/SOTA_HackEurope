@@ -81,7 +81,7 @@ interface Task {
   jobId: string;
   title: string;
   description: string;
-  status: "executing" | "queued" | "completed" | "failed";
+  status: "in_progress" | "collecting_bids" | "completed" | "failed";
   progress: number;
   agent: string;
   agentIcon: string;
@@ -106,15 +106,15 @@ interface Agent {
 interface MarketplaceData {
   tasks: Task[];
   grouped: {
-    executing: Task[];
-    queued: Task[];
+    in_progress: Task[];
+    collecting_bids: Task[];
     completed: Task[];
     failed: Task[];
   };
   stats: {
     total: number;
-    executing: number;
-    queued: number;
+    in_progress: number;
+    collecting_bids: number;
     completed: number;
     failed: number;
   };
@@ -191,7 +191,7 @@ export default function Marketplace() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"orderbook" | "grid">("orderbook");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [activeFilter, setActiveFilter] = useState<"all" | "bids" | "executing" | "settled">("all");
+  const [activeFilter, setActiveFilter] = useState<"all" | "collecting_bids" | "in_progress" | "completed">("all");
   const [recentExecutions, setRecentExecutions] = useState<Task[]>([]);
   const isInitialLoad = useRef(true);
 
@@ -253,12 +253,12 @@ export default function Marketplace() {
   const getFilteredTasks = () => {
     if (!data?.tasks) return [];
     switch (activeFilter) {
-      case "bids":
-        return filterTasks(data.grouped.queued || []);
-      case "executing":
-        return filterTasks(data.grouped.executing || []);
-      case "settled":
-        return filterTasks([...(data.grouped.completed || []), ...(data.grouped.failed || [])]);
+      case "collecting_bids":
+        return filterTasks(data.grouped.collecting_bids || []);
+      case "in_progress":
+        return filterTasks(data.grouped.in_progress || []);
+      case "completed":
+        return filterTasks(data.grouped.completed || []);
       default:
         return filterTasks(data.tasks);
     }
@@ -270,21 +270,21 @@ export default function Marketplace() {
 
   const getStatusConfig = (status: string) => {
     switch (status) {
-      case "executing":
+      case "in_progress":
         return {
           color: "text-amber-400",
           bg: "bg-amber-400/10",
           border: "border-amber-400/30",
           glow: "shadow-amber-500/20",
-          label: "EXECUTING",
+          label: "IN PROGRESS",
           icon: <Activity size={12} className="animate-pulse" />,
         };
-      case "queued":
+      case "collecting_bids":
         return {
-          color: "text-cyan-400",
-          bg: "bg-cyan-400/10",
-          border: "border-cyan-400/30",
-          glow: "shadow-cyan-500/20",
+          color: "text-indigo-400",
+          bg: "bg-indigo-400/10",
+          border: "border-indigo-400/30",
+          glow: "shadow-indigo-500/20",
           label: "COLLECTING BIDS",
           icon: <Gavel size={12} />,
         };
@@ -294,7 +294,7 @@ export default function Marketplace() {
           bg: "bg-emerald-400/10",
           border: "border-emerald-400/30",
           glow: "shadow-emerald-500/20",
-          label: "SETTLED",
+          label: "COMPLETED",
           icon: <CheckCircle size={12} />,
         };
       case "failed":
@@ -374,7 +374,7 @@ export default function Marketplace() {
 
           {/* Agent / Bidders */}
           <div className="col-span-2">
-            {task.status === "queued" ? (
+            {task.status === "collecting_bids" ? (
               <div className="flex items-center gap-1">
                 <div className="flex -space-x-2">
                   {bids.slice(0, 3).map((bid) => (
@@ -403,21 +403,12 @@ export default function Marketplace() {
 
           {/* Progress / Price */}
           <div className="col-span-2">
-            {task.status === "executing" ? (
-              <div>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="text-[color:var(--text-muted)]">Progress</span>
-                  <span className="text-amber-400 font-medium">{task.progress}%</span>
-                </div>
-                <div className="h-2 bg-[color:var(--surface-1)] rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${task.progress}%` }}
-                    className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
-                  />
-                </div>
+            {task.status === "in_progress" ? (
+              <div className="flex items-center gap-1.5">
+                <Activity size={14} className="text-amber-400 animate-pulse" />
+                <span className="text-sm font-medium text-amber-400">{task.agent} executing</span>
               </div>
-            ) : task.status === "queued" ? (
+            ) : task.status === "collecting_bids" ? (
               <div className="flex items-center gap-1">
                 <DollarSign size={14} className="text-cyan-400" />
                 <span className="text-base font-medium text-cyan-400">
@@ -430,7 +421,7 @@ export default function Marketplace() {
                 {task.status === "completed" ? (
                   <>
                     <CheckCircle size={16} className="text-emerald-400" />
-                    <span className="text-base font-medium text-emerald-400">Settled</span>
+                    <span className="text-base font-medium text-emerald-400">Completed</span>
                   </>
                 ) : (
                   <>
@@ -447,9 +438,9 @@ export default function Marketplace() {
             <div className="flex items-center gap-1.5 text-sm text-[color:var(--text-muted)]">
               <Timer size={14} />
               <span>
-                {task.status === "executing"
-                  ? `~${Math.ceil((100 - task.progress) / 10)}s left`
-                  : task.status === "queued"
+                {task.status === "in_progress"
+                  ? `${task.agent} working`
+                  : task.status === "collecting_bids"
                   ? bids.length > 0 ? `${bids.length} bid${bids.length !== 1 ? "s" : ""} received` : "Awaiting bids"
                   : new Date(task.createdAt).toLocaleTimeString()}
               </span>
@@ -469,7 +460,7 @@ export default function Marketplace() {
         </div>
 
         {/* Animated border effect */}
-        {task.status === "executing" && (
+        {task.status === "in_progress" && (
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent" />
           </div>
@@ -729,23 +720,23 @@ export default function Marketplace() {
           <StaggerContainer className="grid grid-cols-4 gap-4 mb-6" staggerDelay={0.08}>
             <StaggerItem preset="scale-up">
               <StatCard
-                label="Open Orders"
-                value={stats?.queued || 0}
+                label="Collecting Bids"
+                value={stats?.collecting_bids || 0}
                 icon={Gavel}
-                color="text-cyan-400"
+                color="text-indigo-400"
               />
             </StaggerItem>
             <StaggerItem preset="scale-up">
               <StatCard
-                label="Executing"
-                value={stats?.executing || 0}
+                label="In Progress"
+                value={stats?.in_progress || 0}
                 icon={Activity}
                 color="text-amber-400"
               />
             </StaggerItem>
             <StaggerItem preset="scale-up">
               <StatCard
-                label="Settled Today"
+                label="Completed"
                 value={stats?.completed || 0}
                 change="+12%"
                 icon={CheckCircle}
@@ -772,9 +763,9 @@ export default function Marketplace() {
                   <div className="flex items-center gap-1">
                     {[
                       { key: "all", label: "All Orders", count: stats?.total },
-                      { key: "bids", label: "Open Bids", count: stats?.queued },
-                      { key: "executing", label: "Executing", count: stats?.executing },
-                      { key: "settled", label: "Settled", count: (stats?.completed || 0) + (stats?.failed || 0) },
+                      { key: "collecting_bids", label: "Collecting Bids", count: stats?.collecting_bids },
+                      { key: "in_progress", label: "In Progress", count: stats?.in_progress },
+                      { key: "completed", label: "Completed", count: stats?.completed },
                     ].map((tab) => (
                       <button
                         key={tab.key}
