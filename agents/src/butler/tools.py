@@ -636,6 +636,9 @@ class PostJobTool(BaseTool):
                 )
                 
                 # Build response with execution results if available
+                # Escrow amount = winning bid price, not full budget
+                escrow_amount = w.amount_usdc
+
                 response = {
                     "success": True,
                     "job_id": job_id_str,
@@ -651,9 +654,9 @@ class PostJobTool(BaseTool):
                     "reason": result.reason,
                     "escrow": {
                         "program_id": program_id_str,
-                        "usdc_required": usdc_required,
-                        "budget_usdc": budget_usd,
-                        "budget_usd": budget_usd,
+                        "usdc_required": escrow_amount,
+                        "budget_usdc": escrow_amount,
+                        "budget_usd": escrow_amount,
                         "needs_user_funding": True,
                     },
                 }
@@ -665,7 +668,7 @@ class PostJobTool(BaseTool):
                     response["formatted_results"] = formatted_results
                     response["instruction"] = (
                         f"Great news — here are the results from your specialist:\n\n{formatted_results}\n\n"
-                        f"The escrow requires {usdc_required:.2f} USDC to lock the payment. "
+                        f"The escrow requires {escrow_amount:.2f} USDC to lock the payment. "
                         "Present these results to the user in a friendly, conversational way. "
                         "Do NOT mention bids, workers, or job IDs."
                     )
@@ -673,7 +676,7 @@ class PostJobTool(BaseTool):
                     response["instruction"] = (
                         "Great news — a specialist has been assigned and is working on it now. "
                         f"Estimated time: about {w.estimated_seconds // 60} minutes. "
-                        f"The escrow requires {usdc_required:.2f} USDC to lock the payment. "
+                        f"The escrow requires {escrow_amount:.2f} USDC to lock the payment. "
                         "Tell the user you're on it and they can check back for updates. "
                         "Do NOT mention bids, workers, or job IDs."
                     )
