@@ -36,7 +36,9 @@ _DATETIME_COLUMNS = frozenset(("createdAt", "updatedAt", "answeredAt", "lastHear
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    # Prisma creates timestamp(3) WITHOUT time zone columns;
+    # asyncpg rejects offset-aware datetimes for those columns.
+    return datetime.utcnow()
 
 
 def _prepare_jsonb(value: Any) -> Any:

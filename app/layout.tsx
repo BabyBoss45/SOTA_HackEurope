@@ -3,6 +3,7 @@ import "./globals.css";
 import Navigation from "@/components/navigation";
 import { AuthProvider } from "@/components/auth-provider";
 import { ThemeProvider } from "@/components/theme-provider";
+import { WalletContextProvider } from "@/components/wallet-provider";
 
 export const metadata: Metadata = {
   title: "SOTA - AI Agent Marketplace",
@@ -35,10 +36,12 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <ThemeProvider>
-          <AuthProvider>
-            <Navigation />
-            {children}
-          </AuthProvider>
+          <WalletContextProvider>
+            <AuthProvider>
+              <Navigation />
+              {children}
+            </AuthProvider>
+          </WalletContextProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -24,7 +24,6 @@ const SplitText: React.FC<{ text: string; className?: string; interval?: number 
   );
 };
 import { useConversation } from '@elevenlabs/react';
-import { useAccount, useChainId, useSwitchChain, useWriteContract } from 'wagmi';
 import { Orb } from '@/components/ui/orb';
 import { ChatTimeline, ChatMessage } from './ChatTimeline';
 
@@ -271,13 +270,12 @@ export const VoiceAgent: React.FC<VoiceAgentProps> = ({
     }).catch((err) => console.warn('Failed to persist message:', err));
   }, [walletAddress]);
   
-  // Get API key from environment
-  const apiKey = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
-
-  const { address } = useAccount();
-  const chainId = useChainId();
-  const { switchChainAsync } = useSwitchChain();
-  const { writeContractAsync } = useWriteContract();
+  // Wagmi hooks removed — this component uses Solana, not EVM.
+  // API key fetched server-side via /api/elevenlabs/token instead of client-side env var.
+  const address = walletAddress || null;
+  const chainId = undefined;
+  const switchChainAsync = undefined;
+  const writeContractAsync = undefined;
   
   const formatError = (err: any) => {
     if (err instanceof Error) return err.message;
@@ -357,37 +355,19 @@ export const VoiceAgent: React.FC<VoiceAgentProps> = ({
   });
 
   const getSignedUrl = async (): Promise<string> => {
-    if (!apiKey) {
-      throw new Error('NEXT_PUBLIC_ELEVENLABS_API_KEY not found in environment variables');
-    }
-
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
-      {
-        method: 'GET',
-        headers: {
-          'xi-api-key': apiKey,
-        },
-      }
-    );
-    
+    // Fetch signed URL via server-side API route to avoid exposing API key
+    const response = await fetch('/api/elevenlabs/token');
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`Failed to get signed URL: ${response.status} ${errorText}`);
     }
-    
     const data = await response.json();
-    return data.signed_url;
+    return data.signed_url || data.token;
   };
 
   const startConversation = useCallback(async () => {
     if (!agentId) {
       alert('Please set NEXT_PUBLIC_ELEVENLABS_AGENT_ID in your environment variables');
-      return;
-    }
-    
-    if (!apiKey) {
-      alert('Please set NEXT_PUBLIC_ELEVENLABS_API_KEY in your environment variables');
       return;
     }
 

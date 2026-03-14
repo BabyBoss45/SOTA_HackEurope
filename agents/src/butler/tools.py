@@ -385,6 +385,25 @@ class SlotFillingTool(BaseTool):
             return json.dumps({"error": str(e)})
 
 
+# Normalize LLM-generated tool names to registered worker tags
+_TOOL_TAG_MAP = {
+    "hackathon_discovery": "hackathon_registration",
+    "hackathon_registration": "hackathon_registration",
+    "hotel_booking": "hotel_booking",
+    "restaurant_booking": "restaurant_booking_smart",
+    "restaurant_booking_smart": "restaurant_booking_smart",
+    "call_verification": "call_verification",
+    "gift_suggestion": "gift_suggestion",
+    "smart_shopping": "smart_shopping",
+    "trip_planning": "trip_planning",
+    "refund_claim": "refund_claim",
+    "fun_activity": "fun_activity",
+    "fun_activity_discovery": "fun_activity",
+    "event_discovery": "fun_activity",
+    "activity_booking": "fun_activity",
+}
+
+
 class PostJobTool(BaseTool):
     """
     Post a job to the marketplace and auto-select the best bid.
@@ -491,6 +510,30 @@ class PostJobTool(BaseTool):
         """
         from ..shared.job_board import JobBoard, JobListing, BidResult
         import uuid
+
+        # Normalize the tool tag so it matches registered workers
+        tool_lower = tool.lower().replace(" ", "_")
+        tool = _TOOL_TAG_MAP.get(tool_lower, tool_lower)
+        # Fallback substring matching
+        if tool == tool_lower and tool not in _TOOL_TAG_MAP.values():
+            if "hackathon" in tool_lower:
+                tool = "hackathon_registration"
+            elif "hotel" in tool_lower:
+                tool = "hotel_booking"
+            elif "fun" in tool_lower or "event" in tool_lower or "activity" in tool_lower:
+                tool = "fun_activity"
+            elif "restaurant" in tool_lower or "booking" in tool_lower:
+                tool = "restaurant_booking_smart"
+            elif "call" in tool_lower or "phone" in tool_lower:
+                tool = "call_verification"
+            elif "gift" in tool_lower:
+                tool = "gift_suggestion"
+            elif "shop" in tool_lower or "product" in tool_lower or "buy" in tool_lower:
+                tool = "smart_shopping"
+            elif "trip" in tool_lower or "travel" in tool_lower or "flight" in tool_lower:
+                tool = "trip_planning"
+            elif "refund" in tool_lower or "claim" in tool_lower:
+                tool = "refund_claim"
 
         try:
             pk = os.getenv("PRIVATE_KEY")

@@ -530,6 +530,7 @@ async def post_job_from_elevenlabs(req: MarketplacePostRequest):
         "nightlife": "fun_activity",
         "nightlife_adventure": "fun_activity",
         "adventure": "fun_activity",
+        "activity_booking": "fun_activity",
     }
     tool_type = TASK_TO_TOOL.get(task_lower, task_lower)
 
@@ -539,6 +540,8 @@ async def post_job_from_elevenlabs(req: MarketplacePostRequest):
             tool_type = "hackathon_registration"
         elif "hotel" in task_lower:
             tool_type = "hotel_booking"
+        elif "fun" in task_lower or "event" in task_lower or "activity" in task_lower:
+            tool_type = "fun_activity"
         elif "restaurant" in task_lower or "booking" in task_lower:
             tool_type = "restaurant_booking_smart"
         elif "call" in task_lower or "phone" in task_lower:
@@ -551,7 +554,7 @@ async def post_job_from_elevenlabs(req: MarketplacePostRequest):
             tool_type = "trip_planning"
         elif "refund" in task_lower or "claim" in task_lower:
             tool_type = "refund_claim"
-        elif "fun" in task_lower or "event" in task_lower or "activity" in task_lower or "nightlife" in task_lower or "adventure" in task_lower:
+        elif "nightlife" in task_lower or "adventure" in task_lower:
             tool_type = "fun_activity"
 
     description = f"{task}: {', '.join(f'{k}={v}' for k, v in params.items())}"

@@ -17,14 +17,9 @@ export const USDC_MINT = new PublicKey(
 );
 
 // ── Butler wallet (SPL token destination) ───────────────────
-if (!process.env.NEXT_PUBLIC_BUTLER_ADDRESS) {
-  throw new Error(
-    "NEXT_PUBLIC_BUTLER_ADDRESS is required. Set it in your .env file."
-  );
-}
-export const BUTLER_ADDRESS = new PublicKey(
-  process.env.NEXT_PUBLIC_BUTLER_ADDRESS
-);
+export const BUTLER_ADDRESS = process.env.NEXT_PUBLIC_BUTLER_ADDRESS
+  ? new PublicKey(process.env.NEXT_PUBLIC_BUTLER_ADDRESS)
+  : null;
 
 // ── USDC decimals (standard for USDC on Solana) ────────────
 export const USDC_DECIMALS = 6;

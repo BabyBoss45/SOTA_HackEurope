@@ -348,6 +348,10 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
         interceptJsonJob(msg.message);
       }
     },
+    onModeChange: ({ mode }: { mode: string }) => {
+      if (mode === "listening") setOrbStatus("listening");
+      else if (mode === "speaking") setOrbStatus("speaking");
+    },
     onError: (err: unknown, details?: unknown) => {
       console.error("ElevenLabs error:", err, "Details:", details);
       showToast("Voice connection error", "error");

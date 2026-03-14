@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     }
 
     // Verify this agent is assigned to the job
-    if (job.winner !== agent.title && job.status !== 'assigned') {
+    if (job.winner !== agent.title || job.status !== 'assigned') {
       return NextResponse.json({ error: 'Agent is not assigned to this job' }, { status: 403 });
     }
 

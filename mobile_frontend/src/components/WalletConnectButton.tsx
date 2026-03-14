@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Smartphone,
   Monitor,
+  QrCode,
 } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -38,6 +39,18 @@ export const WalletConnectButton: React.FC = () => {
     setMounted(true);
   }, []);
 
+  // Auto-connect the hardcoded demo wallet on mount
+  useEffect(() => {
+    if (!mounted || connected || connecting || connectingName) return;
+    const demoWallet = wallets.find(
+      (w) => w.adapter.name === "Demo Wallet"
+    );
+    if (demoWallet) {
+      handleConnect(demoWallet.adapter.name as WalletName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, connected]);
+
   const mobile = mounted && isMobileDevice();
 
   const handleConnect = async (walletName: WalletName) => {
@@ -51,7 +64,7 @@ export const WalletConnectButton: React.FC = () => {
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Connection failed";
-      if (/user rejected|user denied/i.test(msg)) {
+      if (/user rejected|user denied|window closed/i.test(msg)) {
         setError(null);
       } else {
         setError(msg);
@@ -63,15 +76,14 @@ export const WalletConnectButton: React.FC = () => {
 
   if (connected || !mounted) return null;
 
-  // Filter to installed or loadable wallets
-  const available = wallets.filter(
-    (w) =>
-      w.readyState === "Installed" || w.readyState === "Loadable"
+  // Show all wallets — installed ones first, then others
+  const installed = wallets.filter(
+    (w) => w.readyState === "Installed" || w.readyState === "Loadable"
   );
-
   const notInstalled = wallets.filter(
     (w) => w.readyState === "NotDetected"
   );
+  const allWallets = [...installed, ...notInstalled];
 
   return (
     <div className="wallet-connect-options">
@@ -90,10 +102,16 @@ export const WalletConnectButton: React.FC = () => {
         )}
       </div>
 
-      {available.map((wallet) => {
+      {allWallets.map((wallet) => {
         const isLoading =
           connectingName === wallet.adapter.name || connecting;
-        const isPrimary = wallet.adapter.name === "Phantom";
+        const isDemo = wallet.adapter.name === "Demo Wallet";
+        const isPrimary = isDemo || wallet.adapter.name === "Phantom";
+        const isWC = wallet.adapter.name === "WalletConnect";
+        const isInstalled = wallet.readyState === "Installed" || wallet.readyState === "Loadable";
+
+        // WalletConnect is always "connectable" — it opens its own QR modal
+        const canConnect = isInstalled || isWC;
 
         return (
           <button
@@ -101,10 +119,16 @@ export const WalletConnectButton: React.FC = () => {
             type="button"
             className={`wallet-connect-btn${
               isPrimary ? " wallet-connect-btn--primary" : ""
-            }`}
-            onClick={() =>
-              handleConnect(wallet.adapter.name as WalletName)
-            }
+            }${isWC ? " wallet-connect-btn--qr" : ""}`}
+            onClick={() => {
+              if (canConnect) {
+                handleConnect(wallet.adapter.name as WalletName);
+              } else {
+                // Open wallet install page
+                const url = wallet.adapter.url;
+                if (url) window.open(url, "_blank");
+              }
+            }}
             disabled={!!connectingName || connecting}
           >
             <span className="wallet-connect-btn-icon">
@@ -124,46 +148,34 @@ export const WalletConnectButton: React.FC = () => {
             </span>
             <span className="wallet-connect-btn-text">
               <span className="wallet-connect-btn-label">
-                {isLoading ? "Connecting..." : wallet.adapter.name}
+                {isLoading
+                  ? isWC
+                    ? "Opening QR..."
+                    : "Connecting..."
+                  : wallet.adapter.name}
               </span>
               <span className="wallet-connect-btn-sub">
-                {wallet.readyState === "Installed"
-                  ? "Detected"
-                  : "Click to connect"}
+                {isDemo
+                  ? "Hackathon demo wallet (devnet)"
+                  : isWC
+                    ? "Scan with Phantom or any Solana wallet"
+                    : isInstalled
+                      ? "Detected"
+                      : "Not installed — click to get"}
               </span>
             </span>
+            {isWC ? (
+              <span className="wallet-connect-btn-icon" style={{ marginLeft: "auto" }}>
+                <QrCode size={14} />
+              </span>
+            ) : !isInstalled ? (
+              <span className="wallet-connect-btn-icon" style={{ marginLeft: "auto" }}>
+                <Download size={14} />
+              </span>
+            ) : null}
           </button>
         );
       })}
-
-      {/* Show install links for wallets not detected */}
-      {!mobile && notInstalled.length > 0 && available.length === 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <p style={{ fontSize: 13, opacity: 0.7, margin: 0 }}>
-            No Solana wallets detected. Install one to get started:
-          </p>
-          <a
-            href="https://phantom.app/download"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="wallet-install-link"
-          >
-            <Download size={16} />
-            <span>Install Phantom Wallet</span>
-            <ExternalLink size={12} />
-          </a>
-          <a
-            href="https://solflare.com/download"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="wallet-install-link"
-          >
-            <Download size={16} />
-            <span>Install Solflare Wallet</span>
-            <ExternalLink size={12} />
-          </a>
-        </div>
-      )}
 
       {error && <p className="wallet-connect-error">{error}</p>}
     </div>

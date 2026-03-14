@@ -70,8 +70,12 @@ export async function GET() {
       isButler: false,
     }));
 
-    // Merge portal agents and worker agents
-    const allAgents = [...agents, ...workerDashboard];
+    // Merge portal agents and worker agents, deduplicating by normalized title
+    // e.g. "SOTA Hackathon Agent" and "Hackathon Agent" are the same agent
+    const normalize = (t: string) => t.toLowerCase().replace(/^sota\s+/, '').replace(/\s+agent$/, '').trim();
+    const portalKeys = new Set(agents.map(a => normalize(a.title)));
+    const uniqueWorkers = workerDashboard.filter(w => !portalKeys.has(normalize(w.title)));
+    const allAgents = [...agents, ...uniqueWorkers];
 
     // Separate Butler from other agents
     const butler = allAgents.find(a => a.isButler) || {

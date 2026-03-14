@@ -194,6 +194,7 @@ model Session {
 model ChatSession {
   id        String        @id @default(uuid())
   wallet    String?
+  userId    Int?
   title     String?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt

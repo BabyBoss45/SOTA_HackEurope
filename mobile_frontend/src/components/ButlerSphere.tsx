@@ -18,10 +18,10 @@ interface OrbSceneProps {
   getOutputVolume?: () => number;
 }
 
-function OrbScene({ 
+function OrbScene({
   colors = ['#0ea5e9', '#22d3ee'],
   getInputVolume,
-  getOutputVolume 
+  getOutputVolume
 }: OrbSceneProps) {
   const { gl } = useThree();
   const circleRef = useRef<THREE.Mesh<THREE.CircleGeometry, THREE.ShaderMaterial>>(null);
@@ -98,7 +98,7 @@ function OrbScene({
 
   return (
     <mesh ref={circleRef}>
-      <circleGeometry args={[3.9, 64]} />
+      <icosahedronGeometry args={[3.2, 32]} />
       <shaderMaterial
         uniforms={uniforms}
         fragmentShader={fragmentShader}
@@ -126,13 +126,13 @@ export const ButlerSphere: React.FC<ButlerSphereProps> = ({ conversation }) => {
         dpr={[1, 2]}
         resize={{ scroll: false, offsetSize: true }}
       >
-        <OrbScene 
+        <OrbScene
           colors={['#0ea5e9', '#22d3ee']}
           getInputVolume={conversation?.getInputVolume}
           getOutputVolume={conversation?.getOutputVolume}
         />
       </Canvas>
-      
+
       {/* Status indicator */}
       {conversation && (
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white text-sm font-medium">

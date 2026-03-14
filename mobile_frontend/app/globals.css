@@ -680,6 +680,16 @@ body {
   border-style: dashed;
 }
 
+.wallet-connect-btn--qr {
+  border-color: rgba(59, 153, 252, 0.35);
+  background: rgba(59, 153, 252, 0.08);
+}
+
+.wallet-connect-btn--qr:hover {
+  background: rgba(59, 153, 252, 0.15);
+  border-color: rgba(59, 153, 252, 0.5);
+}
+
 .wallet-connect-btn-text {
   display: flex;
   flex-direction: column;

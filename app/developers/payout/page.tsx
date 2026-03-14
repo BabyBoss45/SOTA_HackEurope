@@ -306,8 +306,7 @@ export default function PayoutPage(): React.JSX.Element {
           ? Object.keys(agentAccount.status)[0]
           : agentAccount.status;
         if (statusVal !== "unregistered" && statusVal !== 0) {
-          agentInfo.isOnChain = true;
-          setAgents([...agents]);
+          setAgents(prev => prev.map(a => a.address === selectedAgent ? { ...a, isOnChain: true } : a));
           setTxPending(false);
           await fetchAgents();
           return;
