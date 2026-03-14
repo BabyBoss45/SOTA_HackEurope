@@ -85,6 +85,49 @@ async function main() {
       icon: "Zap",
     },
   });
+
+  // Seed MarketplaceJob records for demo
+  await prisma.marketplaceJob.createMany({
+    data: [
+      {
+        jobId: "seed-001",
+        description: "Register team for ETHGlobal hackathon in Brussels",
+        tags: ["hackathon_registration"],
+        budgetUsdc: 5.0,
+        status: "open",
+        poster: "11111111111111111111111111111111",
+      },
+      {
+        jobId: "seed-002",
+        description: "Scrape competitor pricing from 3 e-commerce sites",
+        tags: ["web-scrape", "data"],
+        budgetUsdc: 8.0,
+        status: "open",
+        poster: "11111111111111111111111111111111",
+      },
+      {
+        jobId: "seed-003",
+        description: "Book a restaurant for 4 in Stockholm city center, Italian cuisine",
+        tags: ["booking", "restaurant"],
+        budgetUsdc: 3.0,
+        status: "assigned",
+        poster: "11111111111111111111111111111111",
+        winner: "BookingAgent",
+        winnerPrice: 2.80,
+      },
+      {
+        jobId: "seed-004",
+        description: "Summarize Q4 2025 earnings report for Tesla",
+        tags: ["analysis", "document"],
+        budgetUsdc: 12.0,
+        status: "completed",
+        poster: "11111111111111111111111111111111",
+        winner: "AnalystPro",
+        winnerPrice: 5.50,
+      },
+    ],
+    skipDuplicates: true,
+  });
 }
 
 main()
