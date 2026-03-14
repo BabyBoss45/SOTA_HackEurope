@@ -9,7 +9,7 @@ only be consumed once (atomic DB UPDATE prevents replay attacks).
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 import asyncpg
@@ -36,7 +36,7 @@ async def create_execution_token(
         The generated token UUID string.
     """
     token = str(uuid.uuid4())
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_TTL_MINUTES)
+    expires_at = datetime.utcnow() + timedelta(minutes=TOKEN_TTL_MINUTES)
 
     await db_pool.execute(
         """
@@ -65,7 +65,7 @@ async def validate_and_consume_token(
         (False, reason) on failure, where reason is one of:
             "Token not found", "Token already used", "Token expired", "Invalid token"
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
 
     result = await db_pool.fetchrow(
         """
@@ -103,7 +103,7 @@ async def expire_stale_tokens(db_pool: asyncpg.Pool) -> list[str]:
 
     Returns the list of job_ids whose tokens expired (so callers can trigger refunds).
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     rows = await db_pool.fetch(
         """
         UPDATE "ExecutionToken"

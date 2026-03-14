@@ -18,4 +18,6 @@ USER appuser
 
 EXPOSE 3001
 
+ENV PYTHONPATH=/app
+
 CMD ["python", "agents/run_all.py"]
