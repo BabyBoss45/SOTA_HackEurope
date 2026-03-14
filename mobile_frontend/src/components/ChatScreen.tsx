@@ -14,8 +14,10 @@ import { X, Plus, MessageSquare, Send } from "lucide-react";
 import AgentOrb from "./AgentOrb";
 import { useToast } from "./ToastProvider";
 import StripePayment from "./StripePayment";
+import UsdcPayment from "./UsdcPayment";
 import { explorerLink } from "@/src/solanaConfig";
 import { useAuth } from "@/src/context/AuthContext";
+import { usePaymentMethod } from "@/src/context/PaymentMethodContext";
 
 /* ── Config ── */
 const BUTLER_URL =
@@ -158,6 +160,7 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
   const bidActiveRef = useRef(false);
 
   const { user } = useAuth();
+  const { paymentMethod } = usePaymentMethod();
   const { publicKey, sendTransaction, connected } = useWallet();
   const { connection } = useConnection();
   const address = publicKey?.toBase58() ?? null;
@@ -632,39 +635,73 @@ export default function ChatScreen({ sidebarOpen: sidebarOpenProp, onSidebarOpen
                 <TaskExecutionProgress message={taskExecution.message} />
               )}
             </AnimatePresence>
-            {/* Stripe payment */}
+            {/* Payment -- route to USDC or Stripe based on session payment method */}
             {stripePayment && (
-              <StripePayment
-                jobId={stripePayment.jobId}
-                amount={stripePayment.amount}
-                agentAddress={stripePayment.agentAddress}
-                boardJobId={stripePayment.boardJobId}
-                userId={stripePayment.userId}
-                onSuccess={() => {
-                  const payment = stripePayment;
-                  setStripePayment(null);
-                  showToast("Payment confirmed! Agent is working...", "success");
-                  addLine("assistant", `Payment of ${payment.amount.toFixed(2)} USDC confirmed via Apple Pay. Escrow funded automatically!`);
-                  if (payment.boardJobId) {
-                    setTaskExecution({ active: true, message: "Generating your results..." });
-                    fetch(`${BUTLER_URL}/marketplace/execute/${payment.boardJobId}`, { method: "POST" })
-                      .then(res => res.json())
-                      .then(data => {
-                        setTaskExecution(null);
-                        addLine("assistant", data.formatted_results || "Task completed.");
-                      })
-                      .catch(() => {
-                        setTaskExecution(null);
-                        addLine("assistant", "Task is being processed...");
-                      });
-                  }
-                }}
-                onError={(err) => {
-                  setStripePayment(null);
-                  showToast("Payment failed", "error");
-                  addLine("assistant", `Payment failed: ${err}. You can try again or pay with crypto.`);
-                }}
-              />
+              paymentMethod === "usdc" ? (
+                <UsdcPayment
+                  jobId={stripePayment.jobId}
+                  amount={stripePayment.amount}
+                  agentAddress={stripePayment.agentAddress}
+                  boardJobId={stripePayment.boardJobId}
+                  userId={stripePayment.userId}
+                  onSuccess={() => {
+                    const payment = stripePayment;
+                    setStripePayment(null);
+                    showToast("Payment confirmed! Agent is working...", "success");
+                    addLine("assistant", "Payment confirmed! Escrow funded on-chain.");
+                    if (payment.boardJobId) {
+                      setTaskExecution({ active: true, message: "Generating your results..." });
+                      fetch(`${BUTLER_URL}/marketplace/execute/${payment.boardJobId}`, { method: "POST" })
+                        .then(res => res.json())
+                        .then(data => {
+                          setTaskExecution(null);
+                          addLine("assistant", data.formatted_results || "Task completed.");
+                        })
+                        .catch(() => {
+                          setTaskExecution(null);
+                          addLine("assistant", "Task is being processed...");
+                        });
+                    }
+                  }}
+                  onError={(err) => {
+                    setStripePayment(null);
+                    showToast("Payment failed", "error");
+                    addLine("assistant", `Payment failed: ${err}. You can try again.`);
+                  }}
+                />
+              ) : (
+                <StripePayment
+                  jobId={stripePayment.jobId}
+                  amount={stripePayment.amount}
+                  agentAddress={stripePayment.agentAddress}
+                  boardJobId={stripePayment.boardJobId}
+                  userId={stripePayment.userId}
+                  onSuccess={() => {
+                    const payment = stripePayment;
+                    setStripePayment(null);
+                    showToast("Payment confirmed! Agent is working...", "success");
+                    addLine("assistant", `Payment of ${payment.amount.toFixed(2)} USDC confirmed via Apple Pay. Escrow funded automatically!`);
+                    if (payment.boardJobId) {
+                      setTaskExecution({ active: true, message: "Generating your results..." });
+                      fetch(`${BUTLER_URL}/marketplace/execute/${payment.boardJobId}`, { method: "POST" })
+                        .then(res => res.json())
+                        .then(data => {
+                          setTaskExecution(null);
+                          addLine("assistant", data.formatted_results || "Task completed.");
+                        })
+                        .catch(() => {
+                          setTaskExecution(null);
+                          addLine("assistant", "Task is being processed...");
+                        });
+                    }
+                  }}
+                  onError={(err) => {
+                    setStripePayment(null);
+                    showToast("Payment failed", "error");
+                    addLine("assistant", `Payment failed: ${err}. You can try again or pay with crypto.`);
+                  }}
+                />
+              )
             )}
           </div>
         )}
