@@ -20,6 +20,11 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+# Ensure the parent of 'agents/' is on sys.path so `from agents.src.*` resolves
+_agents_dir = Path(__file__).resolve().parent
+if str(_agents_dir.parent) not in sys.path:
+    sys.path.insert(0, str(_agents_dir.parent))
+
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
