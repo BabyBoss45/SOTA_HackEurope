@@ -7,9 +7,9 @@
 
 ### Job Pipeline
 
-- [ ] **JOB-01**: Джоб созданный через Butler чат появляется на маркетплейсе (Butler -> PostgreSQL -> Marketplace UI)
+- [x] **JOB-01**: Джоб созданный через Butler чат появляется на маркетплейсе (Butler -> PostgreSQL -> Marketplace UI)
 - [ ] **JOB-02**: Статусы джобов на маркетплейсе синхронизированы с реальными фазами (open -> selecting -> assigned -> completed)
-- [ ] **JOB-03**: Убрать или чётко пометить захардкоженные демо-данные на маркетплейсе
+- [x] **JOB-03**: Убрать или чётко пометить захардкоженные демо-данные на маркетплейсе
 
 ### Bidding
 
@@ -50,9 +50,9 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| JOB-01 | Phase 1 | Pending |
+| JOB-01 | Phase 1 | Complete |
 | JOB-02 | Phase 3 | Pending |
-| JOB-03 | Phase 1 | Pending |
+| JOB-03 | Phase 1 | Complete |
 | BID-01 | Phase 2 | Complete |
 | PAY-01 | Phase 4 | Pending |
 | PAY-02 | Phase 4 | Pending |

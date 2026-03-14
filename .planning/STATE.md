@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-14T12:17:57Z"
+status: completed
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-03-14T12:24:13.497Z"
 last_activity: 2026-03-14 -- Phase 2 Plan 1 completed (bidding timer fix)
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 2
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 50
 ---
 
 # Project State
@@ -50,6 +50,7 @@ Progress: [█████░░░░░] 50%
 - Trend: starting
 
 *Updated after each plan completion*
+| Phase 01-job-creation-pipeline P01 | 2min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,8 @@ Recent decisions affecting current work:
 - [02-01]: Used useRef-anchored timer pattern for re-render immunity in BidProgressBar
 - [02-01]: Removed premature setBidProgress(null) after API response -- timer always runs full 15s
 - [02-01]: Added bidActiveRef guard for double-activation prevention
+- [Phase 01-01]: Removed demo data entirely instead of keeping as fallback -- marketplace shows reality
+- [Phase 01-01]: Awaited _persist_job instead of fire-and-forget to prevent silent empty marketplace
 
 ### Pending Todos
 
@@ -76,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T12:17:57Z
-Stopped at: Completed 02-01-PLAN.md
-Resume file: .planning/phases/02-bidding-timer/02-01-SUMMARY.md
+Last session: 2026-03-14T12:24:13.495Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None
