@@ -4,7 +4,7 @@ Job Board — In-Memory Marketplace for SOTA Agents
 Central hub where:
 1. Butler posts a job → broadcast to all registered workers
 2. Workers evaluate the job against their tags/capabilities
-3. Workers place bids within a configurable window (default 60 s)
+3. Workers place bids within a configurable window (default 15 s)
 4. When the window closes the board auto-selects the best bid
    (lowest price wins; ties broken by earliest submission)
 5. The winning bid is accepted on-chain and the result returned
@@ -52,7 +52,7 @@ class JobListing:
     metadata: Dict[str, Any] = field(default_factory=dict)
     status: JobStatus = JobStatus.OPEN
     posted_at: float = field(default_factory=time.time)
-    bid_window_seconds: int = 60             # how long to collect bids
+    bid_window_seconds: int = 15             # how long to collect bids
 
 
 @dataclass
